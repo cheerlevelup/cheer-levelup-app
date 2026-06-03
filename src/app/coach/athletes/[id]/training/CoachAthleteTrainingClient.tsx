@@ -114,9 +114,12 @@ function ExerciseEditModal({ ex, athleteId, athleteName, existingOverride, exerc
             const match = srcId ? bex.exercise_id === srcId : (srcCode && bex.exercise_code === srcCode)
             if (!match) continue
             const sibPayload = buildPayload(bex.id)
-            const { data: sd } = existingOverride
-              ? await supabase.from('athlete_exercise_overrides').upsert({ ...sibPayload }, { onConflict: 'athlete_id,block_exercise_id' }).select().single()
-              : await supabase.from('athlete_exercise_overrides').upsert({ ...sibPayload }, { onConflict: 'athlete_id,block_exercise_id' }).select().single()
+            let sibResult = await supabase.from('athlete_exercise_overrides').upsert({ ...sibPayload }, { onConflict: 'athlete_id,block_exercise_id' }).select().single()
+            if (sibResult.error?.message?.includes('schema cache') || sibResult.error?.message?.includes('block_exercise_id')) {
+              const { exercise_id_override, exercise_code_override, skip, is_substitution, ...basicSib } = sibPayload
+              sibResult = await supabase.from('athlete_exercise_overrides').upsert({ ...basicSib }, { onConflict: 'athlete_id,block_exercise_id' }).select().single()
+            }
+            const { data: sd } = sibResult
             if (sd) siblings.push({ exerciseId: bex.id, override: { ...sd, exercise_override: resolvedLibEx || null } })
           }
         }

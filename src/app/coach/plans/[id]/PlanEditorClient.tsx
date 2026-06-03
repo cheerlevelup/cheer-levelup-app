@@ -5,6 +5,8 @@ import { useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
+import PlanTableView from './PlanTableView'
+import PlanWellnessConfig from '@/components/PlanWellnessConfig'
 
 type Plan = {
   id: number
@@ -51,6 +53,7 @@ type BlockExercise = {
   is_warmup: boolean
   warmup_sets?: WarmupSet[] | null
   coach_comment?: string | null
+  exercise_url?: string | null
   exercise?: ExerciseLibraryItem | null
 }
 
@@ -204,6 +207,7 @@ function ExerciseModal({
   const [comment, setComment] = useState(exercise.coach_comment || '')
   const [isWarmup, setIsWarmup] = useState(exercise.is_warmup || false)
   const [warmupSets, setWarmupSets] = useState<WarmupSet[]>(normalizeWarmupSets(exercise.warmup_sets))
+  const [exerciseUrl, setExerciseUrl] = useState(exercise.exercise_url || '')
   const [useCustomName, setUseCustomName] = useState(!exercise.exercise_id)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
@@ -229,6 +233,7 @@ function ExerciseModal({
       coach_comment: comment.trim() || null,
       is_warmup: isWarmup,
       warmup_sets: isWarmup ? cleanWarmupSets(warmupSets) : [],
+      exercise_url: exerciseUrl.trim() || null,
     }
 
     const result = isNew
@@ -349,7 +354,7 @@ function ExerciseModal({
               <input value={reps} onChange={e => setReps(e.target.value)} placeholder="8-10" style={inputStyle({ fontFamily: mono, textAlign: 'center' })} />
             </div>
             <div>
-              <label style={labelStyle()}>Kg</label>
+              <label style={labelStyle()}>Ciężar</label>
               <input type="number" value={weightKg} onChange={e => setWeightKg(e.target.value)} placeholder="-" style={inputStyle({ fontFamily: mono, textAlign: 'center' })} />
             </div>
             <div>
@@ -406,7 +411,7 @@ function ExerciseModal({
                     </div>
                     <input value={set.reps || ''} onChange={e => updateWarmupSet(index, 'reps', e.target.value)} placeholder="powt." style={inputStyle({ minHeight: 40, fontFamily: mono, textAlign: 'center' })} />
                     <input value={set.weight_kg || ''} onChange={e => updateWarmupSet(index, 'weight_kg', e.target.value)} placeholder="kg" style={inputStyle({ minHeight: 40, fontFamily: mono, textAlign: 'center' })} />
-                    <input value={set.note || ''} onChange={e => updateWarmupSet(index, 'note', e.target.value)} placeholder="uwaga" style={inputStyle({ minHeight: 40 })} />
+                    <input value={set.note || ''} onChange={e => updateWarmupSet(index, 'note', e.target.value)} placeholder="komentarz" style={inputStyle({ minHeight: 40 })} />
                     <button onClick={() => removeWarmupSet(index)} style={{ height: 40, border: `1.5px solid ${C.grayLight}`, background: C.white, color: C.gray, borderRadius: 9, fontWeight: 800 }}>
                       x
                     </button>
@@ -421,6 +426,11 @@ function ExerciseModal({
               {saveError}
             </div>
           )}
+
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={labelStyle()}>Link do filmu / instrukcji</label>
+            <input value={exerciseUrl} onChange={e => setExerciseUrl(e.target.value)} placeholder="https://youtube.com/..." style={inputStyle()} />
+          </div>
 
           <div style={{ marginBottom: '1rem' }}>
             <label style={labelStyle()}>Komentarz dla zawodniczki</label>
@@ -553,6 +563,8 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
   const [savingPlan, setSavingPlan] = useState(false)
   const [planSaveMessage, setPlanSaveMessage] = useState('')
   const [globalError, setGlobalError] = useState('')
+  const [viewMode, setViewMode] = useState<'blocks' | 'table'>('blocks')
+  const [showWellness, setShowWellness] = useState(false)
 
   const currentDay = localDays.find(day => day.id === selectedDayId)
   const currentWeek = localWeeks.find(week => week.id === currentDay?.week_id)
@@ -622,6 +634,7 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
             is_warmup: exercise.is_warmup,
             warmup_sets: exercise.is_warmup ? cleanWarmupSets(exercise.warmup_sets || []) : [],
             coach_comment: exercise.coach_comment || null,
+            exercise_url: exercise.exercise_url || null,
           }
           let { error: exerciseError } = await supabase
             .from('workout_block_exercises')
@@ -722,13 +735,14 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
     }
   }
 
-  async function addBlock() {
-    if (!selectedDayId) return
-    const existingBlocks = localBlocks.filter(block => block.day_id === selectedDayId)
+  async function addBlock(dayId?: number) {
+    const targetDay = dayId ?? selectedDayId
+    if (!targetDay) return
+    const existingBlocks = localBlocks.filter(block => block.day_id === targetDay)
     const order = existingBlocks.length + 1
     const { data } = await supabase
       .from('workout_day_blocks')
-      .insert({ day_id: selectedDayId, block_name: nextBlockName(existingBlocks.length), block_order: order, rounds: 3 })
+      .insert({ day_id: targetDay, block_name: nextBlockName(existingBlocks.length), block_order: order, rounds: 3 })
       .select()
       .single()
     if (data) {
@@ -736,6 +750,69 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
       setLocalBlocks(prev => [...prev, newBlock])
       setTargetBlocks(prev => [...prev, newBlock])
     }
+  }
+
+  async function addBlockToAllDays() {
+    if (!confirm(`Dodać nowy blok do wszystkich ${localDays.length} treningów w planie?`)) return
+    const newBlocks: Block[] = []
+    for (const day of localDays) {
+      const dayBlocks = localBlocks.filter(block => block.day_id === day.id)
+      const order = dayBlocks.length + 1
+      const { data } = await supabase
+        .from('workout_day_blocks')
+        .insert({ day_id: day.id, block_name: nextBlockName(dayBlocks.length), block_order: order, rounds: 3 })
+        .select()
+        .single()
+      if (data) newBlocks.push({ ...(data as Block), workout_block_exercises: [] })
+    }
+    setLocalBlocks(prev => [...prev, ...newBlocks])
+    setTargetBlocks(prev => [...prev, ...newBlocks])
+  }
+
+  async function copyBlockToAllDays(block: Block) {
+    const otherDays = localDays.filter(day => day.id !== block.day_id)
+    if (otherDays.length === 0) { showError('Brak innych treningów w planie.'); return }
+    if (!confirm(`Skopiować blok "${block.block_name}" do ${otherDays.length} pozostałych treningów?`)) return
+
+    const newBlocks: Block[] = []
+    for (const day of otherDays) {
+      const dayBlocks = localBlocks.filter(b => b.day_id === day.id)
+      const order = dayBlocks.length + 1
+      const { data: blockData } = await supabase
+        .from('workout_day_blocks')
+        .insert({ day_id: day.id, block_name: block.block_name, block_order: order, rounds: block.rounds })
+        .select()
+        .single()
+      if (!blockData) continue
+
+      const exercises = block.workout_block_exercises || []
+      let copiedExercises: BlockExercise[] = []
+      if (exercises.length > 0) {
+        const { data: exData } = await supabase
+          .from('workout_block_exercises')
+          .insert(exercises.map(ex => ({
+            block_id: (blockData as Block).id,
+            exercise_id: ex.exercise_id || null,
+            exercise_code: ex.exercise_code || null,
+            exercise_order: ex.exercise_order,
+            sets: ex.sets,
+            reps: ex.reps || null,
+            tempo: ex.tempo || null,
+            weight_kg: ex.weight_kg ?? null,
+            rir: ex.rir ?? null,
+            is_warmup: ex.is_warmup,
+            warmup_sets: ex.warmup_sets || [],
+            coach_comment: ex.coach_comment || null,
+          })))
+          .select('*, exercise:exercises(*)')
+        copiedExercises = (exData as BlockExercise[]) || []
+      }
+
+      newBlocks.push({ ...(blockData as Block), workout_block_exercises: copiedExercises })
+    }
+
+    setLocalBlocks(prev => [...prev, ...newBlocks])
+    setTargetBlocks(prev => [...prev, ...newBlocks])
   }
 
   async function deleteBlock(blockId: number) {
@@ -915,6 +992,10 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
         </div>
       )}
 
+      {showWellness && (
+        <PlanWellnessConfig planId={plan.id} onClose={() => setShowWellness(false)} />
+      )}
+
       {editingExercise && (
         <ExerciseModal
           exercise={editingExercise}
@@ -939,9 +1020,6 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
       <div style={{ minHeight: '100vh', background: C.offWhite, fontFamily: sans, color: C.navy }}>
         <header style={{ background: C.navy, padding: '1rem 1.25rem 1.25rem', position: 'sticky', top: 0, zIndex: 10 }}>
           <div style={{ maxWidth: 1180, margin: '0 auto', display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr) auto', gap: 12, alignItems: 'center' }}>
-            <button onClick={() => router.push('/coach/plans')} style={{ border: `1.5px solid ${C.gold}`, background: C.white, color: C.navy, borderRadius: 10, padding: '0.72rem 0.95rem', fontFamily: sans, fontSize: '0.84rem', fontWeight: 900 }}>
-              Powrot do panelu
-            </button>
             <div>
               <label style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>Edytor planu</label>
               <input
@@ -952,7 +1030,14 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
               />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div style={{ display: 'flex', background: C.navyLight, borderRadius: 9, border: `1.5px solid ${C.navyBorder}`, overflow: 'hidden' }}>
+                  <button onClick={() => setViewMode('blocks')} style={{ padding: '0.5rem 0.75rem', border: 'none', background: viewMode === 'blocks' ? C.gold : 'transparent', color: viewMode === 'blocks' ? C.navy : C.gray, fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer' }}>⊞ Bloki</button>
+                  <button onClick={() => setViewMode('table')} style={{ padding: '0.5rem 0.75rem', border: 'none', background: viewMode === 'table' ? C.gold : 'transparent', color: viewMode === 'table' ? C.navy : C.gray, fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer' }}>⊟ Tabelka</button>
+                </div>
+                <button onClick={() => setShowWellness(true)} title="Skonfiguruj parametry wellness dla tego planu" style={{ border: `1.5px solid ${C.navyBorder}`, background: C.navyLight, color: C.white, borderRadius: 9, padding: '0.5rem 0.75rem', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer' }}>
+                  🩺 Wellness
+                </button>
                 <button
                   onClick={() => router.push('/coach/plans')}
                   style={{ border: `1.5px solid ${C.navyBorder}`, background: C.navyLight, color: C.white, borderRadius: 10, padding: '0.7rem 0.85rem', fontWeight: 800 }}
@@ -974,7 +1059,21 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
           </div>
         </header>
 
-        <div style={{ maxWidth: 1180, margin: '0 auto', display: 'grid', gridTemplateColumns: '280px minmax(0, 1fr)', gap: 16, padding: '1rem' }}>
+        <div style={{ maxWidth: viewMode === 'table' ? 1600 : 1180, margin: '0 auto', display: 'grid', gridTemplateColumns: viewMode === 'table' ? '1fr' : '280px minmax(0, 1fr)', gap: 16, padding: '1rem' }}>
+          {viewMode === 'table' && (
+            <PlanTableView
+              plan={plan}
+              weeks={localWeeks}
+              days={localDays}
+              blocks={localBlocks}
+              onBlocksChange={next => { setLocalBlocks(next); setTargetBlocks(next) }}
+              onAddWeek={addWeek}
+              onAddDay={addDay}
+              onAddBlock={addBlock}
+              onAddExercise={blockId => setEditingExercise({ block_id: blockId, exercise_order: (localBlocks.find(b => b.id === blockId)?.workout_block_exercises?.length ?? 0) + 1, sets: 3, is_warmup: false })}
+            />
+          )}
+          {viewMode === 'blocks' && <>
           <aside>
             <Card style={{ position: 'sticky', top: 102 }}>
               <div style={{ padding: '1rem' }}>
@@ -1044,65 +1143,72 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
                         style={{ width: '100%', border: 'none', background: 'transparent', outline: 'none', fontWeight: 800, fontSize: '1.45rem', color: C.navy }}
                       />
                     </div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button onClick={addBlock} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 10, padding: '0.75rem 0.9rem', fontWeight: 800 }}>Dodaj blok</button>
-                      <button onClick={() => setMovingItem({ type: 'day', day: currentDay })} style={{ border: `1.5px solid ${C.grayLight}`, background: C.white, color: C.navy, borderRadius: 10, padding: '0.75rem 0.9rem', fontWeight: 700 }}>Przenies</button>
-                      <button onClick={() => deleteDay(selectedDayId)} style={{ border: `1.5px solid ${C.grayLight}`, background: C.white, color: C.gray, borderRadius: 10, padding: '0.75rem 0.9rem', fontWeight: 700 }}>Usun</button>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <button onClick={() => addBlock()} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 9, padding: '0.55rem 0.85rem', fontWeight: 800, fontSize: '0.84rem' }}>+ Blok</button>
+                      <button onClick={() => setMovingItem({ type: 'day', day: currentDay })} title="Przenieś trening" style={iconBtn()}>↕</button>
+                      <button onClick={() => deleteDay(selectedDayId)} title="Usuń trening" style={iconBtn('#FEF2F2', C.red)}>🗑</button>
                     </div>
                   </div>
                 </Card>
 
                 {currentDayBlocks.map(block => (
-                  <Card key={block.id} style={{ marginBottom: '1rem' }}>
-                    <div style={{ padding: '1rem' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 10, marginBottom: '0.875rem' }}>
+                  <Card key={block.id} style={{ marginBottom: '1rem', overflow: 'visible' }}>
+                    {/* Block header */}
+                    <div style={{ padding: '0.75rem 1rem', borderBottom: `1.5px solid ${C.grayLight}`, display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <input
+                        value={block.block_name}
+                        onChange={event => setLocalBlocks(prev => prev.map(item => item.id === block.id ? { ...item, block_name: event.target.value } : item))}
+                        onBlur={event => renameBlock(block.id, event.target.value)}
+                        style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', fontWeight: 800, fontSize: '1rem', color: C.navy, minWidth: 0 }}
+                      />
+                      {/* rounds */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: C.offWhite, borderRadius: 8, padding: '0.28rem 0.55rem', border: `1.5px solid ${C.grayLight}` }}>
+                        <span style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, letterSpacing: '0.06em' }}>🔁</span>
                         <input
-                          value={block.block_name}
-                          onChange={event => setLocalBlocks(prev => prev.map(item => item.id === block.id ? { ...item, block_name: event.target.value } : item))}
-                          onBlur={event => renameBlock(block.id, event.target.value)}
-                          style={{ border: 'none', background: 'transparent', outline: 'none', fontWeight: 800, fontSize: '1.05rem', color: C.navy }}
+                          type="number" min={1} max={10} value={block.rounds}
+                          onChange={event => updateBlockRounds(block.id, parseInt(event.target.value) || 1)}
+                          style={{ width: 28, border: 'none', background: 'transparent', outline: 'none', textAlign: 'center', fontFamily: mono, color: C.navy, fontWeight: 800, fontSize: '0.9rem' }}
                         />
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: C.offWhite, borderRadius: 10, padding: '0.35rem 0.55rem' }}>
-                          <span style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray }}>rundy</span>
-                          <input
-                            type="number"
-                            min={1}
-                            max={10}
-                            value={block.rounds}
-                            onChange={event => updateBlockRounds(block.id, parseInt(event.target.value) || 1)}
-                            style={{ width: 40, border: 'none', background: 'transparent', outline: 'none', textAlign: 'center', fontFamily: mono, color: C.navy, fontWeight: 800 }}
-                          />
-                        </div>
-                        <button onClick={() => setMovingItem({ type: 'block', block })} style={{ border: 'none', background: C.offWhite, color: C.navy, borderRadius: 9, padding: '0.55rem 0.7rem', fontWeight: 800 }}>Przenies</button>
-                        <button onClick={() => deleteBlock(block.id)} style={{ border: 'none', background: 'transparent', color: C.gray, fontWeight: 700 }}>Usun blok</button>
+                        <span style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray }}>rund</span>
                       </div>
+                      {/* icon buttons */}
+                      <button onClick={() => copyBlockToAllDays(block)} title="Kopiuj blok do wszystkich treningów" style={iconBtn()}>📋</button>
+                      <button onClick={() => setMovingItem({ type: 'block', block })} title="Przenieś blok" style={iconBtn()}>↕</button>
+                      <button onClick={() => deleteBlock(block.id)} title="Usuń blok" style={iconBtn('#FEF2F2', C.red)}>🗑</button>
+                    </div>
 
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ padding: '0.75rem 1rem' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         {(block.workout_block_exercises || [])
                           .sort((a, b) => a.exercise_order - b.exercise_order)
                           .map((exercise, index) => {
                             const name = formatExerciseName(exercise.exercise?.name || exercise.exercise_code || 'Cwiczenie')
                             const warmupCount = cleanWarmupSets(exercise.warmup_sets || []).length
                             return (
-                              <div key={exercise.id} style={{ display: 'grid', gridTemplateColumns: '44px 1fr auto', gap: 10, alignItems: 'center', padding: '0.75rem', border: `1.5px solid ${C.grayLight}`, borderRadius: 12, background: C.offWhite }}>
-                                <div style={{ width: 38, height: 38, borderRadius: 10, background: C.navy, color: C.gold, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: mono, fontWeight: 800 }}>
+                              <div key={exercise.id} style={{ display: 'grid', gridTemplateColumns: '32px 1fr auto', gap: 10, alignItems: 'center', padding: '0.6rem 0.75rem', border: `1.5px solid ${C.grayLight}`, borderRadius: 10, background: C.offWhite }}>
+                                <div style={{ width: 28, height: 28, borderRadius: 8, background: C.navy, color: C.gold, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: mono, fontWeight: 800, fontSize: '0.75rem' }}>
                                   {index + 1}
                                 </div>
                                 <div style={{ minWidth: 0 }}>
-                                  <div style={{ fontWeight: 800, color: C.navy }}>{name}</div>
-                                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 5 }}>
-                                    <span style={chipStyle(C.navy, C.gold)}>{exercise.sets}x{exercise.reps || '-'}</span>
-                                    {exercise.tempo && <span style={chipStyle(C.navy, C.gold)}>{exercise.tempo}</span>}
-                                    {exercise.weight_kg && <span style={chipStyle(C.grayLight, C.gray)}>{exercise.weight_kg}kg</span>}
-                                    {exercise.rir !== null && exercise.rir !== undefined && <span style={chipStyle(C.grayLight, C.gray)}>RIR {exercise.rir}</span>}
-                                    {exercise.is_warmup && <span style={chipStyle(C.gold, C.navy)}>Rozgrzewka {warmupCount || 1}</span>}
+                                  <div style={{ fontWeight: 700, color: C.navy, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    {name}
+                                    {exercise.exercise_url && (
+                                      <a href={exercise.exercise_url} target="_blank" rel="noopener noreferrer" title="Otwórz film/instrukcję" style={{ fontSize: '0.85rem', textDecoration: 'none' }}>🔗</a>
+                                    )}
                                   </div>
-                                  {exercise.coach_comment && <div style={{ color: C.gray, fontSize: '0.82rem', marginTop: 6, fontStyle: 'italic' }}>{exercise.coach_comment}</div>}
+                                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 4 }}>
+                                    <span style={chipStyle(C.navy, C.gold)}>{exercise.sets}×{exercise.reps || '—'}</span>
+                                    {exercise.tempo && <span style={chipStyle(C.navy, C.gold)}>{exercise.tempo}</span>}
+                                    {exercise.weight_kg && <span style={chipStyle(C.grayLight, C.gray)}>{exercise.weight_kg} kg</span>}
+                                    {exercise.rir !== null && exercise.rir !== undefined && <span style={chipStyle(C.grayLight, C.gray)}>RIR {exercise.rir}</span>}
+                                    {exercise.is_warmup && <span style={chipStyle('#FEF9C3', '#854D0E')}>🔥 rozgrzewka ×{warmupCount || 1}</span>}
+                                  </div>
+                                  {exercise.coach_comment && <div style={{ color: C.gray, fontSize: '0.76rem', marginTop: 4, fontStyle: 'italic' }}>{exercise.coach_comment}</div>}
                                 </div>
-                                <div style={{ display: 'flex', gap: 6 }}>
-                                  <button onClick={() => setMovingItem({ type: 'exercise', exercise: { ...exercise, block_id: block.id }, fromBlockId: block.id })} style={{ border: 'none', background: C.white, color: C.gray, borderRadius: 10, padding: '0.65rem 0.75rem', fontWeight: 700 }}>Przenies</button>
-                                  <button onClick={() => setEditingExercise({ ...exercise, block_id: block.id })} style={{ border: 'none', background: C.white, color: C.navy, borderRadius: 10, padding: '0.65rem 0.8rem', fontWeight: 800 }}>Edytuj</button>
-                                  <button onClick={() => deleteExercise(block.id, exercise.id)} style={{ border: `1.5px solid ${C.red}`, background: C.white, color: C.red, borderRadius: 10, padding: '0.65rem 0.75rem', fontWeight: 800 }}>Usun</button>
+                                <div style={{ display: 'flex', gap: 4 }}>
+                                  <button onClick={() => setMovingItem({ type: 'exercise', exercise: { ...exercise, block_id: block.id }, fromBlockId: block.id })} title="Przenieś" style={iconBtn()}>↕</button>
+                                  <button onClick={() => setEditingExercise({ ...exercise, block_id: block.id })} title="Edytuj" style={iconBtn(C.navy + '10', C.navy)}>✏️</button>
+                                  <button onClick={() => deleteExercise(block.id, exercise.id)} title="Usuń" style={iconBtn('#FEF2F2', C.red)}>✕</button>
                                 </div>
                               </div>
                             )
@@ -1111,9 +1217,9 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
 
                       <button
                         onClick={() => setEditingExercise({ block_id: block.id, exercise_order: (block.workout_block_exercises || []).length + 1, sets: 3, is_warmup: false })}
-                        style={{ width: '100%', marginTop: '0.875rem', padding: '0.8rem', border: `1.5px dashed ${C.grayLight}`, borderRadius: 12, background: C.white, color: C.gray, fontFamily: mono, fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase' }}
+                        style={{ width: '100%', marginTop: '0.65rem', padding: '0.65rem', border: `1.5px dashed ${C.grayLight}`, borderRadius: 10, background: C.white, color: C.gray, fontFamily: mono, fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer' }}
                       >
-                        + Dodaj cwiczenie
+                        + dodaj ćwiczenie
                       </button>
                     </div>
                   </Card>
@@ -1124,17 +1230,26 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
                     <div style={{ padding: '2rem 1rem', textAlign: 'center' }}>
                       <div style={{ fontWeight: 800, color: C.navy, marginBottom: 6 }}>Ten trening nie ma jeszcze blokow</div>
                       <div style={{ color: C.gray, fontSize: '0.86rem', marginBottom: '1rem' }}>Dodaj pierwszy blok i zacznij wpisywac cwiczenia.</div>
-                      <button onClick={addBlock} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 10, padding: '0.85rem 1rem', fontWeight: 800 }}>Dodaj blok</button>
+                      <button onClick={() => addBlock()} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 10, padding: '0.85rem 1rem', fontWeight: 800 }}>Dodaj blok</button>
                     </div>
                   </Card>
                 )}
               </>
             )}
           </main>
+          </>}
         </div>
       </div>
     </>
   )
+}
+
+function iconBtn(bg = C.offWhite, color = C.navy): CSSProperties {
+  return {
+    width: 32, height: 32, border: `1.5px solid ${C.grayLight}`, background: bg,
+    color, borderRadius: 8, fontWeight: 800, fontSize: '0.9rem', display: 'flex',
+    alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
+  }
 }
 
 function chipStyle(background: string, color: string): CSSProperties {
