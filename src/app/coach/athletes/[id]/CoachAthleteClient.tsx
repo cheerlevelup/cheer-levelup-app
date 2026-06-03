@@ -3,206 +3,414 @@
 
 import { useRouter } from 'next/navigation'
 
+const C = {
+  navy: '#0D1B2A', navyLight: '#1A2E45', navyBorder: '#243652',
+  gold: '#F5C842', white: '#FFFFFF', offWhite: '#F4F6F9',
+  gray: '#8A9BB0', grayLight: '#E8ECF2', green: '#22C55E',
+  red: '#EF4444', orange: '#F97316',
+}
 const sans = "'Space Grotesk', sans-serif"
 const mono = "'Space Mono', monospace"
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('pl-PL', { day: 'numeric', month: 'long', year: 'numeric' })
+function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  return (
+    <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, overflow: 'hidden', boxShadow: '0 4px 20px rgba(13,27,42,0.05)', ...style }}>
+      {children}
+    </div>
+  )
+}
+
+function SectionHeader({ title }: { title: string }) {
+  return (
+    <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.875rem', fontWeight: 700 }}>
+      {title}
+    </div>
+  )
+}
+
+function avg(arr: number[]): string | null {
+  if (arr.length === 0) return null
+  return (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1)
+}
+
+function toDateKey(iso: string) {
+  return iso ? iso.split('T')[0] : ''
 }
 
 function rpeColor(rpe: number) {
-  if (rpe <= 4) return '#4CAF50'
-  if (rpe <= 6) return '#F5C842'
-  if (rpe <= 8) return '#FF9800'
-  return '#f44336'
+  if (rpe <= 4) return C.green
+  if (rpe <= 6) return C.gold
+  if (rpe <= 8) return C.orange
+  return C.red
 }
 
-function feelingLabel(f: string) {
-  const map: Record<string, string> = {
-    swietnie: '💪 Świetnie', dobrze: '😊 Dobrze',
-    srednie: '😐 Średnio', zmeczona: '😓 Zmęczona', slabo: '😞 Słabo',
-  }
-  return map[f] || f
+interface Props {
+  athlete: any
+  assignment: any
+  sessions: any[]
+  feedbacks: any[]
+  wellnessLogs: any[]
+  wellnessList: any[]
+  dietLogs: any[]
+  painLogs: any[]
 }
 
-export default function CoachAthleteClient({ athlete, sessions, feedbacks, wellnessList, painLogs }: any) {
+export default function CoachAthleteClient({ athlete, assignment, sessions, feedbacks, wellnessLogs, wellnessList, dietLogs, painLogs }: Props) {
   const router = useRouter()
 
-  const completedSessions = (sessions || []).filter((s: any) => s.completed)
-  const avgRpe = (feedbacks || []).length > 0
-    ? ((feedbacks || []).reduce((sum: number, f: any) => sum + (f.session_rpe || 0), 0) / (feedbacks || []).length).toFixed(1)
+  const completedSessions = sessions.filter(s => s.completed)
+
+  const feedbackMap: Record<number, any> = {}
+  for (const f of feedbacks) feedbackMap[f.workout_session_id || f.session_id] = f
+
+  const avgRpe = feedbacks.length > 0
+    ? avg(feedbacks.map(f => f.session_rpe).filter((v): v is number => v != null))
     : null
 
-  const lastWellness = (wellnessList || [])[0]
-  const recentPain = (painLogs || []).slice(0, 3)
+  // Wellness averages (28 dni)
+  const wellnessSleepAvg = avg(wellnessLogs.map(w => w.sleep_hours).filter((v): v is number => v != null))
+  const wellnessEnergyAvg = avg(wellnessLogs.map(w => w.energy).filter((v): v is number => v != null))
+  const wellnessStressAvg = avg(wellnessLogs.map(w => w.stress).filter((v): v is number => v != null))
+  const wellnessReadinessAvg = avg(wellnessLogs.map(w => w.readiness).filter((v): v is number => v != null))
+
+  // Indeksy po dacie
+  const wellnessByDate: Record<string, any> = {}
+  for (const w of wellnessLogs) {
+    const k = toDateKey(w.created_at)
+    if (k) wellnessByDate[k] = w
+  }
+
+  const dietByDate: Record<string, any> = {}
+  for (const d of dietLogs) {
+    if (d.date) dietByDate[d.date] = d
+  }
+
+  // Sesje po dacie z numerem porządkowym (od najstarszej)
+  const completedByDate: Record<string, { session: any; num: number }> = {}
+  const sortedCompleted = [...completedSessions].sort(
+    (a, b) => new Date(a.date_completed || a.date_started || 0).getTime() - new Date(b.date_completed || b.date_started || 0).getTime()
+  )
+  sortedCompleted.forEach((s, i) => {
+    const key = toDateKey(s.date_completed || s.date_started || '')
+    if (key) completedByDate[key] = { session: s, num: i + 1 }
+  })
+
+  // Generuj ostatnie 28 dni
+  const todayDate = new Date()
+  todayDate.setHours(0, 0, 0, 0)
+  const todayKey = todayDate.toISOString().split('T')[0]
+
+  const calendarDays: Date[] = []
+  for (let i = 27; i >= 0; i--) {
+    const d = new Date(todayDate)
+    d.setDate(d.getDate() - i)
+    calendarDays.push(d)
+  }
+  const weeks: Date[][] = []
+  for (let i = 0; i < calendarDays.length; i += 7) {
+    weeks.push(calendarDays.slice(i, i + 7))
+  }
+  const dayNames = ['Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'Sb', 'Nd']
+
+  const lastWellness = wellnessList[0]
 
   return (
     <>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap'); * { box-sizing: border-box; margin: 0; padding: 0; } body { background: #F0EEE9; }`}</style>
-      <div style={{ minHeight: '100vh', background: '#F0EEE9', fontFamily: sans, color: '#111' }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: ${C.offWhite}; }
+        button { cursor: pointer; font-family: inherit; }
+      `}</style>
+
+      <div style={{ minHeight: '100vh', background: C.offWhite, fontFamily: sans, color: C.navy }}>
 
         {/* Header */}
-        <header style={{
-          borderBottom: '1px solid #D5D2CB', padding: '1.25rem 2rem',
-          display: 'flex', alignItems: 'center', gap: '1rem',
-          background: '#F0EEE9', position: 'sticky', top: 0, zIndex: 10,
-        }}>
-          <button
-            onClick={() => athlete.group_id ? router.push(`/coach/groups/${athlete.group_id}`) : router.push('/coach')}
-            style={{ fontFamily: mono, fontSize: '0.75rem', color: '#888', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: '0.06em' }}
-          >
-            ← {athlete.group?.name || 'Panel'}
-          </button>
-          <h1 style={{ fontSize: '1.1rem', fontWeight: 700 }}>{athlete.full_name}</h1>
-          <button
-            onClick={() => router.push(`/coach/athletes/${athlete.id}/training`)}
-            style={{ marginLeft: 'auto', padding: '0.5rem 1rem', background: '#111', color: '#F0EEE9', fontFamily: mono, fontSize: '0.65rem', letterSpacing: '0.08em', textTransform: 'uppercase', border: 'none', cursor: 'pointer' }}
-          >
-            Plan ✎
-          </button>
-        </header>
-
-        <main style={{ maxWidth: 720, margin: '0 auto', padding: '2rem' }}>
-
-          {/* Profil */}
-          <div style={{ background: '#111', color: '#F0EEE9', padding: '1.5rem', marginBottom: '1.5rem' }}>
-            <div style={{ fontFamily: mono, fontSize: '0.65rem', color: '#888', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
-              Profil zawodniczki
-            </div>
-            <div style={{ fontSize: '1.8rem', fontWeight: 700, letterSpacing: '-0.02em', marginBottom: 4 }}>
-              {athlete.full_name}
-            </div>
-            <div style={{ fontFamily: mono, fontSize: '0.75rem', color: '#888' }}>
-              {athlete.group?.name && <span>Grupa {athlete.group.name}</span>}
-              {athlete.birth_year && <span> · ur. {athlete.birth_year}</span>}
+        <header style={{ background: C.navy, padding: '1rem 1.25rem 1.35rem', position: 'sticky', top: 0, zIndex: 10 }}>
+          <div style={{ maxWidth: 800, margin: '0 auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: '0.875rem' }}>
+              <button
+                onClick={() => athlete.group_id ? router.push(`/coach/groups/${athlete.group_id}`) : router.push('/coach')}
+                style={{ border: 'none', background: C.navyLight, color: C.gray, borderRadius: 10, padding: '0.55rem 0.75rem', fontFamily: mono, fontSize: '0.68rem', fontWeight: 700 }}
+              >
+                ← {athlete.group?.name || 'Panel'}
+              </button>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 2 }}>Zawodniczka</div>
+                <h1 style={{ color: C.white, fontSize: '1.25rem', fontWeight: 800 }}>{athlete.full_name}</h1>
+              </div>
+              <button
+                onClick={() => router.push(`/coach/athletes/${athlete.id}/training`)}
+                style={{ border: `1.5px solid ${C.gold}`, background: 'transparent', color: C.gold, borderRadius: 10, padding: '0.6rem 0.875rem', fontWeight: 800, fontSize: '0.82rem', flexShrink: 0 }}
+              >
+                ✎ Edytuj plan
+              </button>
             </div>
           </div>
+        </header>
 
-          {/* Statystyki */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1, marginBottom: '1.5rem' }}>
-            {[
-              { label: 'Treningów', value: completedSessions.length },
-              { label: 'Śr. RPE', value: avgRpe || '—' },
-              { label: 'Zgłoszenia bólu', value: painLogs.length },
-            ].map(stat => (
-              <div key={stat.label} style={{ background: '#E8E6E0', padding: '1rem' }}>
-                <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#888', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>{stat.label}</div>
-                <div style={{ fontFamily: mono, fontSize: '1.6rem', fontWeight: 700, color: '#111', lineHeight: 1 }}>{stat.value}</div>
+        <main style={{ maxWidth: 800, margin: '0 auto', padding: '1.25rem 1rem 5rem' }}>
+
+          {/* Profil + Plan */}
+          <Card style={{ marginBottom: '1rem' }}>
+            <div style={{ padding: '1.25rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+              <div>
+                <SectionHeader title="Profil" />
+                <div style={{ fontWeight: 800, fontSize: '1.05rem', color: C.navy, marginBottom: 5 }}>{athlete.full_name}</div>
+                {athlete.group?.name && (
+                  <div style={{ fontFamily: mono, fontSize: '0.72rem', color: C.gray, marginBottom: 2 }}>Grupa: {athlete.group.name}</div>
+                )}
+                {athlete.birth_year && (
+                  <div style={{ fontFamily: mono, fontSize: '0.72rem', color: C.gray }}>ur. {athlete.birth_year}</div>
+                )}
               </div>
+              <div>
+                <SectionHeader title="Aktywny plan" />
+                {assignment ? (
+                  <>
+                    <div style={{ fontWeight: 800, fontSize: '1rem', color: C.navy, marginBottom: 5 }}>{assignment.plan?.name}</div>
+                    <div style={{ fontFamily: mono, fontSize: '0.7rem', color: C.gray, marginBottom: 10 }}>
+                      {assignment.order_mode === 'sequential' ? 'Sekwencyjny' : 'Datowany'} · od {new Date(assignment.start_date).toLocaleDateString('pl-PL')}
+                    </div>
+                    <button
+                      onClick={() => router.push(`/coach/athletes/${athlete.id}/training`)}
+                      style={{ padding: '0.5rem 0.875rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 8, fontWeight: 800, fontSize: '0.78rem' }}
+                    >
+                      Modyfikuj ćwiczenia →
+                    </button>
+                  </>
+                ) : (
+                  <div style={{ color: C.gray, fontSize: '0.86rem', fontStyle: 'italic' }}>Brak przypisanego planu</div>
+                )}
+              </div>
+            </div>
+          </Card>
+
+          {/* Szybkie statystyki */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: '1rem' }}>
+            {[
+              { label: 'Treningi', value: completedSessions.length, color: C.navy },
+              { label: 'Śr. RPE', value: avgRpe ?? '—', color: avgRpe ? rpeColor(parseFloat(avgRpe)) : C.gray },
+              { label: 'Wellness', value: `${wellnessLogs.length}d`, color: C.green },
+              { label: 'Dieta', value: `${dietLogs.length}d`, color: C.gold },
+            ].map(stat => (
+              <Card key={stat.label}>
+                <div style={{ padding: '0.875rem' }}>
+                  <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 5 }}>{stat.label}</div>
+                  <div style={{ fontFamily: mono, fontSize: '1.5rem', fontWeight: 900, color: stat.color, lineHeight: 1 }}>{stat.value}</div>
+                </div>
+              </Card>
             ))}
           </div>
 
-          {/* Ostatnie wellness */}
-          {lastWellness && (
-            <section style={{ marginBottom: '1.5rem' }}>
-              <p style={{ fontFamily: mono, fontSize: '0.65rem', color: '#888', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.625rem' }}>
-                Ostatni wellness ({formatDate(lastWellness.created_at)})
-              </p>
-              <div style={{ background: '#E8E6E0', padding: '1rem', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem' }}>
+          {/* Wellness — średnie */}
+          {wellnessLogs.length > 0 && (
+            <Card style={{ marginBottom: '1rem' }}>
+              <div style={{ padding: '1rem 1.25rem' }}>
+                <SectionHeader title={`Wellness — średnie z 28 dni (${wellnessLogs.length} wpisów)`} />
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+                  {[
+                    { label: 'Sen', value: wellnessSleepAvg, unit: 'h', max: 12, inverse: false },
+                    { label: 'Energia', value: wellnessEnergyAvg, unit: '/10', max: 10, inverse: false },
+                    { label: 'Stres', value: wellnessStressAvg, unit: '/10', max: 10, inverse: true },
+                    { label: 'Gotowość', value: wellnessReadinessAvg, unit: '/10', max: 10, inverse: false },
+                  ].map(stat => {
+                    const num = stat.value ? parseFloat(stat.value) : null
+                    const pct = num ? (num / stat.max) * 100 : 0
+                    const barColor = stat.inverse
+                      ? (pct > 60 ? C.red : pct > 30 ? C.gold : C.green)
+                      : (pct > 60 ? C.green : pct > 30 ? C.gold : C.red)
+                    return (
+                      <div key={stat.label}>
+                        <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>{stat.label}</div>
+                        <div style={{ fontFamily: mono, fontSize: '1.1rem', fontWeight: 800, color: C.navy, marginBottom: 6 }}>
+                          {stat.value ?? '—'}{stat.value ? stat.unit : ''}
+                        </div>
+                        {num != null && (
+                          <div style={{ height: 4, background: C.grayLight, borderRadius: 2, overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${pct}%`, background: barColor, borderRadius: 2 }} />
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {/* Kalendarz */}
+          <Card style={{ marginBottom: '1rem' }}>
+            <div style={{ padding: '1rem 1.25rem' }}>
+              <SectionHeader title="Kalendarz — ostatnie 28 dni" />
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 420 }}>
+                  <thead>
+                    <tr>
+                      {dayNames.map(d => (
+                        <th key={d} style={{ padding: '0 4px 8px', textAlign: 'center', fontFamily: mono, fontSize: '0.6rem', color: C.gray, fontWeight: 700 }}>{d}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {weeks.map((week, wi) => (
+                      <tr key={wi}>
+                        {week.map(day => {
+                          const key = day.toISOString().split('T')[0]
+                          const isToday = key === todayKey
+                          const hasWellness = !!wellnessByDate[key]
+                          const hasDiet = !!dietByDate[key]
+                          const trainingInfo = completedByDate[key]
+                          return (
+                            <td key={key} style={{ padding: '3px 4px', textAlign: 'center', verticalAlign: 'top' }}>
+                              <div style={{
+                                minHeight: 68, padding: '5px 3px', borderRadius: 8,
+                                background: isToday ? C.navyLight : 'transparent',
+                                border: isToday ? `1.5px solid ${C.gold}` : '1.5px solid transparent',
+                              }}>
+                                {/* Data */}
+                                <div style={{ fontFamily: mono, fontSize: '0.6rem', color: isToday ? C.gold : C.gray, fontWeight: isToday ? 800 : 400, marginBottom: 5 }}>
+                                  {day.getDate()}
+                                </div>
+                                {/* Ikony */}
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                                  {/* Wellness — zawsze widoczny */}
+                                  <div
+                                    title={hasWellness ? 'Wellness uzupełniony' : 'Brak wellness'}
+                                    style={{ width: 16, height: 16, borderRadius: '50%', background: hasWellness ? C.green : C.red, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5rem', color: C.white, fontWeight: 800 }}
+                                  >
+                                    {hasWellness ? '✓' : ''}
+                                  </div>
+                                  {/* Dieta — tylko jeśli uzupełniona */}
+                                  {hasDiet && (
+                                    <div title="Dieta uzupełniona" style={{ fontSize: '0.72rem', lineHeight: 1 }}>🥗</div>
+                                  )}
+                                  {/* Trening — tylko jeśli wykonany */}
+                                  {trainingInfo && (
+                                    <div title={`Trening #${trainingInfo.num}`} style={{ position: 'relative', width: 18, height: 18 }}>
+                                      <div style={{ width: 18, height: 18, borderRadius: '50%', background: C.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem' }}>
+                                        🏋️
+                                      </div>
+                                      <div style={{ position: 'absolute', top: -4, right: -5, width: 12, height: 12, borderRadius: '50%', background: C.gold, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: mono, fontSize: '0.48rem', fontWeight: 900, color: C.navy }}>
+                                        {trainingInfo.num}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {/* Legenda */}
+              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: '0.875rem', paddingTop: '0.75rem', borderTop: `1.5px solid ${C.grayLight}` }}>
                 {[
-                  ['Sen', lastWellness.sleep_hours ? `${lastWellness.sleep_hours}h` : null],
-                  ['Energia', lastWellness.energy ? `${lastWellness.energy}/5` : null],
-                  ['Stres', lastWellness.stress ? `${lastWellness.stress}/5` : null],
-                  ['Gotowość', lastWellness.readiness ? `${lastWellness.readiness}/5` : null],
-                ].filter(([, v]) => v).map(([label, value]) => (
-                  <div key={label as string}>
-                    <div style={{ fontFamily: mono, fontSize: '0.55rem', color: '#888', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 2 }}>{label}</div>
-                    <div style={{ fontFamily: mono, fontSize: '1rem', fontWeight: 700, color: '#111' }}>{value}</div>
+                  { icon: <div style={{ width: 12, height: 12, borderRadius: '50%', background: C.green }} />, label: 'Wellness ✓' },
+                  { icon: <div style={{ width: 12, height: 12, borderRadius: '50%', background: C.red }} />, label: 'Wellness brak' },
+                  { icon: <span style={{ fontSize: '0.7rem' }}>🥗</span>, label: 'Dieta' },
+                  { icon: <span style={{ fontSize: '0.7rem' }}>🏋️</span>, label: 'Trening (nr w planie)' },
+                ].map((item, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    {item.icon}
+                    <span style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray }}>{item.label}</span>
                   </div>
                 ))}
               </div>
-              {lastWellness.concerns && (
-                <div style={{ background: '#fff8f0', borderLeft: '3px solid #F5C842', padding: '0.75rem 1rem', marginTop: 1 }}>
-                  <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#888', letterSpacing: '0.06em', marginBottom: 3 }}>UWAGI</div>
-                  <div style={{ fontSize: '0.88rem', color: '#111', fontStyle: 'italic' }}>"{lastWellness.concerns}"</div>
+            </div>
+          </Card>
+
+          {/* Ostatni wellness */}
+          {lastWellness && (
+            <Card style={{ marginBottom: '1rem' }}>
+              <div style={{ padding: '1rem 1.25rem' }}>
+                <SectionHeader title={`Ostatni wellness — ${new Date(lastWellness.created_at).toLocaleDateString('pl-PL', { day: 'numeric', month: 'long' })}`} />
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+                  {([
+                    ['Sen', lastWellness.sleep_hours != null ? `${lastWellness.sleep_hours}h` : null],
+                    ['Energia', lastWellness.energy != null ? `${lastWellness.energy}/10` : null],
+                    ['Stres', lastWellness.stress != null ? `${lastWellness.stress}/10` : null],
+                    ['Gotowość', lastWellness.readiness != null ? `${lastWellness.readiness}/10` : null],
+                  ] as [string, string | null][]).filter(([, v]) => v != null).map(([label, value]) => (
+                    <div key={label}>
+                      <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>{label}</div>
+                      <div style={{ fontFamily: mono, fontSize: '1rem', fontWeight: 800, color: C.navy }}>{value}</div>
+                    </div>
+                  ))}
                 </div>
-              )}
-            </section>
+                {lastWellness.concerns && (
+                  <div style={{ marginTop: '0.875rem', background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 10, padding: '0.75rem', fontSize: '0.86rem', color: C.navy, fontStyle: 'italic' }}>
+                    💬 &ldquo;{lastWellness.concerns}&rdquo;
+                  </div>
+                )}
+              </div>
+            </Card>
           )}
 
-          {/* Ból — ostatnie zgłoszenia */}
-          {(recentPain || []).length > 0 && (
-            <section style={{ marginBottom: '1.5rem' }}>
-              <p style={{ fontFamily: mono, fontSize: '0.65rem', color: '#888', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.625rem' }}>
-                Ostatnie zgłoszenia bólu
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {recentPain.map((p: any) => (
-                  <div key={p.id} style={{ background: '#fff8f0', borderLeft: '3px solid #F5C842', padding: '0.75rem 1rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          {/* Zgłoszenia bólu */}
+          {painLogs.length > 0 && (
+            <Card style={{ marginBottom: '1rem' }}>
+              <div style={{ padding: '1rem 1.25rem' }}>
+                <SectionHeader title="Zgłoszenia bólu" />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {painLogs.slice(0, 5).map((p: any) => (
+                    <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem', background: C.offWhite, borderRadius: 10, border: `1.5px solid ${C.grayLight}` }}>
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: '0.88rem', marginBottom: 2 }}>{p.location || '—'}</div>
-                        {p.description && <div style={{ fontSize: '0.8rem', color: '#555' }}>{p.description}</div>}
+                        <div style={{ fontWeight: 700, fontSize: '0.88rem', color: C.navy }}>{p.location || '—'}</div>
+                        {p.description && <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: 2 }}>{p.description}</div>}
+                        <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, marginTop: 3 }}>{new Date(p.created_at).toLocaleDateString('pl-PL')}</div>
                       </div>
-                      <div style={{
-                        fontFamily: mono, fontSize: '0.8rem', fontWeight: 700,
-                        color: p.vas_score >= 7 ? '#f44336' : p.vas_score >= 4 ? '#FF9800' : '#4CAF50',
-                        minWidth: 40, textAlign: 'right',
-                      }}>
+                      <div style={{ fontFamily: mono, fontSize: '0.88rem', fontWeight: 800, color: p.vas_score >= 7 ? C.red : p.vas_score >= 4 ? C.orange : C.green, background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 8, padding: '4px 10px', flexShrink: 0 }}>
                         VAS {p.vas_score}
                       </div>
                     </div>
-                    <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#aaa', marginTop: 4 }}>
-                      {formatDate(p.created_at)}
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </section>
+            </Card>
           )}
 
           {/* Historia treningów */}
-          <section>
-            <p style={{ fontFamily: mono, fontSize: '0.65rem', color: '#888', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.625rem' }}>
-              Historia treningów
-            </p>
-            {(sessions || []).length === 0 ? (
-              <p style={{ fontSize: '0.9rem', color: '#888', fontStyle: 'italic' }}>Brak treningów.</p>
+          <Card>
+            <div style={{ padding: '1rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}` }}>
+              <SectionHeader title="Historia treningów" />
+            </div>
+            {sessions.filter(s => s.completed).length === 0 ? (
+              <div style={{ padding: '1.5rem', color: C.gray, fontSize: '0.9rem', textAlign: 'center' }}>Brak ukończonych treningów.</div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {(sessions || []).map((s: any) => {
-                  const fb = feedbacks.find((f: any) => f.workout_session_id === s.id || f.session_id === s.id)
+              sessions
+                .filter(s => s.completed)
+                .slice(0, 15)
+                .map((s: any, i: number, arr: any[]) => {
+                  const fb = feedbackMap[s.id]
                   return (
-                    <div key={s.id} style={{
-                      padding: '0.875rem 0', borderBottom: '1px solid #D5D2CB',
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    }}>
+                    <div key={s.id} style={{ padding: '0.875rem 1.25rem', borderBottom: i < arr.length - 1 ? `1.5px solid ${C.grayLight}` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: '0.88rem', marginBottom: 2 }}>
+                        <div style={{ fontWeight: 700, fontSize: '0.9rem', color: C.navy, marginBottom: 2 }}>
                           {s.workout_day?.day_name || 'Trening'}
-                          {!s.completed && <span style={{ marginLeft: 8, fontFamily: mono, fontSize: '0.6rem', color: '#888', textTransform: 'uppercase' }}>w trakcie</span>}
+                          {s.report_sent && <span style={{ marginLeft: 8, fontSize: '0.75rem' }}>📋</span>}
                         </div>
-                        <div style={{ fontFamily: mono, fontSize: '0.65rem', color: '#888', letterSpacing: '0.04em' }}>
-                          {s.date_completed ? formatDate(s.date_completed) : s.date_started ? formatDate(s.date_started) : '—'}
+                        <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray }}>
+                          {s.date_completed ? new Date(s.date_completed).toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' }) : '—'}
                           {s.workout_day?.week?.plan?.name && ` · ${s.workout_day.week.plan.name}`}
                         </div>
                         {fb?.what_went_well && (
-                          <div style={{ fontSize: '0.78rem', color: '#555', marginTop: 3, fontStyle: 'italic' }}>
-                            "{fb.what_went_well}"
-                          </div>
+                          <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: 3, fontStyle: 'italic' }}>&ldquo;{fb.what_went_well}&rdquo;</div>
                         )}
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {fb?.session_rpe && (
-                          <div style={{
-                            fontFamily: mono, fontSize: '0.75rem', fontWeight: 700,
-                            color: rpeColor(fb.session_rpe),
-                            background: '#111', padding: '2px 8px',
-                          }}>
-                            RPE {fb.session_rpe}
-                          </div>
-                        )}
-                        {fb?.feeling_after && (
-                          <span style={{ fontSize: '0.8rem' }}>{feelingLabel(fb.feeling_after).split(' ')[0]}</span>
-                        )}
-                        {s.report_sent && <span style={{ fontSize: '0.75rem' }}>📋</span>}
-                      </div>
+                      {fb?.session_rpe && (
+                        <div style={{ fontFamily: mono, fontSize: '0.78rem', fontWeight: 800, color: rpeColor(fb.session_rpe), background: C.offWhite, border: `1.5px solid ${C.grayLight}`, borderRadius: 8, padding: '4px 10px', flexShrink: 0 }}>
+                          RPE {fb.session_rpe}
+                        </div>
+                      )}
                     </div>
                   )
-                })}
-              </div>
+                })
             )}
-          </section>
+          </Card>
 
         </main>
       </div>

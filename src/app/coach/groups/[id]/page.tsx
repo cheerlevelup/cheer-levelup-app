@@ -86,6 +86,12 @@ export default async function CoachGroupDetailPage({ params }: Props) {
     .in('athlete_id', athleteIds)
     .order('date_completed', { ascending: false })
 
+  // Wszystkie plany (do przypisywania)
+  const { data: plans } = await supabase
+    .from('workout_plans')
+    .select('id, name')
+    .order('created_at', { ascending: false })
+
   return (
     <CoachGroupDetailClient
       group={group}
@@ -93,6 +99,7 @@ export default async function CoachGroupDetailPage({ params }: Props) {
       assignments={allAssignments}
       days={days}
       sessions={sessions || []}
+      plans={plans || []}
     />
   )
 }
