@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
     try {
       const resend = new Resend(process.env.RESEND_API_KEY)
       await resend.emails.send({
-        from: 'Cheer LevelUP <onboarding@resend.dev>',
+        from: 'Cheer LevelUP <noreply@cheerlevelup.pl>',
         to: email,
         subject: '🎉 Witaj w Cheer LevelUP!',
         html: `
