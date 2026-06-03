@@ -68,12 +68,31 @@ function ExerciseEditModal({ ex, athleteId, athleteName, existingOverride, exerc
     setSaving(true); setError('')
     try {
       const payload = buildPayload(ex.id)
+
+      // Próba z pełnym payloadem (nowe kolumny); fallback do podstawowego jeśli schema cache
+      async function tryUpsert(p: any, id?: number) {
+        if (id) {
+          const r = await supabase.from('athlete_exercise_overrides').update(p).eq('id', id).select().single()
+          if (r.error?.message?.includes('schema cache') || r.error?.message?.includes('exercise_id_override') || r.error?.message?.includes('skip')) {
+            const { exercise_id_override, exercise_code_override, skip, is_substitution, ...basic } = p
+            return supabase.from('athlete_exercise_overrides').update(basic).eq('id', id).select().single()
+          }
+          return r
+        }
+        const r = await supabase.from('athlete_exercise_overrides').insert(p).select().single()
+        if (r.error?.message?.includes('schema cache') || r.error?.message?.includes('exercise_id_override') || r.error?.message?.includes('skip')) {
+          const { exercise_id_override, exercise_code_override, skip, is_substitution, ...basic } = p
+          return supabase.from('athlete_exercise_overrides').insert(basic).select().single()
+        }
+        return r
+      }
+
       let result: any
       if (existingOverride) {
-        const { data, error: e } = await supabase.from('athlete_exercise_overrides').update(payload).eq('id', existingOverride.id).select().single()
+        const { data, error: e } = await tryUpsert(payload, existingOverride.id)
         if (e) throw e; result = data
       } else {
-        const { data, error: e } = await supabase.from('athlete_exercise_overrides').insert(payload).select().single()
+        const { data, error: e } = await tryUpsert(payload)
         if (e) throw e; result = data
       }
 
@@ -702,6 +721,11 @@ export default function CoachAthleteTrainingClient({ athlete, assignment, days, 
                         </div>
                       )
                     })}
+                    {/* Przycisk dodaj ćwiczenie na dole bloku */}
+                    <button onClick={() => setAddingToBlock(block.id)}
+                      style={{ width: '100%', padding: '0.75rem 1.25rem', border: 'none', background: C.offWhite, color: C.gray, fontFamily: mono, fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                      ＋ Dodaj ćwiczenie do bloku
+                    </button>
                   </Card>
                 )
               })}
