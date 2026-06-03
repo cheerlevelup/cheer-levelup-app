@@ -15,9 +15,6 @@ export default async function CoachAthletePage({ params }: Props) {
 
   const { id } = await params
 
-  // Jeśli id === 'new' — przekieruj do starego formularza lub obsłuż osobno
-  if (id === 'new') redirect('/coach')
-
   const athleteId = parseInt(id)
 
   const { data: athlete } = await supabase
