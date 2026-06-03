@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 
 const C = {
@@ -188,9 +188,52 @@ export default function DietModal({ athleteId, onClose, onSaved }: Props) {
 
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [existingId, setExistingId] = useState<string | null>(null)
 
-  const today = new Date().toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' })
+  const todayLabel = new Date().toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' })
+  const todayIso = new Date().toISOString().split('T')[0]
   const pages = ['Podstawy', 'Posiłki', 'Napoje']
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.from('diet_logs').select('*').eq('athlete_id', athleteId).eq('date', todayIso).maybeSingle()
+      .then(({ data, error }) => {
+        if (error) { setLoading(false); return }
+        if (data) {
+          setExistingId(data.id)
+          setMealCount(data.meal_count ?? 0)
+          setHadBreakfast(data.had_breakfast ?? null)
+          setHunger(data.hunger_level ?? null)
+          if (Array.isArray(data.meals) && data.meals.length > 0) {
+            setMeals(data.meals.map((m: MealData & { id?: number }, i: number) => ({
+              id: Date.now() + i,
+              mealType: m.mealType ?? '',
+              time: m.time ?? '',
+              description: m.description ?? '',
+              prepMethod: m.prepMethod ?? '',
+              weight: m.weight?.toString() ?? '',
+              calories: m.calories?.toString() ?? '',
+              energyAfter: m.energyAfter ?? null,
+              stomach: m.stomach ?? false,
+              stomachNote: m.stomachNote ?? '',
+            })))
+          }
+          setWaterMl(data.water_ml?.toString() ?? '')
+          setCoffeeCount(data.coffee_count ?? 0)
+          setCoffeeEmpty(data.coffee_empty ?? null)
+          setCoffeeTimes(Array.isArray(data.coffee_times) ? data.coffee_times : [])
+          setOtherDrinks(
+            Array.isArray(data.other_drinks)
+              ? data.other_drinks.map((d: { name: string; amount: string }, i: number) => ({ id: Date.now() + i, name: d.name, amount: d.amount }))
+              : []
+          )
+          setSaved(true)
+        }
+        setLoading(false)
+      })
+  }, [])
 
   function updateMeal(id: number, updated: Partial<MealData>) {
     setMeals(prev => prev.map(m => m.id === id ? { ...m, ...updated } : m))
@@ -198,13 +241,13 @@ export default function DietModal({ athleteId, onClose, onSaved }: Props) {
 
   async function handleSave() {
     setSaving(true)
+    setSaveError('')
     try {
       const supabase = createClient()
-      const today = new Date().toISOString().split('T')[0]
 
       const payload = {
         athlete_id: athleteId,
-        date: today,
+        date: todayIso,
         meal_count: mealCount,
         had_breakfast: hadBreakfast,
         hunger_level: hunger,
@@ -237,8 +280,9 @@ export default function DietModal({ athleteId, onClose, onSaved }: Props) {
         onSaved()
         onClose()
       }, 1200)
-    } catch (err) {
-      console.error('Diet save error:', err)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setSaveError(msg)
       setSaving(false)
     }
   }
@@ -258,7 +302,7 @@ export default function DietModal({ athleteId, onClose, onSaved }: Props) {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.875rem' }}>
             <div>
               <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: C.navy }}>Dieta 🥗</h2>
-              <p style={{ fontSize: '0.75rem', color: C.gray, marginTop: 2 }}>{today}</p>
+              <p style={{ fontSize: '0.75rem', color: C.gray, marginTop: 2 }}>{todayLabel}</p>
             </div>
             <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.gray, fontSize: '1.3rem', lineHeight: 1 }}>×</button>
           </div>
@@ -275,6 +319,18 @@ export default function DietModal({ athleteId, onClose, onSaved }: Props) {
 
         {/* Content */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '0 1.25rem 1rem' }}>
+
+          {loading && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 120, color: C.gray, fontWeight: 700 }}>Ładowanie...</div>
+          )}
+
+          {saveError && (
+            <div style={{ margin: '0.75rem 0', padding: '0.75rem', background: '#FEF2F2', border: `1.5px solid ${C.red}`, borderRadius: 10, fontSize: '0.8rem', color: C.red, fontWeight: 700 }}>
+              ❌ Błąd zapisu: {saveError}
+            </div>
+          )}
+
+          {!loading && <>
 
           {/* PODSTAWY */}
           {page === 0 && (
@@ -456,6 +512,7 @@ export default function DietModal({ athleteId, onClose, onSaved }: Props) {
               </div>
             </div>
           )}
+          </>}
         </div>
 
         {/* Footer */}

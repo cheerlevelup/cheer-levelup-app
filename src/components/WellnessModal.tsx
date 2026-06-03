@@ -431,7 +431,6 @@ export default function WellnessModal({ athlete, onClose, onSaved }: Props) {
           setStress(data.stress ?? 0)
           setSoreness(data.muscle_sorness ?? 0)
           setReadiness(data.readiness ?? 5)
-          setConcerns(data.concerns ?? '')
           setBodyWeight(data.body_weight_kg?.toString() ?? '')
           setHydration(data.hydration_glasses ?? 7.5)
           setHrv(data.resting_hr ?? 60)
@@ -474,6 +473,37 @@ export default function WellnessModal({ athlete, onClose, onSaved }: Props) {
             setCaffeineSources(data.supplements_data.caffeineSources ?? [])
             setCaffeineOther(data.supplements_data.caffeineOther ?? '')
           }
+
+          // Auto-włącz moduły Basic jeśli mają dane w bazie
+          const basicToEnable: string[] = []
+          if (data.body_weight_kg != null) basicToEnable.push('bodyWeight')
+          if (data.hydration_glasses != null) basicToEnable.push('hydration')
+          if (data.resting_hr != null) basicToEnable.push('hrv')
+          if (data.cycle_phase != null) basicToEnable.push('cycle')
+          if (data.recovery_score != null) basicToEnable.push('recovery')
+          if (data.sitting_hours != null) basicToEnable.push('sitting')
+          if (basicToEnable.length > 0) {
+            setActiveBasicModules(prev => [...new Set([...prev, ...basicToEnable])])
+          }
+
+          // Auto-włącz moduły Ból jeśli mają dane
+          const painToEnable: string[] = []
+          const pd = data.pain_data
+          if (pd?.menstrualPain != null) painToEnable.push('menstrualPain')
+          if (pd?.headache != null) painToEnable.push('headache')
+          if (pd?.stomachache != null) painToEnable.push('stomachache')
+          if (pd?.jointStiffness != null) painToEnable.push('jointStiffness')
+          if (pd?.anxiety != null) painToEnable.push('anxiety')
+          if (pd?.mentalOverload != null) painToEnable.push('mentalOverload')
+          if (painToEnable.length > 0) {
+            setActivePainModules(prev => [...new Set([...prev, ...painToEnable])])
+          }
+
+          // Jeśli concerns wygląda jak stary text-dump (stary format), nie pokazuj go w polu
+          const rawConcerns = data.concerns ?? ''
+          const isOldDump = rawConcerns.includes('Aktywnosc:') || rawConcerns.includes('Basic dodatkowe:') || rawConcerns.includes('Suplementy:')
+          setConcerns(isOldDump ? '' : rawConcerns)
+
           setSaved(true)
         }
         setLoading(false)
