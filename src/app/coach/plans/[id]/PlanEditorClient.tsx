@@ -676,7 +676,16 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
 
   async function deleteDay(dayId: number) {
     if (!confirm('Usunac ten trening razem z blokami i cwiczeniami?')) return
-    await supabase.from('workout_days').delete().eq('id', dayId)
+    // najpierw usuń bloki i ćwiczenia należące do tego dnia
+    const dayBlockIds = localBlocks.filter(b => b.day_id === dayId).map(b => b.id)
+    if (dayBlockIds.length > 0) {
+      const { error: exErr } = await supabase.from('workout_block_exercises').delete().in('block_id', dayBlockIds)
+      if (exErr) { showError(`Nie udało się usunąć ćwiczeń: ${exErr.message}`); return }
+      const { error: blErr } = await supabase.from('workout_day_blocks').delete().in('id', dayBlockIds)
+      if (blErr) { showError(`Nie udało się usunąć bloków: ${blErr.message}`); return }
+    }
+    const { error } = await supabase.from('workout_days').delete().eq('id', dayId)
+    if (error) { showError(`Nie udało się usunąć treningu: ${error.message}`); return }
     setLocalDays(prev => prev.filter(day => day.id !== dayId))
     setLocalBlocks(prev => prev.filter(block => block.day_id !== dayId))
     setTargetDays(prev => prev.filter(day => day.id !== dayId))
@@ -734,7 +743,10 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
 
   async function deleteBlock(blockId: number) {
     if (!confirm('Usunac ten blok razem z cwiczeniami?')) return
-    await supabase.from('workout_day_blocks').delete().eq('id', blockId)
+    const { error: exErr } = await supabase.from('workout_block_exercises').delete().eq('block_id', blockId)
+    if (exErr) { showError(`Nie udało się usunąć ćwiczeń: ${exErr.message}`); return }
+    const { error } = await supabase.from('workout_day_blocks').delete().eq('id', blockId)
+    if (error) { showError(`Nie udało się usunąć bloku: ${error.message}`); return }
     setLocalBlocks(prev => prev.filter(block => block.id !== blockId))
     setTargetBlocks(prev => prev.filter(block => block.id !== blockId))
   }
@@ -792,7 +804,8 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
   async function deleteExercise(blockId: number, exerciseId?: number) {
     if (!exerciseId) return
     if (!confirm('Usunac to cwiczenie z bloku?')) return
-    await supabase.from('workout_block_exercises').delete().eq('id', exerciseId)
+    const { error } = await supabase.from('workout_block_exercises').delete().eq('id', exerciseId)
+    if (error) { showError(`Nie udało się usunąć ćwiczenia: ${error.message}`); return }
     handleExerciseDelete(blockId, exerciseId)
   }
 
