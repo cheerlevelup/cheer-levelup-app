@@ -1,5 +1,7 @@
 // src/app/coach/plans/[id]/page.tsx
 // Edytor planu — obsługuje istniejące plany
+export const dynamic = 'force-dynamic'
+
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import PlanEditorClient from './PlanEditorClient'
