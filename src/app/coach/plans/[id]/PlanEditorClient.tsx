@@ -676,17 +676,11 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
 
   async function deleteDay(dayId: number) {
     if (!confirm('Usunac ten trening razem z blokami i cwiczeniami?')) return
-    const dayBlockIds = localBlocks.filter(b => b.day_id === dayId).map(b => b.id)
-    if (dayBlockIds.length > 0) {
-      const { error: exErr } = await supabase.from('workout_block_exercises').delete().in('block_id', dayBlockIds)
-      if (exErr) { showError(`Błąd usuwania ćwiczeń: ${exErr.message}`); return }
-      const { error: blErr } = await supabase.from('workout_day_blocks').delete().in('id', dayBlockIds)
-      if (blErr) { showError(`Błąd usuwania bloków: ${blErr.message}`); return }
-    }
+    // CASCADE na FK usuwa bloki i ćwiczenia automatycznie; sessions dostaną workout_day_id = NULL
     const { data: deleted, error } = await supabase.from('workout_days').delete().eq('id', dayId).select('id')
     if (error) { showError(`Błąd usuwania treningu: ${error.message}`); return }
     if (!deleted || deleted.length === 0) {
-      showError('Usuwanie zablokowane przez RLS — uruchom SQL z politykami w Supabase Dashboard.')
+      showError('Usuwanie zablokowane przez RLS — sprawdź polityki w Supabase Dashboard.')
       return
     }
     setLocalDays(prev => prev.filter(day => day.id !== dayId))
@@ -746,12 +740,11 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
 
   async function deleteBlock(blockId: number) {
     if (!confirm('Usunac ten blok razem z cwiczeniami?')) return
-    const { error: exErr } = await supabase.from('workout_block_exercises').delete().eq('block_id', blockId)
-    if (exErr) { showError(`Błąd usuwania ćwiczeń: ${exErr.message}`); return }
+    // CASCADE usuwa ćwiczenia automatycznie
     const { data: deleted, error } = await supabase.from('workout_day_blocks').delete().eq('id', blockId).select('id')
     if (error) { showError(`Błąd usuwania bloku: ${error.message}`); return }
     if (!deleted || deleted.length === 0) {
-      showError('Usuwanie zablokowane przez RLS — uruchom SQL z politykami w Supabase Dashboard.')
+      showError('Usuwanie zablokowane przez RLS — sprawdź polityki w Supabase Dashboard.')
       return
     }
     setLocalBlocks(prev => prev.filter(block => block.id !== blockId))
