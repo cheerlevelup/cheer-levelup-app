@@ -103,6 +103,23 @@ export default async function CoachAthleteTrainingPage({ params }: Props) {
         .in('block_exercise_id', allExerciseIds)
     : { data: [] }
 
+  // Dodatkowe ćwiczenia tej zawodniczki
+  const allBlockIds = allBlockExercises.map((b: any) => b.id)
+  const { data: extraExercises } = allBlockIds.length > 0
+    ? await supabase
+        .from('athlete_extra_exercises')
+        .select('*, exercise:exercises(*)')
+        .eq('athlete_id', athleteId)
+        .in('block_id', allBlockIds)
+        .order('exercise_order', { ascending: true })
+    : { data: [] }
+
+  // Biblioteka ćwiczeń (do wyboru przy podmianie i dodawaniu)
+  const { data: exerciseLibrary } = await supabase
+    .from('exercises')
+    .select('id, name, category')
+    .order('name', { ascending: true })
+
   return (
     <CoachAthleteTrainingClient
       athlete={athlete}
@@ -110,6 +127,8 @@ export default async function CoachAthleteTrainingPage({ params }: Props) {
       days={days}
       blocks={allBlockExercises}
       overrides={overrides || []}
+      extraExercises={extraExercises || []}
+      exerciseLibrary={exerciseLibrary || []}
     />
   )
 }
