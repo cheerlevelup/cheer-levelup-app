@@ -1,8 +1,11 @@
 'use client'
 // src/app/athlete/AthleteClient.tsx
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Athlete, WorkoutSession, AthleteWorkoutAssignment, WorkoutDay } from '@/types/workout'
+import DietModal from '@/components/DietModal'
+import WellnessModal from '@/components/WellnessModal'
 
 interface Props {
   athlete: Athlete
@@ -90,6 +93,9 @@ function Card({ children, style }: { children: React.ReactNode; style?: React.CS
 
 export default function AthleteClient({ athlete, nextTraining, history, todayWellness }: Props) {
   const router = useRouter()
+  const [wellnessOpen, setWellnessOpen] = useState(false)
+  const [dietOpen, setDietOpen] = useState(false)
+  const [dietSavedToday, setDietSavedToday] = useState(false)
   const planName = nextTraining?.assignment.plan?.name || history[0]?.workout_day?.week?.plan?.name || 'Plan treningowy'
   const nextTrainingLabel = nextTraining ? `Trening ${nextTraining.completedCount + 1}` : ''
   const lastSession = history[0]
@@ -151,7 +157,7 @@ export default function AthleteClient({ athlete, nextTraining, history, todayWel
         <main style={{ maxWidth: contentMaxWidth, margin: '0 auto', padding: '1.25rem 1rem 7rem' }}>
           <Card style={{ marginBottom: '1rem' }}>
             <button
-              onClick={() => router.push('/athlete/wellness')}
+              onClick={() => setWellnessOpen(true)}
               style={{ width: '100%', border: 'none', background: 'none', padding: '1rem', textAlign: 'left' }}
             >
               <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, alignItems: 'start', marginBottom: '1rem' }}>
@@ -198,6 +204,41 @@ export default function AthleteClient({ athlete, nextTraining, history, todayWel
 
               <div style={{ marginTop: '1rem', padding: '0.875rem', borderRadius: 12, background: todayWellness.isComplete ? C.offWhite : C.navy, color: todayWellness.isComplete ? C.navy : C.gold, textAlign: 'center', fontWeight: 800, fontSize: '0.9rem' }}>
                 {todayWellness.isComplete ? 'Zobacz wellness' : 'Uzupełnij wellness'}
+              </div>
+            </button>
+          </Card>
+
+          {/* Diet card */}
+          <Card style={{ marginBottom: '1rem' }}>
+            <button
+              onClick={() => setDietOpen(true)}
+              style={{ width: '100%', border: 'none', background: 'none', padding: '1rem', textAlign: 'left' }}
+            >
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, alignItems: 'start', marginBottom: '1rem' }}>
+                <div>
+                  <div style={{ fontSize: '0.72rem', fontFamily: mono, color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>
+                    Dzisiejsza dieta
+                  </div>
+                  <h2 style={{ fontSize: '1.25rem', lineHeight: 1.1, fontWeight: 800, color: C.navy }}>
+                    {formatLongDate(todayWellness.dateIso)}
+                  </h2>
+                  <div style={{ color: C.gray, fontSize: '0.84rem', marginTop: 5 }}>
+                    {dietSavedToday ? 'Wszystko uzupełnione' : 'Uzupełnij dietę'}
+                  </div>
+                </div>
+                <div style={{
+                  width: 52, height: 52, borderRadius: 13,
+                  background: dietSavedToday ? C.green : C.navy,
+                  color: dietSavedToday ? C.white : C.gold,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontFamily: mono, fontWeight: 900, fontSize: '1.4rem', flexShrink: 0,
+                }}>
+                  🥗
+                </div>
+              </div>
+
+              <div style={{ marginTop: '0.25rem', padding: '0.875rem', borderRadius: 12, background: dietSavedToday ? C.offWhite : C.navy, color: dietSavedToday ? C.navy : C.gold, textAlign: 'center', fontWeight: 800, fontSize: '0.9rem' }}>
+                {dietSavedToday ? 'Zobacz dietę' : 'Uzupełnij dietę'}
               </div>
             </button>
           </Card>
@@ -283,6 +324,22 @@ export default function AthleteClient({ athlete, nextTraining, history, todayWel
           </Card>
         </main>
       </div>
+
+      {wellnessOpen && (
+        <WellnessModal
+          athlete={athlete}
+          onClose={() => setWellnessOpen(false)}
+          onSaved={() => { setWellnessOpen(false); router.refresh() }}
+        />
+      )}
+
+      {dietOpen && (
+        <DietModal
+          athleteId={athlete.id}
+          onClose={() => setDietOpen(false)}
+          onSaved={() => setDietSavedToday(true)}
+        />
+      )}
     </>
   )
 }

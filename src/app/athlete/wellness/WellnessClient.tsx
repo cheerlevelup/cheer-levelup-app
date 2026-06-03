@@ -704,46 +704,6 @@ export default function WellnessClient({ athlete, existingWellness, dateIso }: P
     setCaffeineSources(prev => prev.includes(source) ? prev.filter(item => item !== source) : [...prev, source])
   }
 
-  function buildExtraSummary() {
-    const selectedSupplements = supplementsList
-      .map(item => ({ ...item, count: supplementCount(item.id) }))
-      .filter(item => item.count > 0)
-      .map(item => `${item.name}: ${item.count} x ${item.dose}`)
-
-    return [
-      concerns.trim() && `Uwagi ogolne:\n${concerns.trim()}`,
-      activeBasicModules.length > 0 && `Basic dodatkowe: ${[
-        activeBasicModules.includes('bodyWeight') && `masa=${bodyWeight || '-'}kg`,
-        activeBasicModules.includes('hydration') && `nawodnienie=${hydration} szkl.`,
-        activeBasicModules.includes('hrv') && `HR=${hrv} bpm`,
-        activeBasicModules.includes('cycle') && `cykl=${cyclePhase || '-'} ${cycleDay ? `dzien ${cycleDay}` : ''}`,
-        activeBasicModules.includes('recovery') && `regeneracja=${recovery}/10`,
-        activeBasicModules.includes('sitting') && `siedzenie=${sittingHours}h`,
-      ].filter(Boolean).join(', ')}`,
-      `Aktywnosc: ${activityType || '-'}, godzina=${activityTime || '-'}, czas=${activityDuration || '-'}min, motywacja=${activityMotivation}/5, RPE=${activityRpe}/10, samopoczucie_po=${activityFeelingAfter}, satysfakcja=${activitySatisfaction}/10, cel=${activityGoal || '-'}${activityGoalComment.trim() ? `, komentarz celu=${activityGoalComment.trim()}` : ''}`,
-      activityNote.trim() && `Opis aktywnosci:\n${activityNote.trim()}`,
-      `Bol: ${[
-        `podczas=${painDuring}/10`,
-        activePainModules.includes('menstrualPain') && `menstruacyjny=${menstrualPain}/10`,
-        activePainModules.includes('headache') && `glowa=${headache}/10${headacheNote.trim() ? `, powod=${headacheNote.trim()}` : ''}`,
-        activePainModules.includes('stomachache') && `brzuch=${stomachache}/10${stomachacheNote.trim() ? `, powod=${stomachacheNote.trim()}` : ''}`,
-        activePainModules.includes('jointStiffness') && `stawy=${jointStiffness}/10`,
-        activePainModules.includes('anxiety') && `lek=${anxiety}/10${selectedAnxietySources.length > 0 ? `, zrodla=${selectedAnxietySources.join(' / ')}` : ''}`,
-        activePainModules.includes('mentalOverload') && `mental=${mentalOverload}/10${selectedMentalSources.length > 0 ? `, zrodla=${selectedMentalSources.join(' / ')}` : ''}`,
-        `lokalizacja=${painLocation || '-'}`,
-      ].filter(Boolean).join(', ')}`,
-      activePainModules.includes('anxiety') && anxietyNote.trim() && `Komentarz lek/niepokoj:\n${anxietyNote.trim()}`,
-      activePainModules.includes('mentalOverload') && mentalNote.trim() && `Komentarz mental:\n${mentalNote.trim()}`,
-      painNote.trim() && `Uwagi bol/regeneracja:\n${painNote.trim()}`,
-      selectedSupplements.length > 0 && `Suplementy:\n${selectedSupplements.join('\n')}`,
-      supplementCount('caffeine') > 0 && caffeineSources.length > 0 && `Zrodla kofeiny: ${[
-        ...caffeineSources.filter(source => source !== 'Inne'),
-        caffeineSources.includes('Inne') && caffeineOther.trim() ? `Inne: ${caffeineOther.trim()}` : null,
-      ].filter(Boolean).join(', ')}`,
-      supplementNote.trim() && `Uwagi suplementy:\n${supplementNote.trim()}`,
-    ].filter(Boolean).join('\n\n')
-  }
-
   async function saveWellness() {
     setSaving(true)
     setSaveError('')
@@ -757,7 +717,7 @@ export default function WellnessClient({ athlete, existingWellness, dateIso }: P
       mood: null,
       muscle_sorness: soreness,
       readiness,
-      concerns: buildExtraSummary() || null,
+      concerns: concerns.trim() || null,
       body_weight_kg: activeBasicModules.includes('bodyWeight') && bodyWeight ? parseFloat(bodyWeight) : null,
       hydration_glasses: activeBasicModules.includes('hydration') ? hydration : null,
       resting_hr: activeBasicModules.includes('hrv') ? hrv : null,
@@ -816,7 +776,7 @@ export default function WellnessClient({ athlete, existingWellness, dateIso }: P
         mood: null,
         muscle_sorness: soreness,
         readiness,
-        concerns: buildExtraSummary() || null,
+        concerns: concerns.trim() || null,
       }
       const fallbackResult = existingWellness?.id
         ? await supabase.from('wellness_logs').update(fallbackPayload).eq('id', existingWellness.id)
