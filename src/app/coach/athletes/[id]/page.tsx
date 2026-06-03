@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 // src/app/coach/athletes/[id]/page.tsx
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
