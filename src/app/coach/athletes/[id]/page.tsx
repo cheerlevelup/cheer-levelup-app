@@ -26,15 +26,16 @@ export default async function CoachAthletePage({ params }: Props) {
 
   if (!athlete) redirect('/coach')
 
-  // Aktywne przypisanie planu
+  // Wszystkie przypisania (aktywne + historia)
   const conditions = [`athlete_id.eq.${athleteId}`]
   if (athlete.group_id) conditions.push(`group_id.eq.${athlete.group_id}`)
-  const { data: assignments } = await supabase
+  const { data: allAssignments } = await supabase
     .from('athlete_workout_assignments')
     .select('*, plan:workout_plans(*)')
-    .eq('is_active', true)
     .or(conditions.join(','))
-  const assignment = (assignments || [])[0] || null
+    .order('created_at', { ascending: false })
+  const assignment = (allAssignments || []).find(a => a.is_active) || null
+  const pastAssignments = (allAssignments || []).filter(a => !a.is_active)
 
   // Historia treningów (z pełnym kontekstem)
   const { data: sessions } = await supabase
@@ -52,23 +53,18 @@ export default async function CoachAthletePage({ params }: Props) {
     .order('created_at', { ascending: false })
     .limit(20)
 
-  // Wellness — ostatnie 28 dni (dla kalendarza i statystyk)
+  // Wellness — ostatnie 28 dni, pełne dane (kalendarz + raporty + statystyki)
   const daysAgo28 = new Date()
   daysAgo28.setDate(daysAgo28.getDate() - 28)
   const { data: wellnessLogs } = await supabase
     .from('wellness_logs')
-    .select('id, created_at, sleep_hours, sleep_quality, energy, stress, readiness, muscle_sorness')
+    .select('*')
     .eq('athlete_id', athleteId)
     .gte('created_at', daysAgo28.toISOString())
     .order('created_at', { ascending: false })
 
-  // Wellness — ostatnie 5 (dla sekcji ostatniego wellness)
-  const { data: wellnessList } = await supabase
-    .from('wellness_logs')
-    .select('*')
-    .eq('athlete_id', athleteId)
-    .order('created_at', { ascending: false })
-    .limit(5)
+  // Wellness — ostatni wpis (dla sekcji "ostatni wellness")
+  const wellnessList = wellnessLogs || []
 
   // Dieta — ostatnie 28 dni
   const { data: dietLogs } = await supabase
@@ -90,10 +86,11 @@ export default async function CoachAthletePage({ params }: Props) {
     <CoachAthleteClient
       athlete={athlete}
       assignment={assignment}
+      pastAssignments={pastAssignments}
       sessions={sessions || []}
       feedbacks={feedbacks || []}
       wellnessLogs={wellnessLogs || []}
-      wellnessList={wellnessList || []}
+      wellnessList={wellnessList}
       dietLogs={dietLogs || []}
       painLogs={painLogs || []}
     />
