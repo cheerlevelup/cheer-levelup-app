@@ -8,8 +8,7 @@ import { createClient } from '@/utils/supabase/client'
 const C = {
   navy: '#0D1B2A', navyLight: '#1A2E45', navyBorder: '#243652',
   gold: '#F5C842', white: '#FFFFFF', offWhite: '#F4F6F9',
-  gray: '#8A9BB0', grayLight: '#E8ECF2', green: '#22C55E', red: '#EF4444',
-  orange: '#F97316',
+  gray: '#8A9BB0', grayLight: '#E8ECF2', green: '#22C55E', red: '#EF4444', orange: '#F97316',
 }
 const sans = "'Space Grotesk', sans-serif"
 const mono = "'Space Mono', monospace"
@@ -17,101 +16,99 @@ const mono = "'Space Mono', monospace"
 function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, overflow: 'hidden', boxShadow: '0 4px 20px rgba(13,27,42,0.05)', ...style }}>{children}</div>
 }
+const inputSt: React.CSSProperties = { width: '100%', padding: '0.75rem', border: `1.5px solid ${C.grayLight}`, borderRadius: 10, background: C.offWhite, color: C.navy, fontFamily: mono, fontSize: '0.9rem', outline: 'none', textAlign: 'center' }
+const labelSt: React.CSSProperties = { fontFamily: mono, fontSize: '0.62rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 5, fontWeight: 700 }
+function fmt(n: string) { return n.replace(/-/g, ' ') }
 
-const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '0.75rem', border: `1.5px solid ${C.grayLight}`,
-  borderRadius: 10, background: C.offWhite, color: C.navy,
-  fontFamily: mono, fontSize: '0.9rem', outline: 'none', textAlign: 'center',
-}
-const labelCss: React.CSSProperties = {
-  fontFamily: mono, fontSize: '0.62rem', color: C.gray,
-  letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 5, fontWeight: 700,
-}
-
-function formatExName(name: string) { return name.replace(/-/g, ' ') }
-
-// ─── MODAL EDYCJI ĆWICZENIA (override + podmiana + skip) ─────────────────────
-function ExerciseEditModal({ ex, athleteId, athleteName, existingOverride, exerciseLibrary, onSave, onSkip, onClose }: {
+// ─── MODAL EDYCJI ĆWICZENIA ───────────────────────────────────────────────────
+function ExerciseEditModal({ ex, athleteId, athleteName, existingOverride, exerciseLibrary, allBlocks, onSave, onSaveAll, onClose }: {
   ex: any; athleteId: number; athleteName: string
-  existingOverride: any | null; exerciseLibrary: any[]
+  existingOverride: any | null; exerciseLibrary: any[]; allBlocks: any[]
   onSave: (override: any) => void
-  onSkip: (skipped: boolean) => void
+  onSaveAll: (exerciseId: number | null, exerciseCode: string | null, overrides: { exerciseId: number; override: any }[]) => void
   onClose: () => void
 }) {
   const supabase = createClient()
-
-  // Podmiana ćwiczenia
-  const [swapMode, setSwapMode] = useState<'same' | 'library' | 'custom'>(
+  const [mode, setMode] = useState<'same' | 'library' | 'custom'>(
     existingOverride?.exercise_code_override ? 'custom'
-    : existingOverride?.exercise_id_override ? 'library'
-    : 'same'
+      : existingOverride?.exercise_id_override ? 'library'
+      : 'same'
   )
-  const [swapExerciseId, setSwapExerciseId] = useState(existingOverride?.exercise_id_override?.toString() || '')
-  const [swapCode, setSwapCode] = useState(existingOverride?.exercise_code_override || '')
-
-  // Parametry
+  const [libId, setLibId] = useState(existingOverride?.exercise_id_override?.toString() || '')
+  const [customName, setCustomName] = useState(existingOverride?.exercise_code_override || ex.exercise_code || ex.exercise?.name || '')
   const [sets, setSets] = useState(existingOverride?.sets_override?.toString() || ex.sets?.toString() || '3')
   const [reps, setReps] = useState(existingOverride?.reps_override || ex.reps || '')
   const [weight, setWeight] = useState(existingOverride?.weight_override?.toString() || ex.weight_kg?.toString() || '')
   const [tempo, setTempo] = useState(existingOverride?.tempo_override || ex.tempo || '')
-  const [rir, setRir] = useState(existingOverride?.rir_override?.toString() || ex.rir?.toString() || '')
+  const [rir, setRir] = useState(existingOverride?.rir?.toString() || ex.rir?.toString() || '')
   const [note, setNote] = useState(existingOverride?.coach_note_override || ex.coach_comment || '')
+  const [wholePlan, setWholePlan] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  const originalName = ex.exercise?.name || ex.exercise_code || 'Ćwiczenie'
+  const originalName = ex.exercise?.name ? fmt(ex.exercise.name) : (ex.exercise_code || 'Ćwiczenie')
 
-  async function handleSave() {
-    setSaving(true); setError('')
-    const payload: any = {
+  function buildPayload(blockExerciseId: number): any {
+    return {
       athlete_id: athleteId,
-      block_exercise_id: ex.id,
+      block_exercise_id: blockExerciseId,
       sets_override: sets ? parseInt(sets) : null,
       reps_override: reps || null,
       weight_override: weight ? parseFloat(weight) : null,
       tempo_override: tempo || null,
       coach_note_override: note || null,
-      is_substitution: swapMode !== 'same',
+      is_substitution: mode !== 'same',
       skip: false,
-      exercise_id_override: swapMode === 'library' && swapExerciseId ? parseInt(swapExerciseId) : null,
-      exercise_code_override: swapMode === 'custom' && swapCode.trim() ? swapCode.trim() : null,
+      exercise_id_override: mode === 'library' && libId ? parseInt(libId) : null,
+      exercise_code_override: mode === 'custom' && customName.trim() ? customName.trim() : null,
     }
-    let result, err
-    if (existingOverride) {
-      const { data, error: e } = await supabase.from('athlete_exercise_overrides').update(payload).eq('id', existingOverride.id).select('*, exercise_override:exercises(*)').single()
-      result = data; err = e
-    } else {
-      const { data, error: e } = await supabase.from('athlete_exercise_overrides').insert(payload).select('*, exercise_override:exercises(*)').single()
-      result = data; err = e
-    }
-    setSaving(false)
-    if (err) { setError(err.message); return }
-    if (result) onSave(result)
-    onClose()
   }
 
-  async function handleSkip() {
-    setSaving(true)
-    const isCurrentlySkipped = existingOverride?.skip
-    const payload: any = {
-      athlete_id: athleteId, block_exercise_id: ex.id,
-      skip: !isCurrentlySkipped, is_substitution: false,
-      sets_override: null, reps_override: null, weight_override: null,
-      tempo_override: null, coach_note_override: null,
-      exercise_id_override: null, exercise_code_override: null,
+  async function handleSave() {
+    setSaving(true); setError('')
+    try {
+      const payload = buildPayload(ex.id)
+      let result: any
+      if (existingOverride) {
+        const { data, error: e } = await supabase.from('athlete_exercise_overrides').update(payload).eq('id', existingOverride.id).select().single()
+        if (e) throw e; result = data
+      } else {
+        const { data, error: e } = await supabase.from('athlete_exercise_overrides').insert(payload).select().single()
+        if (e) throw e; result = data
+      }
+
+      // Wzbogać override o nazwę z biblioteki
+      const resolvedLibEx = mode === 'library' && libId
+        ? exerciseLibrary.find(l => l.id === parseInt(libId))
+        : null
+      const enriched = { ...result, exercise_override: resolvedLibEx || null }
+      onSave(enriched)
+
+      // Jeśli "zachowaj dla całego planu" — znajdź wszystkie ćwiczenia z tym samym exercise_id/code
+      if (wholePlan) {
+        const srcId = ex.exercise_id
+        const srcCode = ex.exercise_code
+        const siblings: { exerciseId: number; override: any }[] = []
+        for (const block of allBlocks) {
+          for (const bex of (block.workout_block_exercises || [])) {
+            if (bex.id === ex.id) continue // ten już zapisany
+            const match = srcId ? bex.exercise_id === srcId : (srcCode && bex.exercise_code === srcCode)
+            if (!match) continue
+            const sibPayload = buildPayload(bex.id)
+            const { data: sd } = existingOverride
+              ? await supabase.from('athlete_exercise_overrides').upsert({ ...sibPayload }, { onConflict: 'athlete_id,block_exercise_id' }).select().single()
+              : await supabase.from('athlete_exercise_overrides').upsert({ ...sibPayload }, { onConflict: 'athlete_id,block_exercise_id' }).select().single()
+            if (sd) siblings.push({ exerciseId: bex.id, override: { ...sd, exercise_override: resolvedLibEx || null } })
+          }
+        }
+        onSaveAll(srcId || null, srcCode || null, siblings)
+      }
+
+      onClose()
+    } catch (e: any) {
+      setError(e.message || 'Błąd zapisu')
+      setSaving(false)
     }
-    let result
-    if (existingOverride) {
-      const { data } = await supabase.from('athlete_exercise_overrides').update(payload).eq('id', existingOverride.id).select().single()
-      result = data
-    } else {
-      const { data } = await supabase.from('athlete_exercise_overrides').insert(payload).select().single()
-      result = data
-    }
-    setSaving(false)
-    onSkip(!isCurrentlySkipped)
-    if (result) onSave(result)
-    onClose()
   }
 
   async function handleDeleteOverride() {
@@ -124,102 +121,91 @@ function ExerciseEditModal({ ex, athleteId, athleteName, existingOverride, exerc
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(13,27,42,0.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: sans }}
-      onClick={onClose}>
-      <div style={{ width: '100%', maxWidth: 540, background: C.white, borderRadius: 18, border: `1.5px solid ${C.grayLight}`, maxHeight: '94vh', overflowY: 'auto' }}
-        onClick={e => e.stopPropagation()}>
-
-        {/* Header */}
+    <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(13,27,42,0.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: sans }} onClick={onClose}>
+      <div style={{ width: '100%', maxWidth: 540, background: C.white, borderRadius: 18, border: `1.5px solid ${C.grayLight}`, maxHeight: '94vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
         <div style={{ background: C.navy, padding: '1.1rem 1.25rem' }}>
           <div style={{ fontFamily: mono, fontSize: '0.66rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Modyfikacja ćwiczenia</div>
           <div style={{ color: C.white, fontWeight: 800, fontSize: '1.1rem', marginBottom: 3 }}>{originalName}</div>
-          <div style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray }}>
-            tylko dla <strong style={{ color: C.gold }}>{athleteName}</strong> · szablon pozostaje bez zmian
-          </div>
+          <div style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray }}>tylko dla <strong style={{ color: C.gold }}>{athleteName}</strong></div>
         </div>
-
         <div style={{ padding: '1.25rem' }}>
-
           {/* Szablon */}
-          <div style={{ background: C.offWhite, border: `1.5px solid ${C.grayLight}`, borderRadius: 10, padding: '0.75rem 1rem', marginBottom: '1.25rem' }}>
-            <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4, fontWeight: 700 }}>Szablon planu</div>
-            <div style={{ fontFamily: mono, fontSize: '0.78rem', color: C.navy, fontWeight: 700 }}>
-              {ex.sets}×{ex.reps || '—'}{ex.tempo ? ` · ${ex.tempo}` : ''}{ex.weight_kg ? ` · ${ex.weight_kg}kg` : ''}{ex.rir != null ? ` · RIR ${ex.rir}` : ''}
-            </div>
-            {ex.coach_comment && <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: 4, fontStyle: 'italic' }}>{ex.coach_comment}</div>}
+          <div style={{ background: C.offWhite, border: `1.5px solid ${C.grayLight}`, borderRadius: 10, padding: '0.75rem 1rem', marginBottom: '1.25rem', fontFamily: mono, fontSize: '0.78rem', color: C.navy }}>
+            <span style={{ fontWeight: 700 }}>Szablon: </span>
+            {ex.sets}×{ex.reps || '—'}{ex.tempo ? ` · ${ex.tempo}` : ''}{ex.weight_kg ? ` · ${ex.weight_kg}kg` : ''}{ex.rir != null ? ` · RIR ${ex.rir}` : ''}
+            {ex.coach_comment && <span style={{ display: 'block', marginTop: 4, fontStyle: 'italic', color: C.gray }}>{ex.coach_comment}</span>}
           </div>
 
-          {/* Sekcja 1: Podmiana ćwiczenia */}
+          {/* Nazwa ćwiczenia */}
           <div style={{ marginBottom: '1.25rem' }}>
-            <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, fontWeight: 700 }}>Ćwiczenie</div>
+            <div style={{ ...labelSt, marginBottom: 8 }}>Ćwiczenie</div>
             <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-              {[
-                { key: 'same', label: 'Bez zmiany' },
-                { key: 'library', label: 'Z biblioteki' },
-                { key: 'custom', label: 'Własna nazwa' },
-              ].map(opt => (
-                <button key={opt.key} onClick={() => setSwapMode(opt.key as any)}
-                  style={{ flex: 1, padding: '0.55rem', border: `1.5px solid ${swapMode === opt.key ? C.gold : C.grayLight}`, borderRadius: 8, background: swapMode === opt.key ? C.navy : C.offWhite, color: swapMode === opt.key ? C.gold : C.gray, fontWeight: swapMode === opt.key ? 800 : 500, fontSize: '0.75rem' }}>
-                  {opt.label}
+              {[{ k: 'same', l: 'Bez zmiany nazwy' }, { k: 'library', l: 'Z biblioteki' }, { k: 'custom', l: 'Wpisz nazwę' }].map(o => (
+                <button key={o.k} onClick={() => setMode(o.k as any)}
+                  style={{ flex: 1, padding: '0.55rem 0.4rem', border: `1.5px solid ${mode === o.k ? C.gold : C.grayLight}`, borderRadius: 8, background: mode === o.k ? C.navy : C.offWhite, color: mode === o.k ? C.gold : C.gray, fontWeight: mode === o.k ? 800 : 500, fontSize: '0.72rem' }}>
+                  {o.l}
                 </button>
               ))}
             </div>
-            {swapMode === 'library' && (
-              <select value={swapExerciseId} onChange={e => setSwapExerciseId(e.target.value)}
-                style={{ ...inputStyle, textAlign: 'left', fontFamily: sans, appearance: 'none' }}>
-                <option value="">Wybierz ćwiczenie z biblioteki...</option>
-                {exerciseLibrary.map((ex: any) => (
-                  <option key={ex.id} value={ex.id}>{formatExName(ex.name)}{ex.category ? ` (${ex.category})` : ''}</option>
-                ))}
+            {mode === 'same' && (
+              <div style={{ padding: '0.75rem', background: C.offWhite, borderRadius: 10, fontFamily: mono, fontSize: '0.82rem', color: C.navy, fontWeight: 700 }}>{originalName}</div>
+            )}
+            {mode === 'library' && (
+              <select value={libId} onChange={e => setLibId(e.target.value)} style={{ ...inputSt, textAlign: 'left', fontFamily: sans, appearance: 'none' }}>
+                <option value="">Wybierz ćwiczenie...</option>
+                {exerciseLibrary.map((e: any) => <option key={e.id} value={e.id}>{fmt(e.name)}{e.category ? ` (${e.category})` : ''}</option>)}
               </select>
             )}
-            {swapMode === 'custom' && (
-              <input type="text" value={swapCode} onChange={e => setSwapCode(e.target.value)}
-                placeholder="np. hip thrust, pallof press, zercher squat..."
-                style={{ ...inputStyle, textAlign: 'left', fontFamily: sans }} />
+            {mode === 'custom' && (
+              <input type="text" value={customName} onChange={e => setCustomName(e.target.value)}
+                placeholder="Wpisz dowolną nazwę ćwiczenia..."
+                style={{ ...inputSt, textAlign: 'left', fontFamily: sans }} />
             )}
           </div>
 
-          {/* Sekcja 2: Parametry */}
+          {/* Parametry */}
           <div style={{ marginBottom: '1.25rem' }}>
-            <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, fontWeight: 700 }}>Parametry</div>
+            <div style={{ ...labelSt, marginBottom: 8 }}>Parametry</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 8 }}>
-              <div><label style={labelCss}>Serie</label><input type="number" value={sets} onChange={e => setSets(e.target.value)} style={inputStyle} /></div>
-              <div><label style={labelCss}>Powt.</label><input type="text" value={reps} onChange={e => setReps(e.target.value)} placeholder="8–10" style={inputStyle} /></div>
-              <div><label style={labelCss}>Kg</label><input type="number" step="0.5" value={weight} onChange={e => setWeight(e.target.value)} placeholder="—" style={inputStyle} /></div>
-              <div><label style={labelCss}>RIR</label><input type="number" value={rir} onChange={e => setRir(e.target.value)} placeholder="—" style={inputStyle} /></div>
+              <div><label style={labelSt}>Serie</label><input type="number" value={sets} onChange={e => setSets(e.target.value)} style={inputSt} /></div>
+              <div><label style={labelSt}>Powt.</label><input type="text" value={reps} onChange={e => setReps(e.target.value)} placeholder="8–10" style={inputSt} /></div>
+              <div><label style={labelSt}>Kg</label><input type="number" step="0.5" value={weight} onChange={e => setWeight(e.target.value)} placeholder="—" style={inputSt} /></div>
+              <div><label style={labelSt}>RIR</label><input type="number" value={rir} onChange={e => setRir(e.target.value)} placeholder="—" style={inputSt} /></div>
             </div>
-            <div>
-              <label style={labelCss}>Tempo</label>
-              <input type="text" value={tempo} onChange={e => setTempo(e.target.value)} placeholder="np. 3-1-2-0" style={{ ...inputStyle, textAlign: 'left', fontFamily: sans }} />
-            </div>
+            <div><label style={labelSt}>Tempo</label><input type="text" value={tempo} onChange={e => setTempo(e.target.value)} placeholder="np. 3-1-2-0" style={{ ...inputSt, textAlign: 'left', fontFamily: sans }} /></div>
           </div>
 
-          {/* Sekcja 3: Notatka */}
+          {/* Notatka */}
           <div style={{ marginBottom: '1.25rem' }}>
-            <label style={labelCss}>Notatka dla zawodniczki</label>
-            <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Wskazówki, modyfikacje techniczne, powód zmiany..." rows={3}
+            <label style={labelSt}>Notatka dla zawodniczki</label>
+            <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Wskazówki, powód zmiany..." rows={2}
               style={{ width: '100%', padding: '0.75rem', border: `1.5px solid ${C.grayLight}`, borderRadius: 10, background: C.offWhite, color: C.navy, fontFamily: sans, fontSize: '0.9rem', outline: 'none', resize: 'none' }} />
           </div>
 
+          {/* Zachowaj dla całego planu */}
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '0.875rem', background: wholePlan ? C.navyLight : C.offWhite, border: `1.5px solid ${wholePlan ? C.gold : C.grayLight}`, borderRadius: 10, cursor: 'pointer', marginBottom: '1.25rem' }}>
+            <input type="checkbox" checked={wholePlan} onChange={e => setWholePlan(e.target.checked)} style={{ accentColor: C.gold, width: 16, height: 16, marginTop: 2, flexShrink: 0 }} />
+            <div>
+              <div style={{ fontWeight: 800, fontSize: '0.88rem', color: wholePlan ? C.gold : C.navy }}>Zachowaj dla całego planu</div>
+              <div style={{ fontSize: '0.75rem', color: C.gray, marginTop: 2 }}>
+                Zastosuje tę modyfikację do wszystkich wystąpień tego samego ćwiczenia w planie (np. we wszystkich tygodniach).
+              </div>
+            </div>
+          </label>
+
           {error && <div style={{ padding: '0.75rem', background: '#FEF2F2', border: `1.5px solid ${C.red}`, borderRadius: 10, color: C.red, fontWeight: 700, fontSize: '0.82rem', marginBottom: '1rem' }}>❌ {error}</div>}
 
-          {/* Przyciski */}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={onClose} style={{ padding: '0.875rem 1rem', border: `1.5px solid ${C.grayLight}`, borderRadius: 12, background: C.white, color: C.gray, fontWeight: 700 }}>Anuluj</button>
-            <button onClick={handleSkip} disabled={saving}
-              style={{ padding: '0.875rem 1rem', border: `1.5px solid ${existingOverride?.skip ? C.green : C.orange}`, borderRadius: 12, background: C.white, color: existingOverride?.skip ? C.green : C.orange, fontWeight: 700 }}>
-              {existingOverride?.skip ? '↩ Przywróć' : '✕ Pomiń'}
-            </button>
-            {existingOverride && !existingOverride.skip && (
+            {existingOverride && (
               <button onClick={handleDeleteOverride} disabled={saving}
                 style={{ padding: '0.875rem 1rem', border: `1.5px solid ${C.red}`, borderRadius: 12, background: C.white, color: C.red, fontWeight: 700 }}>
                 Usuń mod.
               </button>
             )}
-            <button onClick={handleSave} disabled={saving || existingOverride?.skip}
-              style={{ flex: 1, padding: '0.875rem', border: 'none', borderRadius: 12, background: existingOverride?.skip ? C.grayLight : C.navy, color: existingOverride?.skip ? C.gray : C.gold, fontWeight: 900, opacity: saving ? 0.7 : 1 }}>
-              {saving ? 'Zapisuję...' : 'Zapisz zmiany ✓'}
+            <button onClick={handleSave} disabled={saving || (mode === 'library' && !libId) || (mode === 'custom' && !customName.trim())}
+              style={{ flex: 1, padding: '0.875rem', border: 'none', borderRadius: 12, background: C.navy, color: C.gold, fontWeight: 900, opacity: saving ? 0.7 : 1 }}>
+              {saving ? 'Zapisuję...' : wholePlan ? 'Zapisz dla całego planu ✓' : 'Zapisz zmiany ✓'}
             </button>
           </div>
         </div>
@@ -228,7 +214,108 @@ function ExerciseEditModal({ ex, athleteId, athleteName, existingOverride, exerc
   )
 }
 
-// ─── MODAL DODAWANIA NOWEGO ĆWICZENIA DO BLOKU ────────────────────────────────
+// ─── MODAL USUWANIA BLOKU ──────────────────────────────────────────────────────
+function DeleteBlockModal({ block, allBlocks, athleteId, onDelete, onClose }: {
+  block: any; allBlocks: any[]; athleteId: number
+  onDelete: (blockId: number, scope: 'single' | 'all_same') => void
+  onClose: () => void
+}) {
+  const sameName = allBlocks.filter(b => b.block_name === block.block_name && b.id !== block.id)
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 110, background: 'rgba(13,27,42,0.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: sans }} onClick={onClose}>
+      <div style={{ width: '100%', maxWidth: 440, background: C.white, borderRadius: 18, border: `1.5px solid ${C.grayLight}`, overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+        <div style={{ background: C.navy, padding: '1.1rem 1.25rem' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.66rem', color: C.red, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Usuń blok</div>
+          <div style={{ color: C.white, fontWeight: 800, fontSize: '1.1rem' }}>{block.block_name}</div>
+        </div>
+        <div style={{ padding: '1.25rem' }}>
+          <div style={{ fontSize: '0.86rem', color: C.gray, marginBottom: '1.25rem', lineHeight: 1.6 }}>
+            Ćwiczenia w bloku zostaną oznaczone jako pominięte dla tej zawodniczki. Szablon planu pozostaje bez zmian.
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <button onClick={() => { onDelete(block.id, 'single'); onClose() }}
+              style={{ padding: '0.875rem', border: `1.5px solid ${C.orange}`, borderRadius: 12, background: C.white, color: C.orange, fontWeight: 800, textAlign: 'left' }}>
+              <div>Tylko ten trening</div>
+              <div style={{ fontSize: '0.72rem', fontWeight: 400, color: C.gray, marginTop: 2 }}>Pomija blok tylko w tym dniu</div>
+            </button>
+            {sameName.length > 0 && (
+              <button onClick={() => { onDelete(block.id, 'all_same'); onClose() }}
+                style={{ padding: '0.875rem', border: `1.5px solid ${C.red}`, borderRadius: 12, background: C.white, color: C.red, fontWeight: 800, textAlign: 'left' }}>
+                <div>Cały plan tej zawodniczki ({sameName.length + 1} bloków)</div>
+                <div style={{ fontSize: '0.72rem', fontWeight: 400, color: C.gray, marginTop: 2 }}>Pomija wszystkie bloki &ldquo;{block.block_name}&rdquo; w planie</div>
+              </button>
+            )}
+            <button onClick={onClose}
+              style={{ padding: '0.875rem', border: `1.5px solid ${C.grayLight}`, borderRadius: 12, background: C.offWhite, color: C.gray, fontWeight: 700 }}>
+              Anuluj
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── MODAL DODANIA NOWEGO BLOKU ────────────────────────────────────────────────
+function AddBlockModal({ dayId, dayName, existingCount, onAdd, onClose }: {
+  dayId: number; dayName: string; existingCount: number
+  onAdd: (block: any) => void; onClose: () => void
+}) {
+  const supabase = createClient()
+  const [blockName, setBlockName] = useState(`Blok ${String.fromCharCode(65 + existingCount)}`)
+  const [rounds, setRounds] = useState('3')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleAdd() {
+    setSaving(true); setError('')
+    const { data, error: err } = await supabase.from('workout_day_blocks').insert({
+      day_id: dayId,
+      block_name: blockName.trim() || `Blok ${String.fromCharCode(65 + existingCount)}`,
+      block_order: existingCount + 1,
+      rounds: parseInt(rounds) || 3,
+    }).select().single()
+    setSaving(false)
+    if (err) { setError(err.message); return }
+    if (data) onAdd({ ...data, workout_block_exercises: [] })
+    onClose()
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 110, background: 'rgba(13,27,42,0.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: sans }} onClick={onClose}>
+      <div style={{ width: '100%', maxWidth: 440, background: C.white, borderRadius: 18, border: `1.5px solid ${C.grayLight}`, overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+        <div style={{ background: C.navy, padding: '1.1rem 1.25rem' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.66rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Dodaj blok</div>
+          <div style={{ color: C.white, fontWeight: 800, fontSize: '1.1rem' }}>{dayName}</div>
+        </div>
+        <div style={{ padding: '1.25rem' }}>
+          <div style={{ background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 10, padding: '0.75rem', marginBottom: '1.1rem', fontSize: '0.82rem', color: '#92400E' }}>
+            ⚠️ Blok zostanie dodany do szablonu planu — będzie widoczny dla wszystkich zawodniczek z tym planem.
+          </div>
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={labelSt}>Nazwa bloku</label>
+            <input type="text" value={blockName} onChange={e => setBlockName(e.target.value)}
+              style={{ ...inputSt, textAlign: 'left', fontFamily: sans }} />
+          </div>
+          <div style={{ marginBottom: '1.25rem' }}>
+            <label style={labelSt}>Liczba rund</label>
+            <input type="number" value={rounds} onChange={e => setRounds(e.target.value)} min={1} max={10} style={inputSt} />
+          </div>
+          {error && <div style={{ padding: '0.75rem', background: '#FEF2F2', border: `1.5px solid ${C.red}`, borderRadius: 10, color: C.red, fontWeight: 700, fontSize: '0.82rem', marginBottom: '1rem' }}>❌ {error}</div>}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={onClose} style={{ padding: '0.875rem 1rem', border: `1.5px solid ${C.grayLight}`, borderRadius: 12, background: C.white, color: C.gray, fontWeight: 700 }}>Anuluj</button>
+            <button onClick={handleAdd} disabled={saving}
+              style={{ flex: 1, padding: '0.875rem', border: 'none', borderRadius: 12, background: C.navy, color: C.gold, fontWeight: 900, opacity: saving ? 0.7 : 1 }}>
+              {saving ? 'Dodaję...' : 'Dodaj blok ＋'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── MODAL DODAWANIA ĆWICZENIA ─────────────────────────────────────────────────
 function AddExerciseModal({ blockId, athleteId, exerciseLibrary, existingCount, onSave, onClose }: {
   blockId: number; athleteId: number; exerciseLibrary: any[]
   existingCount: number; onSave: (ex: any) => void; onClose: () => void
@@ -252,20 +339,15 @@ function AddExerciseModal({ blockId, athleteId, exerciseLibrary, existingCount, 
     if (!canSave) return
     setSaving(true); setError('')
     const payload = {
-      athlete_id: athleteId,
-      block_id: blockId,
+      athlete_id: athleteId, block_id: blockId,
       exercise_id: mode === 'library' && exerciseId ? parseInt(exerciseId) : null,
       exercise_code: mode === 'custom' ? exerciseCode.trim() : null,
       exercise_order: existingCount + 100,
-      sets: parseInt(sets) || 3,
-      reps: reps || null,
-      weight_kg: weight ? parseFloat(weight) : null,
-      tempo: tempo || null,
-      rir: rir ? parseInt(rir) : null,
-      coach_note: note || null,
+      sets: parseInt(sets) || 3, reps: reps || null,
+      weight_kg: weight ? parseFloat(weight) : null, tempo: tempo || null,
+      rir: rir ? parseInt(rir) : null, coach_note: note || null,
     }
-    const { data, error: err } = await supabase.from('athlete_extra_exercises')
-      .insert(payload).select('*, exercise:exercises(*)').single()
+    const { data, error: err } = await supabase.from('athlete_extra_exercises').insert(payload).select('*, exercise:exercises(*)').single()
     setSaving(false)
     if (err) { setError(err.message); return }
     if (data) onSave(data)
@@ -273,65 +355,42 @@ function AddExerciseModal({ blockId, athleteId, exerciseLibrary, existingCount, 
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 110, background: 'rgba(13,27,42,0.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: sans }}
-      onClick={onClose}>
-      <div style={{ width: '100%', maxWidth: 540, background: C.white, borderRadius: 18, border: `1.5px solid ${C.grayLight}`, maxHeight: '92vh', overflowY: 'auto' }}
-        onClick={e => e.stopPropagation()}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 110, background: 'rgba(13,27,42,0.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: sans }} onClick={onClose}>
+      <div style={{ width: '100%', maxWidth: 500, background: C.white, borderRadius: 18, border: `1.5px solid ${C.grayLight}`, maxHeight: '92vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
         <div style={{ background: C.navy, padding: '1.1rem 1.25rem' }}>
           <div style={{ fontFamily: mono, fontSize: '0.66rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Dodaj ćwiczenie</div>
-          <div style={{ color: C.white, fontWeight: 800, fontSize: '1.1rem' }}>Nowe ćwiczenie do bloku</div>
-          <div style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray, marginTop: 3 }}>Widoczne tylko dla tej zawodniczki</div>
+          <div style={{ color: C.white, fontWeight: 800, fontSize: '1.1rem' }}>Tylko dla tej zawodniczki</div>
         </div>
         <div style={{ padding: '1.25rem' }}>
-          {/* Tryb */}
-          <div style={{ marginBottom: '1.1rem' }}>
-            <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, fontWeight: 700 }}>Ćwiczenie</div>
-            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-              {[{ key: 'library', label: 'Z biblioteki' }, { key: 'custom', label: 'Własna nazwa' }].map(opt => (
-                <button key={opt.key} onClick={() => setMode(opt.key as any)}
-                  style={{ flex: 1, padding: '0.55rem', border: `1.5px solid ${mode === opt.key ? C.gold : C.grayLight}`, borderRadius: 8, background: mode === opt.key ? C.navy : C.offWhite, color: mode === opt.key ? C.gold : C.gray, fontWeight: mode === opt.key ? 800 : 500, fontSize: '0.78rem' }}>
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            {mode === 'library' ? (
-              <select value={exerciseId} onChange={e => setExerciseId(e.target.value)}
-                style={{ ...inputStyle, textAlign: 'left', fontFamily: sans, appearance: 'none' }}>
-                <option value="">Wybierz ćwiczenie...</option>
-                {exerciseLibrary.map((ex: any) => (
-                  <option key={ex.id} value={ex.id}>{formatExName(ex.name)}{ex.category ? ` (${ex.category})` : ''}</option>
-                ))}
-              </select>
-            ) : (
-              <input type="text" value={exerciseCode} onChange={e => setExerciseCode(e.target.value)}
-                placeholder="np. hip thrust, rdl, face pull..."
-                style={{ ...inputStyle, textAlign: 'left', fontFamily: sans }} />
-            )}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+            {[{ k: 'library', l: 'Z biblioteki' }, { k: 'custom', l: 'Własna nazwa' }].map(o => (
+              <button key={o.k} onClick={() => setMode(o.k as any)}
+                style={{ flex: 1, padding: '0.55rem', border: `1.5px solid ${mode === o.k ? C.gold : C.grayLight}`, borderRadius: 8, background: mode === o.k ? C.navy : C.offWhite, color: mode === o.k ? C.gold : C.gray, fontWeight: mode === o.k ? 800 : 500, fontSize: '0.78rem' }}>
+                {o.l}
+              </button>
+            ))}
           </div>
-
-          {/* Parametry */}
-          <div style={{ marginBottom: '1.1rem' }}>
-            <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, fontWeight: 700 }}>Parametry</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 8 }}>
-              <div><label style={labelCss}>Serie</label><input type="number" value={sets} onChange={e => setSets(e.target.value)} style={inputStyle} /></div>
-              <div><label style={labelCss}>Powt.</label><input type="text" value={reps} onChange={e => setReps(e.target.value)} placeholder="8–10" style={inputStyle} /></div>
-              <div><label style={labelCss}>Kg</label><input type="number" step="0.5" value={weight} onChange={e => setWeight(e.target.value)} placeholder="—" style={inputStyle} /></div>
-              <div><label style={labelCss}>RIR</label><input type="number" value={rir} onChange={e => setRir(e.target.value)} placeholder="—" style={inputStyle} /></div>
-            </div>
-            <div>
-              <label style={labelCss}>Tempo</label>
-              <input type="text" value={tempo} onChange={e => setTempo(e.target.value)} placeholder="np. 3-1-2-0" style={{ ...inputStyle, textAlign: 'left', fontFamily: sans }} />
-            </div>
+          <div style={{ marginBottom: '1rem' }}>
+            {mode === 'library'
+              ? <select value={exerciseId} onChange={e => setExerciseId(e.target.value)} style={{ ...inputSt, textAlign: 'left', fontFamily: sans, appearance: 'none' }}>
+                  <option value="">Wybierz ćwiczenie...</option>
+                  {exerciseLibrary.map((e: any) => <option key={e.id} value={e.id}>{fmt(e.name)}{e.category ? ` (${e.category})` : ''}</option>)}
+                </select>
+              : <input type="text" value={exerciseCode} onChange={e => setExerciseCode(e.target.value)} placeholder="np. hip thrust, face pull..." style={{ ...inputSt, textAlign: 'left', fontFamily: sans }} />
+            }
           </div>
-
-          <div style={{ marginBottom: '1.1rem' }}>
-            <label style={labelCss}>Notatka</label>
-            <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Wskazówki techniczne..." rows={2}
-              style={{ width: '100%', padding: '0.75rem', border: `1.5px solid ${C.grayLight}`, borderRadius: 10, background: C.offWhite, color: C.navy, fontFamily: sans, fontSize: '0.9rem', outline: 'none', resize: 'none' }} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 8 }}>
+            <div><label style={labelSt}>Serie</label><input type="number" value={sets} onChange={e => setSets(e.target.value)} style={inputSt} /></div>
+            <div><label style={labelSt}>Powt.</label><input type="text" value={reps} onChange={e => setReps(e.target.value)} placeholder="8–10" style={inputSt} /></div>
+            <div><label style={labelSt}>Kg</label><input type="number" step="0.5" value={weight} onChange={e => setWeight(e.target.value)} placeholder="—" style={inputSt} /></div>
+            <div><label style={labelSt}>RIR</label><input type="number" value={rir} onChange={e => setRir(e.target.value)} placeholder="—" style={inputSt} /></div>
           </div>
-
+          <div style={{ marginBottom: '1rem' }}><label style={labelSt}>Tempo</label><input type="text" value={tempo} onChange={e => setTempo(e.target.value)} placeholder="np. 3-1-2-0" style={{ ...inputSt, textAlign: 'left', fontFamily: sans }} /></div>
+          <div style={{ marginBottom: '1.25rem' }}>
+            <label style={labelSt}>Notatka</label>
+            <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Wskazówki techniczne..." rows={2} style={{ width: '100%', padding: '0.75rem', border: `1.5px solid ${C.grayLight}`, borderRadius: 10, background: C.offWhite, color: C.navy, fontFamily: sans, fontSize: '0.9rem', outline: 'none', resize: 'none' }} />
+          </div>
           {error && <div style={{ padding: '0.75rem', background: '#FEF2F2', border: `1.5px solid ${C.red}`, borderRadius: 10, color: C.red, fontWeight: 700, fontSize: '0.82rem', marginBottom: '1rem' }}>❌ {error}</div>}
-
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={onClose} style={{ padding: '0.875rem 1rem', border: `1.5px solid ${C.grayLight}`, borderRadius: 12, background: C.white, color: C.gray, fontWeight: 700 }}>Anuluj</button>
             <button onClick={handleSave} disabled={!canSave || saving}
@@ -348,7 +407,9 @@ function AddExerciseModal({ blockId, athleteId, exerciseLibrary, existingCount, 
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 export default function CoachAthleteTrainingClient({ athlete, assignment, days, blocks, overrides, extraExercises, exerciseLibrary }: any) {
   const router = useRouter()
+  const supabase = createClient()
   const [selectedDay, setSelectedDay] = useState<number>(days[0]?.id || 0)
+  const [localBlocks, setLocalBlocks] = useState<any[]>(blocks)
   const [overrideMap, setOverrideMap] = useState<Record<number, any>>(() => {
     const map: Record<number, any> = {}
     for (const o of overrides) map[o.block_exercise_id] = o
@@ -363,9 +424,11 @@ export default function CoachAthleteTrainingClient({ athlete, assignment, days, 
     return map
   })
   const [editingExercise, setEditingExercise] = useState<any | null>(null)
+  const [deletingBlock, setDeletingBlock] = useState<any | null>(null)
+  const [addingBlock, setAddingBlock] = useState(false)
   const [addingToBlock, setAddingToBlock] = useState<number | null>(null)
 
-  const currentDayBlocks = blocks.filter((b: any) => b.day_id === selectedDay).sort((a: any, z: any) => a.block_order - z.block_order)
+  const currentDayBlocks = localBlocks.filter((b: any) => b.day_id === selectedDay).sort((a: any, z: any) => a.block_order - z.block_order)
   const currentDay = days.find((d: any) => d.id === selectedDay)
 
   const overrideCount = Object.values(overrideMap).filter((o: any) => !o.skip).length
@@ -381,17 +444,54 @@ export default function CoachAthleteTrainingClient({ athlete, assignment, days, 
     })
   }
 
+  function handleSaveAll(_srcId: number | null, _srcCode: string | null, siblings: { exerciseId: number; override: any }[]) {
+    setOverrideMap(prev => {
+      const next = { ...prev }
+      for (const s of siblings) next[s.exerciseId] = s.override
+      return next
+    })
+  }
+
+  async function handleDeleteBlock(blockId: number, scope: 'single' | 'all_same') {
+    const block = localBlocks.find(b => b.id === blockId)
+    if (!block) return
+
+    let toSkip: any[] = block.workout_block_exercises || []
+    if (scope === 'all_same') {
+      toSkip = localBlocks
+        .filter(b => b.block_name === block.block_name)
+        .flatMap(b => b.workout_block_exercises || [])
+    }
+
+    const newOverrides: Record<number, any> = {}
+    for (const ex of toSkip) {
+      const existing = overrideMap[ex.id]
+      const payload = {
+        athlete_id: athlete.id, block_exercise_id: ex.id, skip: true,
+        is_substitution: false, sets_override: null, reps_override: null,
+        weight_override: null, tempo_override: null, coach_note_override: null,
+        exercise_id_override: null, exercise_code_override: null,
+      }
+      if (existing) {
+        await supabase.from('athlete_exercise_overrides').update({ skip: true }).eq('id', existing.id)
+        newOverrides[ex.id] = { ...existing, skip: true }
+      } else {
+        const { data } = await supabase.from('athlete_exercise_overrides').insert(payload).select().single()
+        if (data) newOverrides[ex.id] = data
+      }
+    }
+    setOverrideMap(prev => ({ ...prev, ...newOverrides }))
+  }
+
   function handleExtraAdd(blockId: number, ex: any) {
     setExtraMap(prev => ({ ...prev, [blockId]: [...(prev[blockId] || []), ex] }))
   }
 
   async function handleExtraDelete(blockId: number, exId: string) {
-    const supabase = createClient()
     await supabase.from('athlete_extra_exercises').delete().eq('id', exId)
     setExtraMap(prev => ({ ...prev, [blockId]: (prev[blockId] || []).filter(e => e.id !== exId) }))
   }
 
-  // Pogrupuj dni wg tygodnia
   const weekGroups: Record<number, any[]> = {}
   for (const day of days) {
     const wn = day.week?.week_number || 1
@@ -399,63 +499,61 @@ export default function CoachAthleteTrainingClient({ athlete, assignment, days, 
     weekGroups[wn].push(day)
   }
 
-  function getExerciseDisplayName(ex: any, override: any | null) {
+  function getDisplayName(ex: any, override: any | null) {
     if (override?.exercise_code_override) return override.exercise_code_override
-    if (override?.exercise_id_override && override.exercise_override?.name) return formatExName(override.exercise_override.name)
-    return ex.exercise?.name ? formatExName(ex.exercise.name) : (ex.exercise_code || 'Ćwiczenie')
+    if (override?.exercise_id_override) {
+      const lib = exerciseLibrary.find((l: any) => l.id === override.exercise_id_override)
+      return lib ? fmt(lib.name) : `Ćwiczenie #${override.exercise_id_override}`
+    }
+    return ex.exercise?.name ? fmt(ex.exercise.name) : (ex.exercise_code || 'Ćwiczenie')
   }
 
   return (
     <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: ${C.offWhite}; }
-        button { cursor: pointer; font-family: inherit; }
-      `}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap'); *{box-sizing:border-box;margin:0;padding:0;} body{background:${C.offWhite};} button{cursor:pointer;font-family:inherit;}`}</style>
 
       {editingExercise && (
         <ExerciseEditModal
-          ex={editingExercise}
-          athleteId={athlete.id}
-          athleteName={athlete.full_name.split(' ')[0]}
+          ex={editingExercise} athleteId={athlete.id} athleteName={athlete.full_name.split(' ')[0]}
           existingOverride={overrideMap[editingExercise.id] || null}
-          exerciseLibrary={exerciseLibrary}
+          exerciseLibrary={exerciseLibrary} allBlocks={localBlocks}
           onSave={o => handleOverrideSave(editingExercise.id, o)}
-          onSkip={() => {}}
+          onSaveAll={handleSaveAll}
           onClose={() => setEditingExercise(null)}
         />
       )}
-
+      {deletingBlock && (
+        <DeleteBlockModal block={deletingBlock} allBlocks={localBlocks} athleteId={athlete.id}
+          onDelete={handleDeleteBlock} onClose={() => setDeletingBlock(null)} />
+      )}
+      {addingBlock && (
+        <AddBlockModal dayId={selectedDay} dayName={currentDay?.day_name || ''}
+          existingCount={currentDayBlocks.length}
+          onAdd={b => setLocalBlocks(prev => [...prev, b])}
+          onClose={() => setAddingBlock(false)} />
+      )}
       {addingToBlock != null && (
-        <AddExerciseModal
-          blockId={addingToBlock}
-          athleteId={athlete.id}
+        <AddExerciseModal blockId={addingToBlock} athleteId={athlete.id}
           exerciseLibrary={exerciseLibrary}
-          existingCount={(blocks.find((b: any) => b.id === addingToBlock)?.workout_block_exercises || []).length + (extraMap[addingToBlock] || []).length}
+          existingCount={(localBlocks.find(b => b.id === addingToBlock)?.workout_block_exercises || []).length + (extraMap[addingToBlock] || []).length}
           onSave={ex => handleExtraAdd(addingToBlock, ex)}
-          onClose={() => setAddingToBlock(null)}
-        />
+          onClose={() => setAddingToBlock(null)} />
       )}
 
       <div style={{ minHeight: '100vh', background: C.offWhite, fontFamily: sans, color: C.navy }}>
-
         {/* Header */}
         <header style={{ background: C.navy, padding: '1rem 1.25rem 1.35rem', position: 'sticky', top: 0, zIndex: 10 }}>
           <div style={{ maxWidth: 760, margin: '0 auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: '0.5rem' }}>
-              <button onClick={() => router.push(`/coach/athletes/${athlete.id}`)}
-                style={{ border: 'none', background: C.navyLight, color: C.gray, borderRadius: 10, padding: '0.55rem 0.75rem', fontFamily: mono, fontSize: '0.68rem', fontWeight: 700 }}>
-                ← {athlete.full_name.split(' ')[0]}
-              </button>
+              <button onClick={() => router.push(`/coach/athletes/${athlete.id}`)} style={{ border: 'none', background: C.navyLight, color: C.gray, borderRadius: 10, padding: '0.55rem 0.75rem', fontFamily: mono, fontSize: '0.68rem', fontWeight: 700 }}>← {athlete.full_name.split(' ')[0]}</button>
               <div style={{ flex: 1 }}>
                 <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 2 }}>Modyfikacje planu</div>
                 <div style={{ color: C.white, fontWeight: 800, fontSize: '1.1rem' }}>{assignment?.plan?.name || 'Brak planu'}</div>
               </div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                {overrideCount > 0 && <div style={{ background: C.gold, color: C.navy, borderRadius: 20, padding: '3px 10px', fontFamily: mono, fontSize: '0.68rem', fontWeight: 900 }}>{overrideCount} mod.</div>}
-                {skipCount > 0 && <div style={{ background: C.red, color: C.white, borderRadius: 20, padding: '3px 10px', fontFamily: mono, fontSize: '0.68rem', fontWeight: 900 }}>{skipCount} pominięte</div>}
-                {extraCount > 0 && <div style={{ background: C.green, color: C.white, borderRadius: 20, padding: '3px 10px', fontFamily: mono, fontSize: '0.68rem', fontWeight: 900 }}>+{extraCount} nowe</div>}
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                {overrideCount > 0 && <span style={{ background: C.gold, color: C.navy, borderRadius: 20, padding: '3px 10px', fontFamily: mono, fontSize: '0.65rem', fontWeight: 900 }}>{overrideCount} mod.</span>}
+                {skipCount > 0 && <span style={{ background: C.red, color: C.white, borderRadius: 20, padding: '3px 10px', fontFamily: mono, fontSize: '0.65rem', fontWeight: 900 }}>{skipCount} pom.</span>}
+                {extraCount > 0 && <span style={{ background: C.green, color: C.white, borderRadius: 20, padding: '3px 10px', fontFamily: mono, fontSize: '0.65rem', fontWeight: 900 }}>+{extraCount} nowe</span>}
               </div>
             </div>
             <div style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray }}>{athlete.full_name}</div>
@@ -463,7 +561,6 @@ export default function CoachAthleteTrainingClient({ athlete, assignment, days, 
         </header>
 
         <main style={{ maxWidth: 760, margin: '0 auto', padding: '1.25rem 1rem 5rem' }}>
-
           {!assignment ? (
             <Card><div style={{ padding: '2rem', textAlign: 'center', color: C.gray }}>Brak przypisanego planu.</div></Card>
           ) : (
@@ -475,22 +572,22 @@ export default function CoachAthleteTrainingClient({ athlete, assignment, days, 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {Object.entries(weekGroups).map(([weekNum, weekDays]) => (
                       <div key={weekNum}>
-                        <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 5 }}>Tydzień {weekNum}</div>
+                        <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, textTransform: 'uppercase', marginBottom: 5 }}>Tydzień {weekNum}</div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                           {weekDays.map((day: any) => {
-                            const dayBlockIds = blocks.filter((b: any) => b.day_id === day.id).map((b: any) => b.id)
-                            const dayExIds = blocks.filter((b: any) => b.day_id === day.id).flatMap((b: any) => (b.workout_block_exercises || []).map((e: any) => e.id))
-                            const dayMods = dayExIds.filter((id: number) => overrideMap[id] && !overrideMap[id].skip).length
-                            const daySkips = dayExIds.filter((id: number) => overrideMap[id]?.skip).length
-                            const dayExtra = dayBlockIds.reduce((sum: number, bid: number) => sum + (extraMap[bid] || []).length, 0)
-                            const isSelected = selectedDay === day.id
+                            const dayBlockIds = localBlocks.filter(b => b.day_id === day.id).map(b => b.id)
+                            const dayExIds = localBlocks.filter(b => b.day_id === day.id).flatMap(b => (b.workout_block_exercises || []).map((e: any) => e.id))
+                            const mods = dayExIds.filter((id: number) => overrideMap[id] && !overrideMap[id].skip).length
+                            const skips = dayExIds.filter((id: number) => overrideMap[id]?.skip).length
+                            const extra = dayBlockIds.reduce((s: number, bid: number) => s + (extraMap[bid] || []).length, 0)
+                            const isSel = selectedDay === day.id
                             return (
                               <button key={day.id} onClick={() => setSelectedDay(day.id)}
-                                style={{ padding: '0.5rem 0.875rem', border: `1.5px solid ${isSelected ? C.gold : C.grayLight}`, borderRadius: 8, background: isSelected ? C.navy : C.white, color: isSelected ? C.gold : C.navy, fontWeight: isSelected ? 800 : 500, fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: 5 }}>
+                                style={{ padding: '0.5rem 0.875rem', border: `1.5px solid ${isSel ? C.gold : C.grayLight}`, borderRadius: 8, background: isSel ? C.navy : C.white, color: isSel ? C.gold : C.navy, fontWeight: isSel ? 800 : 500, fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: 5 }}>
                                 {day.day_name}
-                                {dayMods > 0 && <span style={{ background: C.gold, color: C.navy, borderRadius: 8, padding: '1px 5px', fontSize: '0.58rem', fontWeight: 900 }}>✎{dayMods}</span>}
-                                {daySkips > 0 && <span style={{ background: C.red, color: C.white, borderRadius: 8, padding: '1px 5px', fontSize: '0.58rem', fontWeight: 900 }}>✕{daySkips}</span>}
-                                {dayExtra > 0 && <span style={{ background: C.green, color: C.white, borderRadius: 8, padding: '1px 5px', fontSize: '0.58rem', fontWeight: 900 }}>+{dayExtra}</span>}
+                                {mods > 0 && <span style={{ background: C.gold, color: C.navy, borderRadius: 8, padding: '1px 5px', fontSize: '0.55rem', fontWeight: 900 }}>✎{mods}</span>}
+                                {skips > 0 && <span style={{ background: C.red, color: C.white, borderRadius: 8, padding: '1px 5px', fontSize: '0.55rem', fontWeight: 900 }}>✕{skips}</span>}
+                                {extra > 0 && <span style={{ background: C.green, color: C.white, borderRadius: 8, padding: '1px 5px', fontSize: '0.55rem', fontWeight: 900 }}>+{extra}</span>}
                               </button>
                             )
                           })}
@@ -501,149 +598,119 @@ export default function CoachAthleteTrainingClient({ athlete, assignment, days, 
                 </div>
               </Card>
 
-              {/* Info */}
+              {/* Info o dniu */}
               {currentDay && (
                 <div style={{ marginBottom: '1rem', padding: '0.875rem 1.25rem', background: C.navyLight, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div>
                     <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray, marginBottom: 2 }}>{assignment?.plan?.name}</div>
                     <div style={{ color: C.white, fontWeight: 800 }}>Tydzień {currentDay.week?.week_number} · {currentDay.day_name}</div>
                   </div>
-                  <div style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gold, textAlign: 'right' }}>Kliknij ćwiczenie<br />aby modyfikować</div>
+                  <div style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gold, textAlign: 'right' }}>Kliknij ćwiczenie<br/>aby modyfikować</div>
                 </div>
               )}
 
               {/* Bloki */}
-              {currentDayBlocks.length === 0 ? (
-                <Card><div style={{ padding: '2rem', textAlign: 'center', color: C.gray }}>Brak ćwiczeń w tym dniu.</div></Card>
-              ) : (
-                currentDayBlocks.map((block: any) => {
-                  const templateExercises = (block.workout_block_exercises || []).sort((a: any, b: any) => a.exercise_order - b.exercise_order)
-                  const extras = extraMap[block.id] || []
-                  const totalEx = templateExercises.length + extras.length
+              {currentDayBlocks.map((block: any) => {
+                const templateEx = (block.workout_block_exercises || []).sort((a: any, b: any) => a.exercise_order - b.exercise_order)
+                const extras = extraMap[block.id] || []
+                return (
+                  <Card key={block.id} style={{ marginBottom: '1rem' }}>
+                    {/* Nagłówek bloku */}
+                    <div style={{ padding: '0.875rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}`, display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontWeight: 800, fontSize: '1rem', color: C.navy, flex: 1 }}>{block.block_name}</span>
+                      {block.rounds > 1 && <span style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray, background: C.offWhite, padding: '2px 8px', borderRadius: 6 }}>{block.rounds} rundy</span>}
+                      <button onClick={() => setAddingToBlock(block.id)}
+                        style={{ padding: '0.4rem 0.75rem', border: `1.5px solid ${C.grayLight}`, borderRadius: 8, background: C.white, color: C.navy, fontWeight: 700, fontSize: '0.75rem' }}>
+                        + Ćwiczenie
+                      </button>
+                      <button onClick={() => setDeletingBlock(block)}
+                        style={{ padding: '0.4rem 0.75rem', border: `1.5px solid ${C.red}`, borderRadius: 8, background: C.white, color: C.red, fontWeight: 700, fontSize: '0.75rem' }}>
+                        Usuń blok
+                      </button>
+                    </div>
 
-                  return (
-                    <Card key={block.id} style={{ marginBottom: '1rem' }}>
-                      {/* Nagłówek bloku */}
-                      <div style={{ padding: '0.875rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={{ fontWeight: 800, fontSize: '1rem', color: C.navy }}>{block.block_name}</span>
-                          {block.rounds > 1 && <span style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray, background: C.offWhite, padding: '2px 8px', borderRadius: 6 }}>{block.rounds} rundy</span>}
-                          <span style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray }}>{totalEx} ćw.</span>
-                        </div>
-                        <button onClick={() => setAddingToBlock(block.id)}
-                          style={{ padding: '0.45rem 0.875rem', border: `1.5px solid ${C.green}`, borderRadius: 8, background: C.white, color: C.green, fontWeight: 800, fontSize: '0.78rem' }}>
-                          + Dodaj
-                        </button>
-                      </div>
-
-                      {/* Ćwiczenia z szablonu */}
-                      {templateExercises.map((ex: any, idx: number) => {
-                        const override = overrideMap[ex.id]
-                        const isSkipped = override?.skip
-                        const isModified = override && !isSkipped
-                        const isSwapped = isModified && override.is_substitution
-                        const displayName = getExerciseDisplayName(ex, override)
-
-                        return (
-                          <button key={ex.id} onClick={() => setEditingExercise(ex)}
-                            style={{
-                              width: '100%', border: 'none', textAlign: 'left', fontFamily: sans,
-                              background: isSkipped ? '#FEF2F2' : isModified ? C.navyLight : C.white,
-                              borderBottom: `1.5px solid ${C.grayLight}`,
-                              padding: '0.875rem 1.25rem', display: 'flex', alignItems: 'flex-start', gap: 12,
-                              opacity: isSkipped ? 0.7 : 1,
-                            }}>
-                            {/* Numer */}
-                            <div style={{ width: 26, height: 26, borderRadius: 7, background: isSkipped ? C.red : isModified ? C.gold : C.offWhite, color: isSkipped ? C.white : isModified ? C.navy : C.gray, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: mono, fontWeight: 900, fontSize: '0.7rem', flexShrink: 0 }}>
-                              {isSkipped ? '✕' : idx + 1}
+                    {/* Ćwiczenia szablonu */}
+                    {templateEx.map((ex: any, idx: number) => {
+                      const override = overrideMap[ex.id]
+                      const isSkipped = override?.skip
+                      const isModified = override && !isSkipped
+                      const isSwapped = isModified && override.is_substitution
+                      const displayName = getDisplayName(ex, override)
+                      return (
+                        <button key={ex.id} onClick={() => setEditingExercise(ex)}
+                          style={{ width: '100%', border: 'none', textAlign: 'left', fontFamily: sans, background: isSkipped ? '#FEF2F2' : isModified ? C.navyLight : C.white, borderBottom: `1.5px solid ${C.grayLight}`, padding: '0.875rem 1.25rem', display: 'flex', alignItems: 'flex-start', gap: 12, opacity: isSkipped ? 0.75 : 1 }}>
+                          <div style={{ width: 26, height: 26, borderRadius: 7, background: isSkipped ? C.red : isModified ? C.gold : C.offWhite, color: isSkipped ? C.white : isModified ? C.navy : C.gray, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: mono, fontWeight: 900, fontSize: '0.7rem', flexShrink: 0, marginTop: 2 }}>
+                            {isSkipped ? '✕' : idx + 1}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                              {ex.is_warmup && <span style={{ fontFamily: mono, fontSize: '0.52rem', color: C.gold, background: C.navy, padding: '1px 5px', borderRadius: 4 }}>WU</span>}
+                              {isSwapped && <span style={{ fontFamily: mono, fontSize: '0.52rem', color: C.white, background: C.orange, padding: '1px 5px', borderRadius: 4 }}>ZAMIANA</span>}
+                              <span style={{ fontWeight: 700, fontSize: '0.92rem', color: isSkipped ? C.red : isModified ? C.white : C.navy, textDecoration: isSkipped ? 'line-through' : 'none' }}>{displayName}</span>
                             </div>
-
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                                {ex.is_warmup && <span style={{ fontFamily: mono, fontSize: '0.52rem', color: C.gold, background: C.navy, padding: '1px 5px', borderRadius: 4 }}>WU</span>}
-                                {isSwapped && <span style={{ fontFamily: mono, fontSize: '0.52rem', color: C.white, background: C.orange, padding: '1px 5px', borderRadius: 4 }}>ZAMIANA</span>}
-                                <span style={{ fontWeight: 700, fontSize: '0.92rem', color: isSkipped ? C.red : isModified ? C.white : C.navy, textDecoration: isSkipped ? 'line-through' : 'none' }}>
-                                  {displayName}
-                                </span>
-                              </div>
-                              {/* Parametry */}
-                              <div style={{ fontFamily: mono, fontSize: '0.68rem', letterSpacing: '0.03em', color: isModified && !isSkipped ? C.gray : C.gray }}>
-                                {isSkipped ? (
-                                  <span style={{ color: C.red }}>Pominięte dla tej zawodniczki</span>
-                                ) : isModified ? (
+                            <div style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray }}>
+                              {isSkipped ? <span style={{ color: C.red }}>Pominięte</span>
+                                : isModified ? (
                                   <>
                                     <span style={{ color: C.gold, fontWeight: 800 }}>
                                       {override.sets_override || ex.sets}×{override.reps_override || ex.reps || '—'}
                                       {override.weight_override ? ` · ${override.weight_override}kg` : ex.weight_kg ? ` · ${ex.weight_kg}kg` : ''}
                                       {override.tempo_override || ex.tempo ? ` · ${override.tempo_override || ex.tempo}` : ''}
                                     </span>
-                                    {isSwapped && <span style={{ color: '#666', marginLeft: 8 }}>(oryg: {ex.exercise?.name ? formatExName(ex.exercise.name) : ex.exercise_code})</span>}
-                                    {!isSwapped && <span style={{ color: '#555', marginLeft: 8 }}>(oryg: {ex.sets}×{ex.reps || '—'})</span>}
+                                    <span style={{ color: '#555', marginLeft: 8 }}>
+                                      {isSwapped ? `(oryg: ${ex.exercise?.name ? fmt(ex.exercise.name) : ex.exercise_code})` : `(oryg: ${ex.sets}×${ex.reps || '—'})`}
+                                    </span>
                                   </>
                                 ) : (
-                                  <>
-                                    {ex.sets}×{ex.reps || '—'}
-                                    {ex.tempo ? ` · ${ex.tempo}` : ''}
-                                    {ex.weight_kg ? ` · ${ex.weight_kg}kg` : ''}
-                                    {ex.rir != null ? ` · RIR ${ex.rir}` : ''}
-                                  </>
-                                )}
-                              </div>
-                              {(override?.coach_note_override || ex.coach_comment) && !isSkipped && (
-                                <div style={{ fontSize: '0.75rem', color: isModified ? C.gold : C.gray, fontStyle: 'italic', marginTop: 3 }}>
-                                  ✎ {override?.coach_note_override || ex.coach_comment}
-                                </div>
-                              )}
+                                  <>{ex.sets}×{ex.reps || '—'}{ex.tempo ? ` · ${ex.tempo}` : ''}{ex.weight_kg ? ` · ${ex.weight_kg}kg` : ''}{ex.rir != null ? ` · RIR ${ex.rir}` : ''}</>
+                                )
+                              }
                             </div>
-
-                            <div style={{ flexShrink: 0, paddingTop: 2 }}>
-                              {isSkipped ? (
-                                <span style={{ fontFamily: mono, fontSize: '0.6rem', color: C.red, border: `1.5px solid ${C.red}`, borderRadius: 6, padding: '2px 8px' }}>Pominięte</span>
-                              ) : isModified ? (
-                                <span style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gold, border: `1.5px solid ${C.gold}`, borderRadius: 6, padding: '2px 8px' }}>
-                                  {isSwapped ? 'Zamienione' : 'Zmodyfikowane'}
-                                </span>
-                              ) : (
-                                <span style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, border: `1.5px solid ${C.grayLight}`, borderRadius: 6, padding: '2px 8px' }}>✎ edytuj</span>
-                              )}
-                            </div>
-                          </button>
-                        )
-                      })}
-
-                      {/* Ćwiczenia dodane tylko dla tej zawodniczki */}
-                      {extras.map((ex: any) => {
-                        const name = ex.exercise?.name ? formatExName(ex.exercise.name) : (ex.exercise_code || '—')
-                        return (
-                          <div key={ex.id} style={{ padding: '0.875rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}`, display: 'flex', alignItems: 'flex-start', gap: 12, background: '#F0FDF4' }}>
-                            <div style={{ width: 26, height: 26, borderRadius: 7, background: C.green, color: C.white, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: mono, fontWeight: 900, fontSize: '0.7rem', flexShrink: 0 }}>＋</div>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                                <span style={{ fontFamily: mono, fontSize: '0.52rem', color: C.white, background: C.green, padding: '1px 5px', borderRadius: 4 }}>DODANE</span>
-                                <span style={{ fontWeight: 700, fontSize: '0.92rem', color: C.navy }}>{name}</span>
-                              </div>
-                              <div style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray }}>
-                                {ex.sets}×{ex.reps || '—'}{ex.tempo ? ` · ${ex.tempo}` : ''}{ex.weight_kg ? ` · ${ex.weight_kg}kg` : ''}{ex.rir != null ? ` · RIR ${ex.rir}` : ''}
-                              </div>
-                              {ex.coach_note && <div style={{ fontSize: '0.75rem', color: C.green, fontStyle: 'italic', marginTop: 3 }}>✎ {ex.coach_note}</div>}
-                            </div>
-                            <button onClick={() => handleExtraDelete(block.id, ex.id)}
-                              style={{ background: 'none', border: `1.5px solid ${C.red}`, borderRadius: 6, color: C.red, padding: '2px 8px', fontFamily: mono, fontSize: '0.6rem', fontWeight: 700, flexShrink: 0 }}>
-                              Usuń
-                            </button>
+                            {(override?.coach_note_override || ex.coach_comment) && !isSkipped && (
+                              <div style={{ fontSize: '0.75rem', color: isModified ? C.gold : C.gray, fontStyle: 'italic', marginTop: 3 }}>✎ {override?.coach_note_override || ex.coach_comment}</div>
+                            )}
                           </div>
-                        )
-                      })}
+                          <div style={{ flexShrink: 0, paddingTop: 2 }}>
+                            {isSkipped ? <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.red, border: `1.5px solid ${C.red}`, borderRadius: 6, padding: '2px 7px' }}>Pominięte</span>
+                              : isModified ? <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gold, border: `1.5px solid ${C.gold}`, borderRadius: 6, padding: '2px 7px' }}>{isSwapped ? 'Zamienione' : 'Zmodyfikowane'}</span>
+                              : <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, border: `1.5px solid ${C.grayLight}`, borderRadius: 6, padding: '2px 7px' }}>✎ edytuj</span>}
+                          </div>
+                        </button>
+                      )
+                    })}
 
-                      {/* Przycisk dodaj na dole bloku */}
-                      <button onClick={() => setAddingToBlock(block.id)}
-                        style={{ width: '100%', padding: '0.75rem', border: 'none', background: C.offWhite, color: C.gray, fontFamily: mono, fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                        ＋ Dodaj ćwiczenie do tego bloku
-                      </button>
-                    </Card>
-                  )
-                })
-              )}
+                    {/* Ćwiczenia dodane dla tej zawodniczki */}
+                    {extras.map((ex: any) => {
+                      const name = ex.exercise?.name ? fmt(ex.exercise.name) : (ex.exercise_code || '—')
+                      return (
+                        <div key={ex.id} style={{ padding: '0.875rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}`, display: 'flex', alignItems: 'flex-start', gap: 12, background: '#F0FDF4' }}>
+                          <div style={{ width: 26, height: 26, borderRadius: 7, background: C.green, color: C.white, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: mono, fontWeight: 900, fontSize: '0.7rem', flexShrink: 0, marginTop: 2 }}>＋</div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                              <span style={{ fontFamily: mono, fontSize: '0.52rem', color: C.white, background: C.green, padding: '1px 5px', borderRadius: 4 }}>DODANE</span>
+                              <span style={{ fontWeight: 700, fontSize: '0.92rem', color: C.navy }}>{name}</span>
+                            </div>
+                            <div style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray }}>
+                              {ex.sets}×{ex.reps || '—'}{ex.tempo ? ` · ${ex.tempo}` : ''}{ex.weight_kg ? ` · ${ex.weight_kg}kg` : ''}{ex.rir != null ? ` · RIR ${ex.rir}` : ''}
+                            </div>
+                            {ex.coach_note && <div style={{ fontSize: '0.75rem', color: C.green, fontStyle: 'italic', marginTop: 3 }}>✎ {ex.coach_note}</div>}
+                          </div>
+                          <button onClick={() => handleExtraDelete(block.id, ex.id)}
+                            style={{ background: 'none', border: `1.5px solid ${C.red}`, borderRadius: 6, color: C.red, padding: '2px 8px', fontFamily: mono, fontSize: '0.58rem', fontWeight: 700, flexShrink: 0, marginTop: 2 }}>
+                            Usuń
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </Card>
+                )
+              })}
+
+              {/* Dodaj blok */}
+              <button onClick={() => setAddingBlock(true)}
+                style={{ width: '100%', padding: '0.875rem', border: `1.5px dashed ${C.grayLight}`, borderRadius: 14, background: C.white, color: C.gray, fontFamily: mono, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                ＋ Dodaj nowy blok do tego treningu
+              </button>
             </>
           )}
         </main>
