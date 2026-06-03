@@ -552,6 +552,7 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
   const [movingItem, setMovingItem] = useState<MoveItem | null>(null)
   const [savingPlan, setSavingPlan] = useState(false)
   const [planSaveMessage, setPlanSaveMessage] = useState('')
+  const [globalError, setGlobalError] = useState('')
 
   const currentDay = localDays.find(day => day.id === selectedDayId)
   const currentWeek = localWeeks.find(week => week.id === currentDay?.week_id)
@@ -559,9 +560,15 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
     .filter(block => block.day_id === selectedDayId)
     .sort((a, b) => a.block_order - b.block_order)
 
+  function showError(msg: string) {
+    setGlobalError(msg)
+    setTimeout(() => setGlobalError(''), 6000)
+  }
+
   async function savePlanName() {
     setSavingName(true)
-    await supabase.from('workout_plans').update({ name: planName }).eq('id', plan.id)
+    const { error } = await supabase.from('workout_plans').update({ name: planName }).eq('id', plan.id)
+    if (error) showError(`Nie udało się zapisać nazwy planu: ${error.message}`)
     setSavingName(false)
   }
 
@@ -661,7 +668,8 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
 
   async function renameDay(dayId: number, newName: string) {
     const nextName = newName.trim() || 'Trening'
-    await supabase.from('workout_days').update({ day_name: nextName }).eq('id', dayId)
+    const { error } = await supabase.from('workout_days').update({ day_name: nextName }).eq('id', dayId)
+    if (error) { showError(`Nie udało się zapisać nazwy treningu: ${error.message}`); return }
     setLocalDays(prev => prev.map(day => day.id === dayId ? { ...day, day_name: nextName } : day))
     setTargetDays(prev => prev.map(day => day.id === dayId ? { ...day, day_name: nextName } : day))
   }
@@ -732,14 +740,16 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
   }
 
   async function updateBlockRounds(blockId: number, rounds: number) {
-    await supabase.from('workout_day_blocks').update({ rounds }).eq('id', blockId)
+    const { error } = await supabase.from('workout_day_blocks').update({ rounds }).eq('id', blockId)
+    if (error) { showError(`Nie udało się zapisać liczby rund: ${error.message}`); return }
     setLocalBlocks(prev => prev.map(block => block.id === blockId ? { ...block, rounds } : block))
     setTargetBlocks(prev => prev.map(block => block.id === blockId ? { ...block, rounds } : block))
   }
 
   async function renameBlock(blockId: number, name: string) {
     const nextName = name.trim() || 'Blok'
-    await supabase.from('workout_day_blocks').update({ block_name: nextName }).eq('id', blockId)
+    const { error } = await supabase.from('workout_day_blocks').update({ block_name: nextName }).eq('id', blockId)
+    if (error) { showError(`Nie udało się zapisać nazwy bloku: ${error.message}`); return }
     setLocalBlocks(prev => prev.map(block => block.id === blockId ? { ...block, block_name: nextName } : block))
     setTargetBlocks(prev => prev.map(block => block.id === blockId ? { ...block, block_name: nextName } : block))
   }
@@ -881,6 +891,12 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
         body { background: ${C.offWhite}; }
         button, input, select, textarea { font-family: inherit; }
       `}</style>
+
+      {globalError && (
+        <div style={{ position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 200, background: '#FEF2F2', border: `1.5px solid ${C.red}`, borderRadius: 12, padding: '0.75rem 1.25rem', color: C.red, fontWeight: 700, fontFamily: sans, fontSize: '0.86rem', boxShadow: '0 8px 24px rgba(0,0,0,0.15)', maxWidth: 520, width: 'calc(100vw - 2rem)', textAlign: 'center' }}>
+          ❌ {globalError}
+        </div>
+      )}
 
       {editingExercise && (
         <ExerciseModal
