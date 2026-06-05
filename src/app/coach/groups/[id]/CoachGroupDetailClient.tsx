@@ -133,7 +133,7 @@ function AssignPlanModal({ athletes, plans, onClose, onAssigned }: {
   )
 }
 
-type Tab = 'plan' | 'wellness' | 'diet'
+type Tab = 'plan' | 'wellness' | 'diet' | 'athletes'
 
 // ── Wellness helpers ──────────────────────────────────────────────────────────
 
@@ -195,6 +195,105 @@ function getAthleteWellnessSummary(athleteId: number, logs: any[]) {
     latestCycle,
     entryCount: myLogs.length,
   }
+}
+
+// ── AthleteEditCard ───────────────────────────────────────────────────────────
+
+function AthleteEditCard({ athlete, onSaved }: { athlete: any; onSaved: (updated: any) => void }) {
+  const supabase = createClient()
+  const [open, setOpen] = useState(false)
+  const [fullName, setFullName] = useState(athlete.full_name || '')
+  const [birthYear, setBirthYear] = useState(athlete.birth_year?.toString() || '')
+  const [phone, setPhone]       = useState(athlete.phone || '')
+  const [position, setPosition] = useState(athlete.position || '')
+  const [height, setHeight]     = useState(athlete.height_cm?.toString() || '')
+  const [bodyWeight, setBodyWeight] = useState(athlete.body_weight_kg?.toString() || '')
+  const [notes, setNotes]       = useState(athlete.notes || '')
+  const [saving, setSaving]     = useState(false)
+  const [saved, setSaved]       = useState(false)
+
+  const inp: React.CSSProperties = { width: '100%', minHeight: 38, border: `1.5px solid ${C.grayLight}`, borderRadius: 8, background: C.offWhite, color: C.navy, padding: '0 0.75rem', fontFamily: sans, fontSize: '0.88rem', outline: 'none' }
+  const lbl: React.CSSProperties = { fontFamily: mono, fontSize: '0.58rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4, fontWeight: 700 }
+
+  async function handleSave() {
+    setSaving(true)
+    const { data, error } = await supabase.from('athletes').update({
+      full_name: fullName.trim(),
+      birth_year: birthYear ? parseInt(birthYear) : null,
+      phone: phone.trim() || null,
+      position: position.trim() || null,
+      height_cm: height ? parseFloat(height) : null,
+      body_weight_kg: bodyWeight ? parseFloat(bodyWeight) : null,
+      notes: notes.trim() || null,
+    }).eq('id', athlete.id).select().single()
+    setSaving(false)
+    if (!error && data) { setSaved(true); onSaved(data); setTimeout(() => setSaved(false), 2000) }
+  }
+
+  return (
+    <div style={{ border: `1.5px solid ${C.grayLight}`, borderRadius: 12, background: C.white, overflow: 'hidden', boxShadow: '0 2px 8px rgba(13,27,42,0.04)' }}>
+      {/* Header */}
+      <button onClick={() => setOpen(v => !v)} style={{ width: '100%', background: 'none', border: 'none', padding: '0.875rem 1.25rem', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', textAlign: 'left' }}>
+        <div style={{ width: 40, height: 40, borderRadius: '50%', background: C.navy, color: C.gold, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: mono, fontWeight: 800, fontSize: '1rem', flexShrink: 0 }}>
+          {fullName.charAt(0).toUpperCase()}
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 800, fontSize: '0.95rem', color: C.navy }}>{fullName}</div>
+          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, marginTop: 2 }}>
+            {birthYear && `ur. ${birthYear}`}
+            {position && ` · ${position}`}
+            {height && ` · ${height} cm`}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {saved && <span style={{ fontFamily: mono, fontSize: '0.62rem', color: C.green }}>✓ Zapisano</span>}
+          <span style={{ color: C.gray, fontSize: '1rem', transition: 'transform 0.2s', transform: open ? 'rotate(90deg)' : 'none' }}>›</span>
+        </div>
+      </button>
+
+      {/* Edit form */}
+      {open && (
+        <div style={{ padding: '0 1.25rem 1.25rem', borderTop: `1.5px solid ${C.grayLight}` }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: '1rem' }}>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={lbl}>Imię i nazwisko</label>
+              <input value={fullName} onChange={e => setFullName(e.target.value)} style={inp} />
+            </div>
+            <div>
+              <label style={lbl}>Rok urodzenia</label>
+              <input type="number" value={birthYear} onChange={e => setBirthYear(e.target.value)} placeholder="np. 2005" style={inp} />
+            </div>
+            <div>
+              <label style={lbl}>Telefon</label>
+              <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+48 000 000 000" style={inp} />
+            </div>
+            <div>
+              <label style={lbl}>Pozycja / rola</label>
+              <input value={position} onChange={e => setPosition(e.target.value)} placeholder="np. flyer, baza" style={inp} />
+            </div>
+            <div>
+              <label style={lbl}>Wzrost (cm)</label>
+              <input type="number" value={height} onChange={e => setHeight(e.target.value)} placeholder="np. 165" style={inp} />
+            </div>
+            <div>
+              <label style={lbl}>Masa ciała (kg)</label>
+              <input type="number" value={bodyWeight} onChange={e => setBodyWeight(e.target.value)} placeholder="np. 55" style={inp} />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={lbl}>Notatki trenerskie</label>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Kontuzje, uwagi, cele..." style={{ ...inp, minHeight: 64, padding: '0.5rem 0.75rem', resize: 'none', display: 'block' }} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: '0.875rem', justifyContent: 'flex-end' }}>
+            <button onClick={() => setOpen(false)} style={{ padding: '0.55rem 0.875rem', borderRadius: 8, border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.gray, fontWeight: 700, cursor: 'pointer' }}>Anuluj</button>
+            <button onClick={handleSave} disabled={saving || !fullName.trim()} style={{ padding: '0.55rem 1rem', borderRadius: 8, border: 'none', background: saved ? C.green : C.navy, color: saved ? C.white : C.gold, fontWeight: 800, cursor: 'pointer', minWidth: 90 }}>
+              {saving ? 'Zapisuję...' : saved ? '✓ Zapisano' : 'Zapisz'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ── StatsCard — reusable styled stats table ────────────────────────────────
@@ -325,6 +424,7 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
   const [wellnessPeriod, setWellnessPeriod] = useState(14)
   const [dietPeriod, setDietPeriod] = useState(14)
   const [trainingPeriod, setTrainingPeriod] = useState(30)
+  const [localAthletes, setLocalAthletes] = useState<any[]>(athletes)
 
   const sessionIndex: Record<string, any> = {}
   for (const s of sessions) {
@@ -407,6 +507,7 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
               { id: 'plan',     label: '📋 Plan' },
               { id: 'wellness', label: '🩺 Wellness' },
               { id: 'diet',     label: '🥗 Dieta' },
+              { id: 'athletes', label: '👤 Zawodniczki' },
             ] as { id: Tab; label: string }[]).map(t => (
               <button key={t.id} onClick={() => setActiveTab(t.id)} style={{ padding: '0.7rem 1.1rem', border: 'none', background: 'transparent', color: activeTab === t.id ? C.gold : C.gray, fontWeight: activeTab === t.id ? 800 : 600, fontFamily: mono, fontSize: '0.72rem', borderBottom: activeTab === t.id ? `2px solid ${C.gold}` : '2px solid transparent', cursor: 'pointer', letterSpacing: '0.04em' }}>
                 {t.label}
@@ -558,6 +659,34 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                 })}
                 onAthleteClick={id => router.push(`/coach/athletes/${id}`)}
               />
+            </div>
+          )}
+
+          {/* ══ ATHLETES TAB ══════════════════════════════════════════════════════ */}
+          {activeTab === 'athletes' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '1rem', color: C.navy }}>Zawodniczki grupy</div>
+                  <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, marginTop: 2 }}>Kliknij zawodniczkę aby rozwinąć i edytować profil</div>
+                </div>
+                <button onClick={() => router.push('/coach/athletes/new')} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 10, padding: '0.6rem 0.9rem', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer' }}>
+                  + Dodaj zawodniczkę
+                </button>
+              </div>
+
+              {localAthletes.length === 0 && (
+                <Card><div style={{ padding: '2rem', textAlign: 'center', color: C.gray }}>Brak zawodniczek w grupie.</div></Card>
+              )}
+
+              {localAthletes.map(athlete => (
+                <AthleteEditCard
+                  key={athlete.id}
+                  athlete={athlete}
+                  onSaved={updated => setLocalAthletes(prev => prev.map(a => a.id === updated.id ? updated : a))}
+                />
+              ))}
             </div>
           )}
 
