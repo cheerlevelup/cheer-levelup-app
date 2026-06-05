@@ -3,6 +3,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import ModuleConfigPanel from '@/components/ModuleConfigPanel'
 
 const C = {
   navy: '#0D1B2A', navyLight: '#1A2E45', navyBorder: '#243652',
@@ -132,10 +133,14 @@ interface Props {
   painLogs: any[]
 }
 
+type MainTab = 'overview' | 'wellness' | 'diet'
+
 export default function CoachAthleteClient({ athlete, assignment, pastAssignments, sessions, feedbacks, wellnessLogs, wellnessList, dietLogs, painLogs }: Props) {
   const router = useRouter()
   const [planTab, setPlanTab] = useState<'active' | 'history'>('active')
   const [selectedWellness, setSelectedWellness] = useState<{ wellness: any; dateLabel: string } | null>(null)
+  const [mainTab, setMainTab] = useState<MainTab>('overview')
+  const [moduleConfig, setModuleConfig] = useState<'wellness' | 'diet' | null>(null)
 
   const completedSessions = sessions.filter(s => s.completed)
   const feedbackMap: Record<number, any> = {}
@@ -207,6 +212,13 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
           onClose={() => setSelectedWellness(null)}
         />
       )}
+      {moduleConfig && (
+        <ModuleConfigPanel
+          athleteId={athlete.id}
+          module={moduleConfig}
+          onClose={() => setModuleConfig(null)}
+        />
+      )}
 
       <div style={{ minHeight: '100vh', background: C.offWhite, fontFamily: sans, color: C.navy }}>
 
@@ -226,7 +238,99 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
           </div>
         </header>
 
+        {/* Tab bar */}
+        <div style={{ background: C.navyLight, borderBottom: `1.5px solid ${C.navyBorder}` }}>
+          <div style={{ maxWidth: 800, margin: '0 auto', display: 'flex' }}>
+            {([
+              { id: 'overview', label: '📊 Przegląd' },
+              { id: 'wellness', label: '🩺 Wellness' },
+              { id: 'diet',     label: '🥗 Dieta' },
+            ] as { id: MainTab; label: string }[]).map(t => (
+              <button key={t.id} onClick={() => setMainTab(t.id)} style={{ padding: '0.7rem 1rem', border: 'none', background: 'transparent', color: mainTab === t.id ? C.gold : C.gray, fontWeight: mainTab === t.id ? 800 : 600, fontFamily: mono, fontSize: '0.7rem', borderBottom: mainTab === t.id ? `2px solid ${C.gold}` : '2px solid transparent', cursor: 'pointer' }}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <main style={{ maxWidth: 800, margin: '0 auto', padding: '1.25rem 1rem 5rem' }}>
+
+          {/* ── Wellness tab ── */}
+          {mainTab === 'wellness' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <Card>
+                <div style={{ padding: '1.25rem' }}>
+                  <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Konfiguracja wellness</div>
+                  <p style={{ color: C.gray, fontSize: '0.84rem', marginBottom: '1rem' }}>
+                    Wybierz które parametry wellness widzi ta zawodniczka. Nadpisuje ustawienia grupy.
+                  </p>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button onClick={() => setModuleConfig('wellness')} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 10, padding: '0.7rem 1rem', fontWeight: 800, cursor: 'pointer' }}>
+                      🩺 Edytuj parametry wellness
+                    </button>
+                    <button onClick={() => router.push(`/coach/athletes/${athlete.id}/training`)} style={{ border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.navy, borderRadius: 10, padding: '0.7rem 1rem', fontWeight: 700, cursor: 'pointer' }}>
+                      Zobacz historię →
+                    </button>
+                  </div>
+                </div>
+              </Card>
+              {wellnessLogs.length > 0 && (
+                <Card>
+                  <div style={{ padding: '1rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}` }}>
+                    <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Ostatnie wpisy wellness</div>
+                  </div>
+                  {wellnessLogs.slice(0, 7).map((w: any, i: number) => (
+                    <button key={w.id} onClick={() => setSelectedWellness({ wellness: w, dateLabel: new Date(w.date || w.created_at).toLocaleDateString('pl-PL') })}
+                      style={{ width: '100%', background: 'none', border: 'none', borderBottom: i < Math.min(wellnessLogs.length, 7) - 1 ? `1.5px solid ${C.grayLight}` : 'none', padding: '0.75rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', textAlign: 'left' }}>
+                      <div style={{ fontFamily: mono, fontSize: '0.75rem', color: C.navy, fontWeight: 700 }}>{new Date(w.date || w.created_at).toLocaleDateString('pl-PL', { weekday: 'short', day: 'numeric', month: 'short' })}</div>
+                      <div style={{ display: 'flex', gap: 10 }}>
+                        {w.energy != null && <span style={{ fontFamily: mono, fontSize: '0.7rem', color: C.gold }}>⚡{w.energy}</span>}
+                        {w.sleep_hours != null && <span style={{ fontFamily: mono, fontSize: '0.7rem', color: C.gray }}>🌙{w.sleep_hours}h</span>}
+                        {w.readiness != null && <span style={{ fontFamily: mono, fontSize: '0.7rem', color: C.green }}>💪{w.readiness}</span>}
+                        <span style={{ color: C.gray }}>›</span>
+                      </div>
+                    </button>
+                  ))}
+                </Card>
+              )}
+            </div>
+          )}
+
+          {/* ── Diet tab ── */}
+          {mainTab === 'diet' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <Card>
+                <div style={{ padding: '1.25rem' }}>
+                  <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Konfiguracja diety</div>
+                  <p style={{ color: C.gray, fontSize: '0.84rem', marginBottom: '1rem' }}>
+                    Wybierz które pola dziennika diety wypełnia ta zawodniczka. Nadpisuje ustawienia grupy.
+                  </p>
+                  <button onClick={() => setModuleConfig('diet')} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 10, padding: '0.7rem 1rem', fontWeight: 800, cursor: 'pointer' }}>
+                    🥗 Edytuj parametry diety
+                  </button>
+                </div>
+              </Card>
+              {dietLogs.length > 0 && (
+                <Card>
+                  <div style={{ padding: '1rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}` }}>
+                    <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Ostatnie wpisy diety</div>
+                  </div>
+                  {dietLogs.slice(0, 7).map((d: any, i: number) => (
+                    <div key={d.id} style={{ padding: '0.75rem 1.25rem', borderBottom: i < Math.min(dietLogs.length, 7) - 1 ? `1.5px solid ${C.grayLight}` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ fontFamily: mono, fontSize: '0.75rem', color: C.navy, fontWeight: 700 }}>{new Date(d.date || d.created_at).toLocaleDateString('pl-PL', { weekday: 'short', day: 'numeric', month: 'short' })}</div>
+                      <div style={{ display: 'flex', gap: 10 }}>
+                        {d.meal_count > 0 && <span style={{ fontFamily: mono, fontSize: '0.7rem', color: C.gray }}>🍽️{d.meal_count}</span>}
+                        {d.water_ml > 0 && <span style={{ fontFamily: mono, fontSize: '0.7rem', color: C.gray }}>💧{d.water_ml}ml</span>}
+                      </div>
+                    </div>
+                  ))}
+                </Card>
+              )}
+            </div>
+          )}
+
+          {/* ── Overview tab ── */}
+          {mainTab === 'overview' && <>
 
           {/* Profil */}
           <Card style={{ marginBottom: '1rem' }}>
@@ -497,6 +601,8 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
               })
             )}
           </Card>
+
+          </>}  {/* end overview tab */}
 
         </main>
       </div>

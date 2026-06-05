@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
+import ModuleConfigPanel from '@/components/ModuleConfigPanel'
 
 const C = {
   navy: '#0D1B2A', navyLight: '#1A2E45', navyBorder: '#243652',
@@ -128,10 +129,14 @@ function AssignPlanModal({ athletes, plans, onClose, onAssigned }: {
   )
 }
 
+type Tab = 'plan' | 'wellness' | 'diet'
+
 export default function CoachGroupDetailClient({ group, athletes, assignments, days, sessions, plans }: any) {
   const router = useRouter()
   const [showAssignModal, setShowAssignModal] = useState(false)
   const [assignedMsg, setAssignedMsg] = useState('')
+  const [activeTab, setActiveTab] = useState<Tab>('plan')
+  const [moduleConfig, setModuleConfig] = useState<'wellness' | 'diet' | null>(null)
 
   const sessionIndex: Record<string, any> = {}
   for (const s of sessions) {
@@ -158,6 +163,13 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
           onAssigned={() => { setAssignedMsg('Plan przypisany!'); router.refresh() }}
         />
       )}
+      {moduleConfig && (
+        <ModuleConfigPanel
+          groupId={group.id}
+          module={moduleConfig}
+          onClose={() => setModuleConfig(null)}
+        />
+      )}
 
       <div style={{ minHeight: '100vh', background: C.offWhite, fontFamily: sans, color: C.navy }}>
         <header style={{ background: C.navy, padding: '1rem 1.25rem 1.35rem', position: 'sticky', top: 0, zIndex: 10 }}>
@@ -180,10 +192,82 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
           </div>
         </header>
 
+        {/* Tab navigation */}
+        <div style={{ background: C.navyLight, borderBottom: `1.5px solid ${C.navyBorder}` }}>
+          <div style={{ maxWidth: 1100, margin: '0 auto', display: 'flex', gap: 0 }}>
+            {([
+              { id: 'plan',     label: '📋 Plan' },
+              { id: 'wellness', label: '🩺 Wellness' },
+              { id: 'diet',     label: '🥗 Dieta' },
+            ] as { id: Tab; label: string }[]).map(t => (
+              <button key={t.id} onClick={() => setActiveTab(t.id)} style={{ padding: '0.7rem 1.1rem', border: 'none', background: 'transparent', color: activeTab === t.id ? C.gold : C.gray, fontWeight: activeTab === t.id ? 800 : 600, fontFamily: mono, fontSize: '0.72rem', borderBottom: activeTab === t.id ? `2px solid ${C.gold}` : '2px solid transparent', cursor: 'pointer', letterSpacing: '0.04em' }}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <main style={{ maxWidth: 1100, margin: '0 auto', padding: '1.25rem 1rem 5rem' }}>
-          {athletes.length === 0 ? (
+          {/* ── Wellness tab ── */}
+          {activeTab === 'wellness' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <Card>
+                <div style={{ padding: '1.25rem' }}>
+                  <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Konfiguracja grupy</div>
+                  <p style={{ color: C.gray, fontSize: '0.84rem', marginBottom: '1rem' }}>Ustaw które parametry wellness widzą wszystkie zawodniczki w grupie. Możesz nadpisać ustawienia indywidualnie dla każdej zawodniczki.</p>
+                  <button onClick={() => setModuleConfig('wellness')} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 10, padding: '0.75rem 1.1rem', fontWeight: 800, cursor: 'pointer' }}>
+                    🩺 Skonfiguruj wellness dla grupy
+                  </button>
+                </div>
+              </Card>
+              <Card>
+                <div style={{ padding: '1rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}` }}>
+                  <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Ustawienia indywidualne</div>
+                </div>
+                {athletes.map((athlete: any, i: number) => (
+                  <div key={athlete.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1.25rem', borderBottom: i < athletes.length - 1 ? `1.5px solid ${C.grayLight}` : 'none' }}>
+                    <div style={{ fontWeight: 700, color: C.navy }}>{athlete.full_name}</div>
+                    <button onClick={() => router.push(`/coach/athletes/${athlete.id}`)} style={{ border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.navy, borderRadius: 8, padding: '0.4rem 0.75rem', fontFamily: mono, fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer' }}>
+                      Edytuj →
+                    </button>
+                  </div>
+                ))}
+              </Card>
+            </div>
+          )}
+
+          {/* ── Diet tab ── */}
+          {activeTab === 'diet' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <Card>
+                <div style={{ padding: '1.25rem' }}>
+                  <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Konfiguracja grupy</div>
+                  <p style={{ color: C.gray, fontSize: '0.84rem', marginBottom: '1rem' }}>Ustaw które parametry dziennika diety widzą zawodniczki. Możesz wyłączyć dietę dla całej grupy lub poszczególnych zawodniczek.</p>
+                  <button onClick={() => setModuleConfig('diet')} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 10, padding: '0.75rem 1.1rem', fontWeight: 800, cursor: 'pointer' }}>
+                    🥗 Skonfiguruj dietę dla grupy
+                  </button>
+                </div>
+              </Card>
+              <Card>
+                <div style={{ padding: '1rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}` }}>
+                  <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Ustawienia indywidualne</div>
+                </div>
+                {athletes.map((athlete: any, i: number) => (
+                  <div key={athlete.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1.25rem', borderBottom: i < athletes.length - 1 ? `1.5px solid ${C.grayLight}` : 'none' }}>
+                    <div style={{ fontWeight: 700, color: C.navy }}>{athlete.full_name}</div>
+                    <button onClick={() => router.push(`/coach/athletes/${athlete.id}`)} style={{ border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.navy, borderRadius: 8, padding: '0.4rem 0.75rem', fontFamily: mono, fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer' }}>
+                      Edytuj →
+                    </button>
+                  </div>
+                ))}
+              </Card>
+            </div>
+          )}
+
+          {/* ── Plan tab ── */}
+          {activeTab === 'plan' && athletes.length === 0 ? (
             <Card><div style={{ padding: '2rem', textAlign: 'center', color: C.gray }}>Brak zawodniczek w tej grupie.</div></Card>
-          ) : (
+          ) : activeTab === 'plan' && (
             <>
               {assignments.length > 0 && days.length > 0 && (
                 <Card style={{ marginBottom: '1.25rem' }}>
