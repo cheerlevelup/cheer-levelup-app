@@ -16,6 +16,7 @@ const mono = "'Space Mono', monospace"
 
 const thStyle: React.CSSProperties = { padding: '0.75rem 0.5rem', textAlign: 'center', fontFamily: mono, fontSize: '0.6rem', color: C.gray, background: C.offWhite, borderBottom: `1.5px solid ${C.grayLight}`, whiteSpace: 'nowrap', minWidth: 44 }
 function tdWs(bg: string): React.CSSProperties { return { padding: '0.4rem 0.5rem', textAlign: 'center', borderBottom: `1.5px solid ${C.grayLight}`, background: bg, verticalAlign: 'middle' } }
+function statTd(bg: string): React.CSSProperties { return { padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid ${C.grayLight}`, background: bg, fontFamily: mono, fontSize: '0.78rem', fontWeight: 700, color: C.navy } }
 
 function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, overflow: 'hidden', boxShadow: '0 4px 20px rgba(13,27,42,0.05)', ...style }}>{children}</div>
@@ -196,7 +197,7 @@ function getAthleteWellnessSummary(athleteId: number, logs: any[]) {
   }
 }
 
-export default function CoachGroupDetailClient({ group, athletes, assignments, days, sessions, plans, wellnessLogs = [] }: any) {
+export default function CoachGroupDetailClient({ group, athletes, assignments, days, sessions, plans, wellnessLogs = [], wellnessWeek = [], feedbacks = [], dietLogs = [] }: any) {
   const router = useRouter()
   const supabase = createClient()
   const [showAssignModal, setShowAssignModal] = useState(false)
@@ -296,57 +297,156 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
 
         <main style={{ maxWidth: 1100, margin: '0 auto', padding: '1.25rem 1rem 5rem' }}>
           {/* ── Wellness tab ── */}
+          {/* ══ WELLNESS TAB ══════════════════════════════════════════════════════ */}
           {activeTab === 'wellness' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+
+              {/* Config + individual overrides */}
               <Card>
-                <div style={{ padding: '1.25rem' }}>
-                  <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Konfiguracja grupy</div>
-                  <p style={{ color: C.gray, fontSize: '0.84rem', marginBottom: '1rem' }}>Ustaw które parametry wellness widzą wszystkie zawodniczki w grupie. Możesz nadpisać ustawienia indywidualnie dla każdej zawodniczki.</p>
-                  <button onClick={() => setModuleConfig('wellness')} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 10, padding: '0.75rem 1.1rem', fontWeight: 800, cursor: 'pointer' }}>
-                    🩺 Skonfiguruj wellness dla grupy
+                <div style={{ padding: '1rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Konfiguracja parametrów</div>
+                  <button onClick={() => setModuleConfig('wellness')} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 8, padding: '0.45rem 0.85rem', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer' }}>
+                    🩺 Edytuj dla grupy
                   </button>
                 </div>
+                {athletes.map((athlete: any, i: number) => {
+                  const ws = getAthleteWellnessSummary(athlete.id, wellnessWeek)
+                  return (
+                    <div key={athlete.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0.65rem 1.25rem', borderBottom: i < athletes.length - 1 ? `1.5px solid ${C.grayLight}` : 'none' }}>
+                      <div style={{ flex: 1, fontWeight: 700, color: C.navy, fontSize: '0.9rem' }}>{athlete.full_name}</div>
+                      <div style={{ fontFamily: mono, fontSize: '0.68rem', color: ws.hasToday ? C.green : ws.entryCount > 0 ? C.gold : C.red }}>{ws.hasToday ? '✅ dziś' : ws.entryCount > 0 ? `⚠️ ${ws.entryCount} wpisów` : '✗ brak'}</div>
+                      <button onClick={() => router.push(`/coach/athletes/${athlete.id}?tab=wellness`)} style={{ border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.navy, borderRadius: 7, padding: '0.35rem 0.65rem', fontFamily: mono, fontSize: '0.62rem', fontWeight: 700, cursor: 'pointer' }}>
+                        Konfiguruj →
+                      </button>
+                    </div>
+                  )
+                })}
               </Card>
+
+              {/* Wellness stats per athlete — 30 days */}
               <Card>
                 <div style={{ padding: '1rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}` }}>
-                  <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Ustawienia indywidualne</div>
+                  <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Statystyki wellness — ostatnie 30 dni</div>
                 </div>
-                {athletes.map((athlete: any, i: number) => (
-                  <div key={athlete.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1.25rem', borderBottom: i < athletes.length - 1 ? `1.5px solid ${C.grayLight}` : 'none' }}>
-                    <div style={{ fontWeight: 700, color: C.navy }}>{athlete.full_name}</div>
-                    <button onClick={() => router.push(`/coach/athletes/${athlete.id}`)} style={{ border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.navy, borderRadius: 8, padding: '0.4rem 0.75rem', fontFamily: mono, fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer' }}>
-                      Edytuj →
-                    </button>
-                  </div>
-                ))}
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                    <thead>
+                      <tr style={{ background: C.offWhite }}>
+                        {['Zawodniczka', 'Wpisów', 'Sen śr.', 'Energia śr.', 'Stres śr.', 'Gotowość śr.', 'Max ból', 'Akt. godz.', 'Cykl'].map(h => (
+                          <th key={h} style={{ padding: '0.6rem 0.75rem', fontFamily: mono, fontSize: '0.6rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: h === 'Zawodniczka' ? 'left' : 'center', borderBottom: `1.5px solid ${C.grayLight}`, whiteSpace: 'nowrap' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {athletes.map((athlete: any, ri: number) => {
+                        const logs30 = wellnessLogs.filter((l: any) => l.athlete_id === athlete.id)
+                        const sleepAvg = avg(logs30.map((l: any) => l.sleep_hours).filter((v: any) => v != null))
+                        const energyAvg = avg(logs30.map((l: any) => l.energy).filter((v: any) => v != null))
+                        const stressAvg = avg(logs30.map((l: any) => l.stress).filter((v: any) => v != null))
+                        const readinessAvg = avg(logs30.map((l: any) => l.readiness).filter((v: any) => v != null))
+                        const maxPain = logs30.reduce((m: number | null, l: any) => {
+                          const p = l.pain_data?.painDuring ?? null
+                          if (p === null) return m
+                          return m === null ? p : Math.max(m, p)
+                        }, null as number | null)
+                        const totalMin = logs30.reduce((s: number, l: any) => s + (parseInt(l.activity_data?.duration || '0') || 0), 0)
+                        const actH = totalMin > 0 ? (totalMin / 60).toFixed(1) : null
+                        const latestCycle = logs30.find((l: any) => l.cycle_phase)?.cycle_phase ?? null
+                        const rowBg = ri % 2 === 0 ? C.white : C.offWhite
+
+                        const sc = (v: number | null, lo: number, hi: number) =>
+                          v === null ? C.gray : v < lo ? C.red : v < hi ? C.gold : C.green
+                        const stressC = stressAvg === null ? C.gray : stressAvg >= 8 ? C.red : stressAvg >= 5 ? C.gold : C.green
+
+                        return (
+                          <tr key={athlete.id} style={{ background: rowBg }}>
+                            <td style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: C.navy, borderBottom: `1px solid ${C.grayLight}` }}>
+                              <button onClick={() => router.push(`/coach/athletes/${athlete.id}`)} style={{ background: 'none', border: 'none', color: C.navy, fontWeight: 700, cursor: 'pointer', padding: 0, fontSize: '0.88rem' }}>{athlete.full_name}</button>
+                            </td>
+                            <td style={{ ...statTd(rowBg), color: logs30.length === 0 ? C.red : C.navy }}>{logs30.length}</td>
+                            <td style={{ ...statTd(rowBg), color: sc(sleepAvg, 5, 7) }}>{sleepAvg !== null ? `${sleepAvg.toFixed(1)}h` : '—'}</td>
+                            <td style={{ ...statTd(rowBg), color: sc(energyAvg, 4, 7) }}>{energyAvg !== null ? energyAvg.toFixed(1) : '—'}</td>
+                            <td style={{ ...statTd(rowBg), color: stressC }}>{stressAvg !== null ? stressAvg.toFixed(1) : '—'}</td>
+                            <td style={{ ...statTd(rowBg), color: sc(readinessAvg, 4, 7) }}>{readinessAvg !== null ? readinessAvg.toFixed(1) : '—'}</td>
+                            <td style={{ ...statTd(rowBg), color: maxPain === null ? C.gray : maxPain >= 6 ? C.red : maxPain >= 4 ? C.gold : C.green }}>{maxPain !== null ? maxPain : '—'}</td>
+                            <td style={{ ...statTd(rowBg) }}>{actH !== null ? `${actH}h` : '—'}</td>
+                            <td style={{ ...statTd(rowBg), color: latestCycle === 'menstruacja' ? C.red : C.gray }}>{latestCycle === 'menstruacja' ? '🔴 mens.' : latestCycle ? latestCycle.slice(0, 6) : '—'}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </Card>
             </div>
           )}
 
-          {/* ── Diet tab ── */}
+          {/* ══ DIET TAB ══════════════════════════════════════════════════════════ */}
           {activeTab === 'diet' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+
+              {/* Config */}
               <Card>
-                <div style={{ padding: '1.25rem' }}>
-                  <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Konfiguracja grupy</div>
-                  <p style={{ color: C.gray, fontSize: '0.84rem', marginBottom: '1rem' }}>Ustaw które parametry dziennika diety widzą zawodniczki. Możesz wyłączyć dietę dla całej grupy lub poszczególnych zawodniczek.</p>
-                  <button onClick={() => setModuleConfig('diet')} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 10, padding: '0.75rem 1.1rem', fontWeight: 800, cursor: 'pointer' }}>
-                    🥗 Skonfiguruj dietę dla grupy
+                <div style={{ padding: '1rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Konfiguracja parametrów</div>
+                  <button onClick={() => setModuleConfig('diet')} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 8, padding: '0.45rem 0.85rem', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer' }}>
+                    🥗 Edytuj dla grupy
                   </button>
                 </div>
+                {athletes.map((athlete: any, i: number) => {
+                  const myDiet = dietLogs.filter((d: any) => d.athlete_id === athlete.id)
+                  return (
+                    <div key={athlete.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0.65rem 1.25rem', borderBottom: i < athletes.length - 1 ? `1.5px solid ${C.grayLight}` : 'none' }}>
+                      <div style={{ flex: 1, fontWeight: 700, color: C.navy, fontSize: '0.9rem' }}>{athlete.full_name}</div>
+                      <div style={{ fontFamily: mono, fontSize: '0.68rem', color: myDiet.length === 0 ? C.gray : C.green }}>{myDiet.length} wpisów / 30 dni</div>
+                      <button onClick={() => router.push(`/coach/athletes/${athlete.id}?tab=diet`)} style={{ border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.navy, borderRadius: 7, padding: '0.35rem 0.65rem', fontFamily: mono, fontSize: '0.62rem', fontWeight: 700, cursor: 'pointer' }}>
+                        Konfiguruj →
+                      </button>
+                    </div>
+                  )
+                })}
               </Card>
+
+              {/* Diet stats */}
               <Card>
                 <div style={{ padding: '1rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}` }}>
-                  <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Ustawienia indywidualne</div>
+                  <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Statystyki diety — ostatnie 30 dni</div>
                 </div>
-                {athletes.map((athlete: any, i: number) => (
-                  <div key={athlete.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1.25rem', borderBottom: i < athletes.length - 1 ? `1.5px solid ${C.grayLight}` : 'none' }}>
-                    <div style={{ fontWeight: 700, color: C.navy }}>{athlete.full_name}</div>
-                    <button onClick={() => router.push(`/coach/athletes/${athlete.id}`)} style={{ border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.navy, borderRadius: 8, padding: '0.4rem 0.75rem', fontFamily: mono, fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer' }}>
-                      Edytuj →
-                    </button>
-                  </div>
-                ))}
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                    <thead>
+                      <tr style={{ background: C.offWhite }}>
+                        {['Zawodniczka', 'Wpisów', 'Śniadanie %', 'Śr. posiłki', 'Śr. woda ml', 'Śr. kawa', 'Śr. głód'].map(h => (
+                          <th key={h} style={{ padding: '0.6rem 0.75rem', fontFamily: mono, fontSize: '0.6rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: h === 'Zawodniczka' ? 'left' : 'center', borderBottom: `1.5px solid ${C.grayLight}`, whiteSpace: 'nowrap' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {athletes.map((athlete: any, ri: number) => {
+                        const logs = dietLogs.filter((d: any) => d.athlete_id === athlete.id)
+                        const breakfastPct = logs.length ? Math.round((logs.filter((d: any) => d.had_breakfast).length / logs.length) * 100) : null
+                        const mealAvg = avg(logs.map((d: any) => d.meal_count).filter((v: any) => v > 0))
+                        const waterAvg = avg(logs.map((d: any) => d.water_ml).filter((v: any) => v != null && v > 0))
+                        const coffeeAvg = avg(logs.map((d: any) => d.coffee_count).filter((v: any) => v != null))
+                        const hungerAvg = avg(logs.map((d: any) => d.hunger_level).filter((v: any) => v != null))
+                        const rowBg = ri % 2 === 0 ? C.white : C.offWhite
+                        return (
+                          <tr key={athlete.id} style={{ background: rowBg }}>
+                            <td style={{ padding: '0.65rem 0.75rem', fontWeight: 700, borderBottom: `1px solid ${C.grayLight}` }}>
+                              <button onClick={() => router.push(`/coach/athletes/${athlete.id}`)} style={{ background: 'none', border: 'none', color: C.navy, fontWeight: 700, cursor: 'pointer', padding: 0, fontSize: '0.88rem' }}>{athlete.full_name}</button>
+                            </td>
+                            <td style={{ ...statTd(rowBg), color: logs.length === 0 ? C.red : C.navy }}>{logs.length}</td>
+                            <td style={{ ...statTd(rowBg), color: breakfastPct === null ? C.gray : breakfastPct >= 80 ? C.green : breakfastPct >= 50 ? C.gold : C.red }}>{breakfastPct !== null ? `${breakfastPct}%` : '—'}</td>
+                            <td style={statTd(rowBg)}>{mealAvg !== null ? mealAvg.toFixed(1) : '—'}</td>
+                            <td style={{ ...statTd(rowBg), color: waterAvg === null ? C.gray : waterAvg >= 2000 ? C.green : waterAvg >= 1500 ? C.gold : C.red }}>{waterAvg !== null ? `${Math.round(waterAvg)}` : '—'}</td>
+                            <td style={statTd(rowBg)}>{coffeeAvg !== null ? coffeeAvg.toFixed(1) : '—'}</td>
+                            <td style={statTd(rowBg)}>{hungerAvg !== null ? hungerAvg.toFixed(1) : '—'}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </Card>
             </div>
           )}
@@ -485,6 +585,51 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                         <span style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray }}>{item.label}</span>
                       </div>
                     ))}
+                  </div>
+                </Card>
+              )}
+
+              {/* Training stats */}
+              {feedbacks.length > 0 && (
+                <Card style={{ marginBottom: '1.25rem' }}>
+                  <div style={{ padding: '1rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}` }}>
+                    <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Statystyki treningowe — ostatnie 30 dni</div>
+                  </div>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                      <thead>
+                        <tr style={{ background: C.offWhite }}>
+                          {['Zawodniczka', 'Treningi', 'Ukończone', '% planu', 'Śr. RPE', 'Min RPE', 'Max RPE'].map(h => (
+                            <th key={h} style={{ padding: '0.6rem 0.75rem', fontFamily: mono, fontSize: '0.6rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: h === 'Zawodniczka' ? 'left' : 'center', borderBottom: `1.5px solid ${C.grayLight}`, whiteSpace: 'nowrap' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {athletes.map((athlete: any, ri: number) => {
+                          const athFeedbacks = feedbacks.filter((f: any) => f.athlete_id === athlete.id)
+                          const rpeVals = athFeedbacks.map((f: any) => f.session_rpe).filter((v: any) => v != null) as number[]
+                          const rpeAvg = avg(rpeVals)
+                          const completed = sessions.filter((s: any) => s.athlete_id === athlete.id && s.completed).length
+                          const progress = getAthleteProgress(athlete.id)
+                          const pct = progress ? Math.round((progress.done / progress.total) * 100) : null
+                          const rowBg = ri % 2 === 0 ? C.white : C.offWhite
+                          const rpeColor = rpeAvg === null ? C.gray : rpeAvg >= 8 ? C.red : rpeAvg >= 6 ? C.gold : C.green
+                          return (
+                            <tr key={athlete.id} style={{ background: rowBg }}>
+                              <td style={{ padding: '0.65rem 0.75rem', fontWeight: 700, borderBottom: `1px solid ${C.grayLight}` }}>
+                                <button onClick={() => router.push(`/coach/athletes/${athlete.id}`)} style={{ background: 'none', border: 'none', color: C.navy, fontWeight: 700, cursor: 'pointer', padding: 0, fontSize: '0.88rem' }}>{athlete.full_name}</button>
+                              </td>
+                              <td style={statTd(rowBg)}>{athFeedbacks.length}</td>
+                              <td style={statTd(rowBg)}>{completed}</td>
+                              <td style={{ ...statTd(rowBg), color: pct === null ? C.gray : pct >= 80 ? C.green : pct >= 50 ? C.gold : C.red }}>{pct !== null ? `${pct}%` : '—'}</td>
+                              <td style={{ ...statTd(rowBg), color: rpeColor }}>{rpeAvg !== null ? rpeAvg.toFixed(1) : '—'}</td>
+                              <td style={statTd(rowBg)}>{rpeVals.length ? Math.min(...rpeVals) : '—'}</td>
+                              <td style={statTd(rowBg)}>{rpeVals.length ? Math.max(...rpeVals) : '—'}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </Card>
               )}

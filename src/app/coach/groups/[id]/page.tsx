@@ -92,15 +92,36 @@ export default async function CoachGroupDetailPage({ params }: Props) {
     .select('id, name, is_archived')
     .order('created_at', { ascending: false })
 
-  // Wellness z ostatnich 7 dni dla wszystkich zawodniczek
+  // Wellness z ostatnich 30 dni (7 do tabeli + 30 do statystyk)
+  const thirtyDaysAgo = new Date()
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
   const sevenDaysAgo = new Date()
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+
   const { data: wellnessLogs } = await supabase
     .from('wellness_logs')
-    .select('athlete_id, date, created_at, sleep_hours, energy, stress, readiness, muscle_sorness, pain_data, activity_data, cycle_phase')
+    .select('athlete_id, date, created_at, sleep_hours, sleep_quality, energy, stress, readiness, muscle_sorness, mood, body_weight_kg, hydration_glasses, pain_data, activity_data, cycle_phase')
     .in('athlete_id', athleteIds)
-    .gte('date', sevenDaysAgo.toISOString().split('T')[0])
+    .gte('date', thirtyDaysAgo.toISOString().split('T')[0])
     .order('date', { ascending: false })
+
+  // Feedback po sesjach (RPE, nastrój)
+  const { data: feedbacks } = await supabase
+    .from('post_session_feedback')
+    .select('athlete_id, session_rpe, created_at, workout_session_id')
+    .in('athlete_id', athleteIds)
+    .gte('created_at', thirtyDaysAgo.toISOString())
+    .order('created_at', { ascending: false })
+
+  // Dieta z ostatnich 30 dni
+  const { data: dietLogs } = await supabase
+    .from('diet_logs')
+    .select('athlete_id, date, meal_count, had_breakfast, hunger_level, water_ml, coffee_count')
+    .in('athlete_id', athleteIds)
+    .gte('date', thirtyDaysAgo.toISOString().split('T')[0])
+    .order('date', { ascending: false })
+
+  const wellnessWeek = (wellnessLogs || []).filter((l: any) => l.date >= sevenDaysAgo.toISOString().split('T')[0])
 
   return (
     <CoachGroupDetailClient
@@ -111,6 +132,9 @@ export default async function CoachGroupDetailPage({ params }: Props) {
       sessions={sessions || []}
       plans={plans || []}
       wellnessLogs={wellnessLogs || []}
+      wellnessWeek={wellnessWeek}
+      feedbacks={feedbacks || []}
+      dietLogs={dietLogs || []}
     />
   )
 }
