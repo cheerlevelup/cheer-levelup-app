@@ -1,7 +1,7 @@
 'use client'
 // src/app/coach/groups/[id]/CoachGroupDetailClient.tsx
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import ModuleConfigPanel from '@/components/ModuleConfigPanel'
@@ -199,14 +199,14 @@ function getAthleteWellnessSummary(athleteId: number, logs: any[]) {
 
 // ── AthleteEditCard ───────────────────────────────────────────────────────────
 
-type ProfileTab = 'profil' | 'umiejetnosci' | 'kontuzje'
+type ProfileTab = 'profil' | 'umiejetnosci' | 'kontuzje' | 'testy' | 'motoryczny'
 
 const CHEER_JUMPS = ['Herkie', 'Pike', 'Toe touch', 'Hurdler', 'Spread eagle', 'Double nine', 'Around the world', 'Tuck', 'X jump']
 const DANCE_JUMPS = ['Grand jeté', 'Switch leap', 'Turning jump', 'Stag', 'Cabriole']
 const ACRO_SKILLS = ['Rondad', 'Flik', 'Salto przodem', 'Salto tyłem', 'Arabian', 'Full', 'Double full', 'Layout', 'Tuck salto', 'Pike salto', 'Handspring']
 const DANCE_STYLES = ['Jazz', 'Hip-hop', 'Lyrical', 'Contemporary', 'Pom', 'Cheerleading', 'Balet', 'Taniec nowoczesny']
 
-function AthleteEditCard({ athlete, onSaved }: { athlete: any; onSaved: (updated: any) => void }) {
+function AthleteEditCard({ athlete, groupId, onSaved }: { athlete: any; groupId: number; onSaved: (updated: any) => void }) {
   const supabase = createClient()
   const [open, setOpen] = useState(false)
   const [profileTab, setProfileTab] = useState<ProfileTab>('profil')
@@ -235,6 +235,24 @@ function AthleteEditCard({ athlete, onSaved }: { athlete: any; onSaved: (updated
   // Kontuzje
   const [injuries, setInjuries]     = useState<{date: string; type: string; status: string; note: string}[]>(athlete.injuries || [])
 
+  // Testy
+  const initTests = athlete.tests || {}
+  const [longJumpBoth, setLongJumpBoth]         = useState(initTests.long_jump_both?.distance_cm?.toString() || '')
+  const [longJumpBothDate, setLongJumpBothDate] = useState(initTests.long_jump_both?.date || '')
+  const [longJumpLeftDist, setLongJumpLeftDist] = useState(initTests.long_jump_left?.distance_cm?.toString() || '')
+  const [longJumpLeftDate, setLongJumpLeftDate] = useState(initTests.long_jump_left?.date || '')
+  const [longJumpRightDist, setLongJumpRightDist] = useState(initTests.long_jump_right?.distance_cm?.toString() || '')
+  const [longJumpRightDate, setLongJumpRightDate] = useState(initTests.long_jump_right?.date || '')
+  const [chinupSec, setChinupSec]   = useState(initTests.chinup?.seconds?.toString() || '')
+  const [chinupDate, setChinupDate] = useState(initTests.chinup?.date || '')
+  const [pushupsCount, setPushupsCount] = useState(initTests.pushups?.count?.toString() || '')
+  const [pushupsDate, setPushupsDate]   = useState(initTests.pushups?.date || '')
+
+  // Trening motoryczny
+  const [motorData, setMotorData] = useState<any[]>([])
+  const [motorLoaded, setMotorLoaded] = useState(false)
+  const [motorLoading, setMotorLoading] = useState(false)
+
   const [saving, setSaving] = useState(false)
   const [saved, setSaved]   = useState(false)
 
@@ -249,6 +267,98 @@ function AthleteEditCard({ athlete, onSaved }: { athlete: any; onSaved: (updated
     setInjuries(prev => [...prev, { date: new Date().toISOString().split('T')[0], type: '', status: 'aktywna', note: '' }])
   }
 
+  async function loadMotorData() {
+    if (motorLoaded || motorLoading) return
+    setMotorLoading(true)
+    const supabase2 = createClient()
+
+    // 1. Pobierz plany grupy (historia)
+    const { data: assigns } = await supabase2
+      .from('athlete_workout_assignments')
+      .select('plan_id, plan:workout_plans(id, name)')
+      .eq('group_id', groupId)
+
+    const planMap: Record<number, string> = {}
+    const planIds = (assigns || []).map((a: any) => {
+      planMap[a.plan_id] = a.plan?.name ?? '—'
+      return a.plan_id
+    })
+    if (!planIds.length) { setMotorLoaded(true); setMotorLoading(false); return }
+
+    // 2. Pobierz wszystkie tygodnie → dni → bloki → ćwiczenia
+    const { data: weeks } = await supabase2.from('workout_weeks').select('id, plan_id').in('plan_id', planIds)
+    const weekIds = (weeks || []).map((w: any) => w.id)
+    const weekPlanMap: Record<number, number> = {}
+    ;(weeks || []).forEach((w: any) => { weekPlanMap[w.id] = w.plan_id })
+
+    const { data: days2 } = await supabase2.from('workout_days').select('id, week_id').in('week_id', weekIds)
+    const dayIds = (days2 || []).map((d: any) => d.id)
+    const dayWeekMap: Record<number, number> = {}
+    ;(days2 || []).forEach((d: any) => { dayWeekMap[d.id] = d.week_id })
+
+    const { data: blocks2 } = await supabase2.from('workout_day_blocks').select('id, day_id').in('day_id', dayIds)
+    const blockIds = (blocks2 || []).map((b: any) => b.id)
+    const blockDayMap: Record<number, number> = {}
+    ;(blocks2 || []).forEach((b: any) => { blockDayMap[b.id] = b.day_id })
+
+    const { data: exs } = await supabase2.from('workout_block_exercises')
+      .select('id, block_id, exercise_id, exercise_code, sets, reps, tempo, weight_kg, exercise:exercises(name)')
+      .in('block_id', blockIds)
+
+    // 3. Sesje zawodniczki (daty)
+    const { data: sessions2 } = await supabase2.from('workout_sessions')
+      .select('workout_day_id, date_completed, completed')
+      .eq('athlete_id', athlete.id)
+      .eq('completed', true)
+      .in('workout_day_id', dayIds)
+
+    const sessionDateMap: Record<number, string> = {}
+    ;(sessions2 || []).forEach((s: any) => {
+      if (!sessionDateMap[s.workout_day_id] || s.date_completed > sessionDateMap[s.workout_day_id]) {
+        sessionDateMap[s.workout_day_id] = s.date_completed
+      }
+    })
+
+    // 4. Zbuduj listę ćwiczeń z metadanymi
+    type ExRow = { name: string; sets: number; reps: string; tempo: string; weight: number | null; planName: string; date: string | null }
+    const rows: ExRow[] = []
+    ;(exs || []).forEach((ex: any) => {
+      const dayId = blockDayMap[ex.block_id]
+      const weekId = dayWeekMap[dayId]
+      const planId = weekPlanMap[weekId]
+      const planName = planMap[planId] ?? '—'
+      const date = sessionDateMap[dayId] ?? null
+      const name = ex.exercise?.name ? ex.exercise.name.replace(/-/g, ' ') : (ex.exercise_code || 'Ćwiczenie')
+      rows.push({ name, sets: ex.sets ?? 0, reps: ex.reps ?? '', tempo: ex.tempo ?? '', weight: ex.weight_kg ?? null, planName, date })
+    })
+
+    // 5. Deduplikacja: grupuj po (name, reps, tempo) → jeśli te same → zostaw z max(sets, weight)
+    // Jeśli różne (reps, tempo) przy tej samej nazwie → osobne wpisy
+    const groupMap = new Map<string, ExRow>()
+    rows.forEach(row => {
+      const key = `${row.name.toLowerCase()}||${row.reps}||${row.tempo}`
+      const existing = groupMap.get(key)
+      if (!existing) {
+        groupMap.set(key, row)
+      } else {
+        // Zastąp jeśli nowy ma więcej sets lub ciężar lub nowsza data
+        const existSets = existing.sets ?? 0
+        const newSets = row.sets ?? 0
+        const existW = existing.weight ?? 0
+        const newW = row.weight ?? 0
+        if (newSets > existSets || newW > existW || (row.date && (!existing.date || row.date > existing.date))) {
+          groupMap.set(key, row)
+        }
+      }
+    })
+
+    // 6. Posortuj alfabetycznie po nazwie
+    const sorted = Array.from(groupMap.values()).sort((a, b) => a.name.localeCompare(b.name, 'pl'))
+    setMotorData(sorted)
+    setMotorLoaded(true)
+    setMotorLoading(false)
+  }
+
   async function handleSave() {
     setSaving(true)
     const skillsPayload = {
@@ -259,6 +369,14 @@ function AthleteEditCard({ athlete, onSaved }: { athlete: any; onSaved: (updated
       stunts: stunts || null, pyramids: pyramids || null,
       notes: skillsNotes || null,
     }
+    const testsPayload = {
+      long_jump_both:  longJumpBoth  ? { distance_cm: parseFloat(longJumpBoth),  date: longJumpBothDate  || null } : null,
+      long_jump_left:  longJumpLeftDist  ? { distance_cm: parseFloat(longJumpLeftDist),  date: longJumpLeftDate  || null } : null,
+      long_jump_right: longJumpRightDist ? { distance_cm: parseFloat(longJumpRightDist), date: longJumpRightDate || null } : null,
+      chinup:   chinupSec   ? { seconds: parseFloat(chinupSec),   date: chinupDate   || null } : null,
+      pushups:  pushupsCount ? { count: parseInt(pushupsCount),   date: pushupsDate  || null } : null,
+    }
+
     const { data, error } = await supabase.from('athletes').update({
       full_name: fullName.trim(),
       birth_year: birthYear ? parseInt(birthYear) : null,
@@ -269,6 +387,7 @@ function AthleteEditCard({ athlete, onSaved }: { athlete: any; onSaved: (updated
       notes: notes.trim() || null,
       skills: skillsPayload,
       injuries,
+      tests: testsPayload,
     }).eq('id', athlete.id).select().single()
     setSaving(false)
     if (!error && data) { setSaved(true); onSaved(data); setTimeout(() => setSaved(false), 2000) }
@@ -315,9 +434,15 @@ function AthleteEditCard({ athlete, onSaved }: { athlete: any; onSaved: (updated
       {open && (
         <div style={{ borderTop: `1.5px solid ${C.grayLight}` }}>
           {/* Sub-tabs */}
-          <div style={{ display: 'flex', borderBottom: `1.5px solid ${C.grayLight}` }}>
-            {([{ id: 'profil', label: '👤 Profil' }, { id: 'umiejetnosci', label: '⭐ Umiejętności' }, { id: 'kontuzje', label: '🩹 Kontuzje' }] as { id: ProfileTab; label: string }[]).map(t => (
-              <button key={t.id} onClick={() => setProfileTab(t.id)} style={{ flex: 1, padding: '0.6rem', border: 'none', background: profileTab === t.id ? C.white : C.offWhite, color: profileTab === t.id ? C.navy : C.gray, fontWeight: profileTab === t.id ? 800 : 600, fontFamily: mono, fontSize: '0.65rem', borderBottom: profileTab === t.id ? `2px solid ${C.gold}` : '2px solid transparent', cursor: 'pointer' }}>
+          <div style={{ display: 'flex', borderBottom: `1.5px solid ${C.grayLight}`, overflowX: 'auto' }}>
+            {([
+              { id: 'profil',      label: '👤 Profil' },
+              { id: 'umiejetnosci',label: '⭐ Umiejętności' },
+              { id: 'kontuzje',    label: '🩹 Kontuzje' },
+              { id: 'testy',       label: '📏 Testy' },
+              { id: 'motoryczny',  label: '🏋️ Motoryczny' },
+            ] as { id: ProfileTab; label: string }[]).map(t => (
+              <button key={t.id} onClick={() => { setProfileTab(t.id); if (t.id === 'motoryczny') loadMotorData() }} style={{ flexShrink: 0, padding: '0.6rem 0.85rem', border: 'none', background: profileTab === t.id ? C.white : C.offWhite, color: profileTab === t.id ? C.navy : C.gray, fontWeight: profileTab === t.id ? 800 : 600, fontFamily: mono, fontSize: '0.63rem', borderBottom: profileTab === t.id ? `2px solid ${C.gold}` : '2px solid transparent', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                 {t.label}
               </button>
             ))}
@@ -434,11 +559,104 @@ function AthleteEditCard({ athlete, onSaved }: { athlete: any; onSaved: (updated
               </div>
             )}
 
+            {/* ── Testy ── */}
+            {profileTab === 'testy' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Testy sprawnościowe — wyniki i daty pomiarów</div>
+
+                {/* Skok w dal */}
+                <div style={{ border: `1.5px solid ${C.grayLight}`, borderRadius: 10, overflow: 'hidden' }}>
+                  <div style={{ background: C.navy, padding: '0.5rem 0.875rem', fontFamily: mono, fontSize: '0.65rem', color: C.gold, fontWeight: 700 }}>📏 Skok w dal (cm)</div>
+                  <div style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {[
+                      { label: 'Obunóż', val: longJumpBoth, setVal: setLongJumpBoth, date: longJumpBothDate, setDate: setLongJumpBothDate },
+                      { label: 'Jednonóż — lewa', val: longJumpLeftDist, setVal: setLongJumpLeftDist, date: longJumpLeftDate, setDate: setLongJumpLeftDate },
+                      { label: 'Jednonóż — prawa', val: longJumpRightDist, setVal: setLongJumpRightDist, date: longJumpRightDate, setDate: setLongJumpRightDate },
+                    ].map(row => (
+                      <div key={row.label} style={{ display: 'grid', gridTemplateColumns: '140px 100px 140px', gap: 8, alignItems: 'center' }}>
+                        <label style={{ fontFamily: mono, fontSize: '0.68rem', color: C.navy, fontWeight: 700 }}>{row.label}</label>
+                        <input type="number" value={row.val} onChange={e => row.setVal(e.target.value)} placeholder="cm" style={{ ...inp, minHeight: 32 }} />
+                        <input type="date" value={row.date} onChange={e => row.setDate(e.target.value)} style={{ ...inp, minHeight: 32, fontSize: '0.78rem' }} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Chin-up */}
+                <div style={{ border: `1.5px solid ${C.grayLight}`, borderRadius: 10, overflow: 'hidden' }}>
+                  <div style={{ background: C.navy, padding: '0.5rem 0.875rem', fontFamily: mono, fontSize: '0.65rem', color: C.gold, fontWeight: 700 }}>⏱️ Chin-up (czas w sekundach)</div>
+                  <div style={{ padding: '0.75rem', display: 'grid', gridTemplateColumns: '140px 100px 140px', gap: 8, alignItems: 'center' }}>
+                    <label style={{ fontFamily: mono, fontSize: '0.68rem', color: C.navy, fontWeight: 700 }}>Wynik</label>
+                    <input type="number" value={chinupSec} onChange={e => setChinupSec(e.target.value)} placeholder="sek." style={{ ...inp, minHeight: 32 }} />
+                    <input type="date" value={chinupDate} onChange={e => setChinupDate(e.target.value)} style={{ ...inp, minHeight: 32, fontSize: '0.78rem' }} />
+                  </div>
+                </div>
+
+                {/* Pompki */}
+                <div style={{ border: `1.5px solid ${C.grayLight}`, borderRadius: 10, overflow: 'hidden' }}>
+                  <div style={{ background: C.navy, padding: '0.5rem 0.875rem', fontFamily: mono, fontSize: '0.65rem', color: C.gold, fontWeight: 700 }}>💪 Pompki (ilość)</div>
+                  <div style={{ padding: '0.75rem', display: 'grid', gridTemplateColumns: '140px 100px 140px', gap: 8, alignItems: 'center' }}>
+                    <label style={{ fontFamily: mono, fontSize: '0.68rem', color: C.navy, fontWeight: 700 }}>Wynik</label>
+                    <input type="number" value={pushupsCount} onChange={e => setPushupsCount(e.target.value)} placeholder="szt." style={{ ...inp, minHeight: 32 }} />
+                    <input type="date" value={pushupsDate} onChange={e => setPushupsDate(e.target.value)} style={{ ...inp, minHeight: 32, fontSize: '0.78rem' }} />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Trening motoryczny ── */}
+            {profileTab === 'motoryczny' && (
+              <div>
+                {motorLoading && (
+                  <div style={{ textAlign: 'center', padding: '2rem', fontFamily: mono, fontSize: '0.72rem', color: C.gray }}>Ładowanie danych...</div>
+                )}
+                {motorLoaded && motorData.length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '2rem', fontFamily: mono, fontSize: '0.72rem', color: C.gray }}>Brak ćwiczeń w planach grupy.</div>
+                )}
+                {motorLoaded && motorData.length > 0 && (
+                  <div style={{ overflowX: 'auto' }}>
+                    <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 8 }}>
+                      {motorData.length} ćwiczeń ze wszystkich planów grupy · posortowane alfabetycznie
+                    </div>
+                    <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                      <thead>
+                        <tr style={{ background: C.navy }}>
+                          {['Ćwiczenie', 'Serie', 'Powt.', 'Ciężar', 'Tempo', 'Plan', 'Data treningu'].map(h => (
+                            <th key={h} style={{ padding: '0.5rem 0.75rem', fontFamily: mono, fontSize: '0.58rem', color: C.gold, letterSpacing: '0.06em', textTransform: 'uppercase', textAlign: h === 'Ćwiczenie' || h === 'Plan' ? 'left' : 'center', whiteSpace: 'nowrap', borderBottom: `1.5px solid ${C.navyBorder}` }}>
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {motorData.map((row: any, i: number) => {
+                          const rowBg = i % 2 === 0 ? C.white : '#FAFBFC'
+                          return (
+                            <tr key={i} style={{ background: rowBg }}>
+                              <td style={{ padding: '0.5rem 0.75rem', fontWeight: 700, color: C.navy, borderBottom: `1px solid ${C.grayLight}`, fontSize: '0.86rem' }}>{row.name}</td>
+                              <td style={{ padding: '0.5rem 0.75rem', textAlign: 'center', borderBottom: `1px solid ${C.grayLight}`, fontFamily: mono, fontSize: '0.75rem', fontWeight: 800, color: C.navy }}>{row.sets || '—'}</td>
+                              <td style={{ padding: '0.5rem 0.75rem', textAlign: 'center', borderBottom: `1px solid ${C.grayLight}`, fontFamily: mono, fontSize: '0.75rem', color: C.navy }}>{row.reps || '—'}</td>
+                              <td style={{ padding: '0.5rem 0.75rem', textAlign: 'center', borderBottom: `1px solid ${C.grayLight}`, fontFamily: mono, fontSize: '0.75rem', color: C.navy }}>{row.weight ? `${row.weight} kg` : '—'}</td>
+                              <td style={{ padding: '0.5rem 0.75rem', textAlign: 'center', borderBottom: `1px solid ${C.grayLight}`, fontFamily: mono, fontSize: '0.75rem', color: C.gray }}>{row.tempo || '—'}</td>
+                              <td style={{ padding: '0.5rem 0.75rem', borderBottom: `1px solid ${C.grayLight}`, fontFamily: mono, fontSize: '0.68rem', color: C.gray }}>{row.planName}</td>
+                              <td style={{ padding: '0.5rem 0.75rem', textAlign: 'center', borderBottom: `1px solid ${C.grayLight}`, fontFamily: mono, fontSize: '0.68rem', color: C.gray }}>{row.date ? new Date(row.date).toLocaleDateString('pl-PL') : '—'}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div style={{ display: 'flex', gap: 8, marginTop: '1rem', justifyContent: 'flex-end' }}>
               <button onClick={() => setOpen(false)} style={{ padding: '0.55rem 0.875rem', borderRadius: 8, border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.gray, fontWeight: 700, cursor: 'pointer' }}>Zamknij</button>
-              <button onClick={handleSave} disabled={saving || !fullName.trim()} style={{ padding: '0.55rem 1rem', borderRadius: 8, border: 'none', background: saved ? C.green : C.navy, color: saved ? C.white : C.gold, fontWeight: 800, cursor: 'pointer', minWidth: 90 }}>
-                {saving ? 'Zapisuję...' : saved ? '✓ Zapisano' : 'Zapisz'}
-              </button>
+              {profileTab !== 'motoryczny' && (
+                <button onClick={handleSave} disabled={saving || !fullName.trim()} style={{ padding: '0.55rem 1rem', borderRadius: 8, border: 'none', background: saved ? C.green : C.navy, color: saved ? C.white : C.gold, fontWeight: 800, cursor: 'pointer', minWidth: 90 }}>
+                  {saving ? 'Zapisuję...' : saved ? '✓ Zapisano' : 'Zapisz'}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -823,6 +1041,7 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                 <AthleteEditCard
                   key={athlete.id}
                   athlete={athlete}
+                  groupId={group.id}
                   onSaved={updated => setLocalAthletes(prev => prev.map(a => a.id === updated.id ? updated : a))}
                 />
               ))}
