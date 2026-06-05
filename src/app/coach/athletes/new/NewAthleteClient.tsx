@@ -55,23 +55,33 @@ export default function NewAthleteClient({ groups }: { groups: Group[] }) {
     setSaving(true)
     setError('')
 
-    const res = await fetch('/api/athletes/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        full_name: fullName.trim(),
-        email: email.trim().toLowerCase(),
-        password,
-        birth_year: birthYear || null,
-        group_id: groupId || null,
-      }),
-    })
+    let res: Response
+    let json: any = {}
 
-    const json = await res.json()
+    try {
+      res = await fetch('/api/athletes/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          full_name: fullName.trim(),
+          email: email.trim().toLowerCase(),
+          password,
+          birth_year: birthYear || null,
+          group_id: groupId || null,
+        }),
+      })
+      const text = await res.text()
+      if (text) json = JSON.parse(text)
+    } catch (e: any) {
+      setSaving(false)
+      setError(`Błąd połączenia: ${e?.message || e}`)
+      return
+    }
+
     setSaving(false)
 
-    if (!res.ok) {
-      setError(json.error || 'Nieznany błąd')
+    if (!res!.ok) {
+      setError(json?.error || `Błąd serwera (${res!.status})`)
       return
     }
 
