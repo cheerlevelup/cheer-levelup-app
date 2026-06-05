@@ -140,18 +140,63 @@ const feelingLabelMap: Record<string, string> = {
   zmeczona: '😓 Zmęczona', slabo: '😞 Słabo',
 }
 
+// ── Wellness row helper — zawsze pokazuje pole, nawet puste ──────────────────
+function WRow({ label, value, unit, color }: { label: string; value: any; unit?: string; color?: string }) {
+  const isEmpty = value === null || value === undefined || value === ''
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: `1px solid ${C.grayLight}` }}>
+      <span style={{ fontSize: '0.82rem', color: C.gray }}>{label}</span>
+      {isEmpty
+        ? <span style={{ fontFamily: mono, fontSize: '0.7rem', color: C.grayLight, fontStyle: 'italic' }}>nie wypełnione</span>
+        : <span style={{ fontFamily: mono, fontSize: '0.82rem', fontWeight: 800, color: color ?? C.navy }}>{value}{unit}</span>
+      }
+    </div>
+  )
+}
+
+function WBar({ label, value, max, inverse }: { label: string; value: number | null | undefined; max: number; inverse?: boolean }) {
+  const isEmpty = value === null || value === undefined
+  const pct = isEmpty ? 0 : Math.min(100, Math.max(0, (value! / max) * 100))
+  const color = isEmpty ? C.grayLight : wScaleColor(value!, max, !!inverse)
+  const comment = isEmpty ? null : (
+    inverse
+      ? (pct > 70 ? 'Wysoki' : pct > 40 ? 'Średni' : 'Niski')
+      : (pct < 30 ? 'Niski' : pct < 60 ? 'Średni' : 'Wysoki')
+  )
+  return (
+    <div style={{ marginBottom: '0.75rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+        <span style={{ fontSize: '0.82rem', color: C.gray }}>{label}</span>
+        {isEmpty
+          ? <span style={{ fontFamily: mono, fontSize: '0.7rem', color: C.grayLight, fontStyle: 'italic' }}>nie wypełnione</span>
+          : <span style={{ fontFamily: mono, fontSize: '0.82rem', fontWeight: 800, color }}>{value}/10</span>
+        }
+      </div>
+      <div style={{ height: 6, background: C.grayLight, borderRadius: 3, overflow: 'hidden' }}>
+        {!isEmpty && <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 3 }} />}
+      </div>
+      {!isEmpty && comment && <div style={{ fontSize: '0.65rem', color, textAlign: 'right', marginTop: 2 }}>{wComment(value!, inverse ? WC.stress : WC.energy)}</div>}
+    </div>
+  )
+}
+
 function SessionReportModal({ session, athleteId, athleteName, dayName, onClose }: {
   session: any; athleteId: number; athleteName: string; dayName: string; onClose: () => void
 }) {
   const [loading, setLoading] = useState(true)
   const [feedback, setFeedback] = useState<any | null>(null)
+  const [wellness, setWellness] = useState<any | null>(null)
   const [setLogs, setSetLogs] = useState<any[]>([])
   const [blocks, setBlocks] = useState<any[]>([])
 
   useEffect(() => {
     async function load() {
       const sb = createClient()
-      const [fbRes, logsRes, blocksRes] = await Promise.all([
+      const sessionDate = session.date_completed
+        ? new Date(session.date_completed).toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0]
+
+      const [fbRes, logsRes, blocksRes, wellnessRes] = await Promise.all([
         sb.from('post_session_feedback')
           .select('*')
           .eq('workout_session_id', session.id)
@@ -166,14 +211,20 @@ function SessionReportModal({ session, athleteId, athleteName, dayName, onClose 
           .select('*, workout_block_exercises(id, exercise_id, exercise_code, sets, reps, weight_kg, exercise:exercises(name))')
           .eq('day_id', session.workout_day_id)
           .order('block_order', { ascending: true }),
+        sb.from('wellness_logs')
+          .select('*')
+          .eq('athlete_id', athleteId)
+          .eq('date', sessionDate)
+          .maybeSingle(),
       ])
       setFeedback(fbRes.data || null)
       setSetLogs(logsRes.data || [])
       setBlocks(blocksRes.data || [])
+      setWellness(wellnessRes.data || null)
       setLoading(false)
     }
     load()
-  }, [session.id, session.workout_day_id])
+  }, [session.id, session.workout_day_id, athleteId])
 
   const dateStr = session.date_completed
     ? new Date(session.date_completed).toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' })
@@ -227,30 +278,87 @@ function SessionReportModal({ session, athleteId, athleteName, dayName, onClose 
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
 
-              {/* RPE + samopoczucie */}
-              {feedback && (
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {feedback.session_rpe != null && (
-                    <div style={{ flex: 1, background: rpeC(feedback.session_rpe) + '18', border: `1.5px solid ${rpeC(feedback.session_rpe)}`, borderRadius: 12, padding: '0.875rem', textAlign: 'center' }}>
-                      <div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>RPE</div>
-                      <div style={{ fontFamily: mono, fontWeight: 900, fontSize: '1.8rem', color: rpeC(feedback.session_rpe), lineHeight: 1 }}>{feedback.session_rpe}</div>
-                      <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, marginTop: 3 }}>
-                        {feedback.session_rpe <= 3 ? 'Lekki' : feedback.session_rpe <= 5 ? 'Umiarkowany' : feedback.session_rpe <= 7 ? 'Ciężki' : feedback.session_rpe <= 9 ? 'Bardzo ciężki' : 'Maksymalny'}
+              {/* ── 1. WELLNESS PRZED TRENINGIEM ── */}
+              <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 12, overflow: 'hidden' }}>
+                <div style={{ padding: '0.65rem 1rem', background: '#0D2D1A', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontFamily: mono, fontSize: '0.62rem', color: '#86EFAC', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>🩺 Wellness przed treningiem</span>
+                  {!wellness && <span style={{ fontFamily: mono, fontSize: '0.58rem', color: '#4ADE80', fontStyle: 'italic' }}>brak wpisu na ten dzień</span>}
+                </div>
+                <div style={{ padding: '0.75rem 1rem' }}>
+                  {/* Pasek snu */}
+                  <div style={{ marginBottom: '0.75rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span style={{ fontSize: '0.82rem', color: C.gray }}>🌙 Sen — ilość godzin</span>
+                      {wellness?.sleep_hours != null
+                        ? <span style={{ fontFamily: mono, fontSize: '0.82rem', fontWeight: 800, color: wScaleColor(wellness.sleep_hours, 12, false) }}>{wellness.sleep_hours}h</span>
+                        : <span style={{ fontFamily: mono, fontSize: '0.7rem', color: C.grayLight, fontStyle: 'italic' }}>nie wypełnione</span>}
+                    </div>
+                    <div style={{ height: 6, background: C.grayLight, borderRadius: 3, overflow: 'hidden' }}>
+                      {wellness?.sleep_hours != null && <div style={{ height: '100%', width: `${Math.min(100, (wellness.sleep_hours / 12) * 100)}%`, background: wScaleColor(wellness.sleep_hours, 12, false), borderRadius: 3 }} />}
+                    </div>
+                  </div>
+                  <WBar label="Jakość snu" value={wellness?.sleep_quality} max={10} />
+                  <WBar label={`${readinessEmoji(wellness?.readiness ?? 5)} Poziom wypoczęcia`} value={wellness?.readiness} max={10} />
+                  <WBar label="Energia" value={wellness?.energy} max={10} />
+                  <WBar label="Obciążenie stresem" value={wellness?.stress} max={10} inverse />
+                  <WBar label="Zakwasy" value={wellness?.muscle_sorness} max={10} inverse />
+                  {/* Opcjonalne pola */}
+                  <WRow label="Masa ciała" value={wellness?.body_weight_kg} unit=" kg" />
+                  <WRow label="Nawodnienie" value={wellness?.hydration_glasses} unit=" szkl." />
+                  <WRow label="Tętno spoczynkowe" value={wellness?.resting_hr} unit=" bpm" />
+                  {/* Cykl */}
+                  {(() => {
+                    const cp = wellness?.cycle_phase
+                    const cd = wellness?.cycle_day
+                    const cStyle: Record<string, { color: string }> = { menstruacja: { color: C.red }, folikularna: { color: '#F59E0B' }, owulacja: { color: C.green }, lutealna: { color: '#A78BFA' } }
+                    const cs = cp ? (cStyle[cp] || { color: C.gray }) : null
+                    return (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: `1px solid ${C.grayLight}` }}>
+                        <span style={{ fontSize: '0.82rem', color: C.gray }}>Faza cyklu</span>
+                        {cp
+                          ? <span style={{ fontFamily: mono, fontSize: '0.78rem', fontWeight: 800, color: cs?.color }}>{cp}{cd ? ` · dzień ${cd}` : ''}</span>
+                          : <span style={{ fontFamily: mono, fontSize: '0.7rem', color: C.grayLight, fontStyle: 'italic' }}>nie wypełnione</span>}
+                      </div>
+                    )
+                  })()}
+                  {/* Aktywność */}
+                  {wellness?.activity_data?.type ? (
+                    <div style={{ marginTop: 8, padding: '0.6rem 0.75rem', background: C.offWhite, borderRadius: 8 }}>
+                      <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Aktywność</div>
+                      <div style={{ fontWeight: 700, color: C.navy, fontSize: '0.85rem' }}>{wellness.activity_data.type}</div>
+                      <div style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray, marginTop: 2 }}>
+                        {wellness.activity_data.time && `${wellness.activity_data.time} · `}
+                        {wellness.activity_data.duration && `${wellness.activity_data.duration} min`}
+                        {wellness.activity_data.rpe != null && ` · RPE ${wellness.activity_data.rpe}/10`}
                       </div>
                     </div>
+                  ) : (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: `1px solid ${C.grayLight}` }}>
+                      <span style={{ fontSize: '0.82rem', color: C.gray }}>Aktywność dnia</span>
+                      <span style={{ fontFamily: mono, fontSize: '0.7rem', color: C.grayLight, fontStyle: 'italic' }}>nie wypełnione</span>
+                    </div>
                   )}
-                  {feedback.feeling_after && (
-                    <div style={{ flex: 1.5, background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 12, padding: '0.875rem', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                      <div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>Po treningu</div>
-                      <div style={{ fontWeight: 800, color: C.navy, fontSize: '1rem' }}>{feelingLabelMap[feedback.feeling_after] || feedback.feeling_after}</div>
+                  {/* Ból */}
+                  {wellness?.pain_data?.painDuring > 0 && (
+                    <div style={{ marginTop: 8, padding: '0.6rem 0.75rem', background: '#FEF2F2', border: `1.5px solid #FCA5A5`, borderRadius: 8 }}>
+                      <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.red, textTransform: 'uppercase', marginBottom: 3 }}>Ból podczas treningu</div>
+                      <div style={{ fontFamily: mono, fontWeight: 800, color: C.red }}>{wellness.pain_data.painDuring}/10</div>
+                      {wellness.pain_data.location && <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: 2 }}>📍 {wellness.pain_data.location}</div>}
+                    </div>
+                  )}
+                  {/* Uwagi */}
+                  {wellness?.concerns && (
+                    <div style={{ marginTop: 8, padding: '0.6rem 0.75rem', background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 8 }}>
+                      <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#92400E', textTransform: 'uppercase', marginBottom: 3 }}>Uwagi dla trenera</div>
+                      <div style={{ fontSize: '0.84rem', color: C.navy, fontStyle: 'italic' }}>&ldquo;{wellness.concerns}&rdquo;</div>
                     </div>
                   )}
                 </div>
-              )}
+              </div>
 
-              {/* Serie — wszystkie ćwiczenia z planu */}
+              {/* ── 2. ĆWICZENIA ── */}
               <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 12, overflow: 'hidden' }}>
-                <div style={{ padding: '0.75rem 1rem', background: C.offWhite, borderBottom: `1.5px solid ${C.grayLight}`, fontFamily: mono, fontSize: '0.62rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>
+                <div style={{ padding: '0.65rem 1rem', background: C.navy, borderBottom: `1.5px solid ${C.navyBorder}`, fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>
                   🏋️ Ćwiczenia z treningu
                 </div>
                 {blocks.length === 0 && (
@@ -261,8 +369,7 @@ function SessionReportModal({ session, athleteId, athleteName, dayName, onClose 
                   if (blockExs.length === 0) return null
                   return (
                     <div key={block.id}>
-                      {/* Nagłówek bloku */}
-                      <div style={{ padding: '0.5rem 1rem', background: C.navyLight, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ padding: '0.45rem 1rem', background: C.navyLight, display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{block.block_name}</span>
                         {block.rounds > 1 && <span style={{ fontFamily: mono, fontSize: '0.55rem', color: C.gray }}>{block.rounds} rundy</span>}
                       </div>
@@ -274,25 +381,17 @@ function SessionReportModal({ session, athleteId, athleteName, dayName, onClose 
                         const mainLogs = logs.filter((l: any) => !l.is_warmup)
                         const hasLogs = logs.length > 0
                         const isLast = exIdx === blockExs.length - 1
-
                         return (
                           <div key={ex.id} style={{ borderBottom: isLast ? 'none' : `1px solid ${C.grayLight}`, padding: '0.75rem 1rem', background: !hasLogs ? '#FAFAFA' : C.white }}>
-                            {/* Nazwa ćwiczenia + plan */}
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: hasLogs ? 8 : 0 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: hasLogs ? 8 : 4 }}>
                               <div style={{ fontWeight: 700, color: hasLogs ? C.navy : C.gray, fontSize: '0.9rem' }}>{name}</div>
                               <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray }}>
-                                {plan ? `${plan.sets}×${plan.reps}${plan.weight ? ` · ${plan.weight}kg` : ''}` : ''}
+                                {plan ? `plan: ${plan.sets}×${plan.reps}${plan.weight ? ` · ${plan.weight}kg` : ''}` : ''}
                               </div>
                             </div>
-
-                            {/* Brak danych */}
                             {!hasLogs && (
-                              <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray, fontStyle: 'italic', marginTop: 2 }}>
-                                nie wykonano / brak danych
-                              </div>
+                              <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.grayLight, fontStyle: 'italic' }}>nie wykonano / brak danych</div>
                             )}
-
-                            {/* Rozgrzewka */}
                             {warmupLogs.map((l: any) => (
                               <div key={l.id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '4px 0', opacity: 0.6 }}>
                                 <span style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, minWidth: 42 }}>Rozg</span>
@@ -300,20 +399,12 @@ function SessionReportModal({ session, athleteId, athleteName, dayName, onClose 
                                 <span style={{ fontFamily: mono, fontSize: '0.7rem', color: C.gray }}>{l.reps_completed ? `${l.reps_completed} powt.` : '—'}</span>
                               </div>
                             ))}
-
-                            {/* Serie właściwe */}
                             {mainLogs.map((l: any, i: number) => (
                               <div key={l.id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '5px 0', borderTop: i === 0 && warmupLogs.length > 0 ? `1px dashed ${C.grayLight}` : 'none' }}>
                                 <span style={{ fontFamily: mono, fontSize: '0.65rem', color: l.completed ? C.gold : C.gray, fontWeight: 800, minWidth: 42 }}>S{l.set_number}</span>
-                                <span style={{ fontFamily: mono, fontSize: '0.92rem', fontWeight: 900, color: l.weight ? C.navy : C.gray }}>
-                                  {l.weight ? `${l.weight} kg` : '—'}
-                                </span>
-                                <span style={{ fontFamily: mono, fontSize: '0.75rem', color: C.gray }}>
-                                  {l.reps_completed ? `${l.reps_completed} powt.` : '—'}
-                                </span>
-                                {!l.completed && (
-                                  <span style={{ fontFamily: mono, fontSize: '0.52rem', color: C.gray, background: C.offWhite, padding: '1px 5px', borderRadius: 4 }}>nieukończona</span>
-                                )}
+                                <span style={{ fontFamily: mono, fontSize: '0.92rem', fontWeight: 900, color: l.weight ? C.navy : C.gray }}>{l.weight ? `${l.weight} kg` : '—'}</span>
+                                <span style={{ fontFamily: mono, fontSize: '0.75rem', color: C.gray }}>{l.reps_completed ? `${l.reps_completed} powt.` : '—'}</span>
+                                {!l.completed && <span style={{ fontFamily: mono, fontSize: '0.52rem', color: C.gray, background: C.offWhite, padding: '1px 5px', borderRadius: 4 }}>nieukończona</span>}
                               </div>
                             ))}
                           </div>
@@ -324,40 +415,58 @@ function SessionReportModal({ session, athleteId, athleteName, dayName, onClose 
                 })}
               </div>
 
-              {/* Feedback tekstowy */}
-              {feedback && (feedback.what_went_well || feedback.pain_after_comment || feedback.general_notes) && (
-                <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 12, overflow: 'hidden' }}>
-                  <div style={{ padding: '0.75rem 1rem', background: C.offWhite, borderBottom: `1.5px solid ${C.grayLight}`, fontFamily: mono, fontSize: '0.62rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>
-                    💬 Feedback zawodniczki
+              {/* ── 3. FEEDBACK PO TRENINGU ── */}
+              <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 12, overflow: 'hidden' }}>
+                <div style={{ padding: '0.65rem 1rem', background: '#1A0D2A', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontFamily: mono, fontSize: '0.62rem', color: '#C4B5FD', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>💬 Feedback po treningu</span>
+                  {!feedback && <span style={{ fontFamily: mono, fontSize: '0.58rem', color: '#A78BFA', fontStyle: 'italic' }}>nie wypełniony</span>}
+                </div>
+                <div style={{ padding: '0.75rem 1rem' }}>
+                  {/* RPE */}
+                  <div style={{ marginBottom: '0.75rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <span style={{ fontSize: '0.82rem', color: C.gray }}>RPE — ciężkość treningu</span>
+                      {feedback?.session_rpe != null
+                        ? <span style={{ fontFamily: mono, fontWeight: 900, fontSize: '1rem', color: rpeC(feedback.session_rpe) }}>{feedback.session_rpe}/10 <span style={{ fontSize: '0.65rem', fontWeight: 400 }}>{feedback.session_rpe <= 3 ? 'Lekki' : feedback.session_rpe <= 5 ? 'Umiarkowany' : feedback.session_rpe <= 7 ? 'Ciężki' : feedback.session_rpe <= 9 ? 'Bardzo ciężki' : 'Maksymalny'}</span></span>
+                        : <span style={{ fontFamily: mono, fontSize: '0.7rem', color: C.grayLight, fontStyle: 'italic' }}>nie wypełnione</span>}
+                    </div>
+                    {feedback?.session_rpe != null && (
+                      <div style={{ height: 6, background: C.grayLight, borderRadius: 3, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${(feedback.session_rpe / 10) * 100}%`, background: rpeC(feedback.session_rpe), borderRadius: 3 }} />
+                      </div>
+                    )}
                   </div>
-                  <div style={{ padding: '0.875rem 1rem', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {feedback.what_went_well && (
-                      <div>
-                        <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.green, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3, fontWeight: 700 }}>Co poszło dobrze</div>
-                        <div style={{ fontSize: '0.88rem', color: C.navy, lineHeight: 1.5, fontStyle: 'italic' }}>&ldquo;{feedback.what_went_well}&rdquo;</div>
-                      </div>
-                    )}
-                    {feedback.pain_after_comment && (
-                      <div>
-                        <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.red, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3, fontWeight: 700 }}>Ból / dyskomfort</div>
-                        <div style={{ fontSize: '0.88rem', color: C.navy, lineHeight: 1.5, fontStyle: 'italic' }}>&ldquo;{feedback.pain_after_comment}&rdquo;</div>
-                      </div>
-                    )}
-                    {feedback.general_notes && (
-                      <div>
-                        <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3, fontWeight: 700 }}>Dodatkowe uwagi</div>
-                        <div style={{ fontSize: '0.88rem', color: C.navy, lineHeight: 1.5 }}>{feedback.general_notes}</div>
-                      </div>
-                    )}
+                  {/* Samopoczucie */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: `1px solid ${C.grayLight}` }}>
+                    <span style={{ fontSize: '0.82rem', color: C.gray }}>Samopoczucie po treningu</span>
+                    {feedback?.feeling_after
+                      ? <span style={{ fontWeight: 700, color: C.navy, fontSize: '0.88rem' }}>{feelingLabelMap[feedback.feeling_after] || feedback.feeling_after}</span>
+                      : <span style={{ fontFamily: mono, fontSize: '0.7rem', color: C.grayLight, fontStyle: 'italic' }}>nie wypełnione</span>}
+                  </div>
+                  {/* Co poszło dobrze */}
+                  <div style={{ padding: '7px 0', borderBottom: `1px solid ${C.grayLight}` }}>
+                    <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.green, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3, fontWeight: 700 }}>Co poszło dobrze</div>
+                    {feedback?.what_went_well
+                      ? <div style={{ fontSize: '0.86rem', color: C.navy, fontStyle: 'italic', lineHeight: 1.5 }}>&ldquo;{feedback.what_went_well}&rdquo;</div>
+                      : <span style={{ fontFamily: mono, fontSize: '0.7rem', color: C.grayLight, fontStyle: 'italic' }}>nie wypełnione</span>}
+                  </div>
+                  {/* Ból po treningu */}
+                  <div style={{ padding: '7px 0', borderBottom: `1px solid ${C.grayLight}` }}>
+                    <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.red, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3, fontWeight: 700 }}>Ból / dyskomfort po treningu</div>
+                    {feedback?.pain_after_comment
+                      ? <div style={{ fontSize: '0.86rem', color: C.navy, fontStyle: 'italic', lineHeight: 1.5 }}>&ldquo;{feedback.pain_after_comment}&rdquo;</div>
+                      : <span style={{ fontFamily: mono, fontSize: '0.7rem', color: C.grayLight, fontStyle: 'italic' }}>nie wypełnione</span>}
+                  </div>
+                  {/* Dodatkowe uwagi */}
+                  <div style={{ padding: '7px 0' }}>
+                    <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3, fontWeight: 700 }}>Dodatkowe uwagi dla trenera</div>
+                    {feedback?.general_notes
+                      ? <div style={{ fontSize: '0.86rem', color: C.navy, lineHeight: 1.5 }}>{feedback.general_notes}</div>
+                      : <span style={{ fontFamily: mono, fontSize: '0.7rem', color: C.grayLight, fontStyle: 'italic' }}>nie wypełnione</span>}
                   </div>
                 </div>
-              )}
+              </div>
 
-              {!feedback && !hasSetLogs && (
-                <div style={{ textAlign: 'center', padding: '1rem', fontFamily: mono, fontSize: '0.72rem', color: C.gray }}>
-                  Zawodniczka nie wypełniła jeszcze feedbacku po tej sesji.
-                </div>
-              )}
             </div>
           )}
         </div>
