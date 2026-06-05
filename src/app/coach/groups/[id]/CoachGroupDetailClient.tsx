@@ -1296,7 +1296,8 @@ function filterByDays(logs: any[], days: number, dateField = 'date') {
 
 // ── PlanExerciseTable ─────────────────────────────────────────────────────────
 
-type ActualEntry = { weight: number | null; sets: number; repsRange: string }
+type ActualSet = { num: number; weight: number | null; reps: number | null }
+type ActualEntry = { sets: ActualSet[] }
 
 function PlanExerciseTable({ rows, athletes, overrides, actual, uniqueDays }: {
   rows: { exId: number; name: string; block: string; day: string; dayId: number; sets: number; reps: string; tempo: string; weight: number | null }[]
@@ -1382,29 +1383,54 @@ function PlanExerciseTable({ rows, athletes, overrides, actual, uniqueDays }: {
                       const planR = effectiveReps(row.exId, a.id, row.reps)
                       const planT = effectiveTempo(row.exId, a.id, row.tempo)
                       const act = actual[row.exId]?.[a.id] ?? null
-                      const hasAct = act !== null
+                      const hasAct = act !== null && act.sets.length > 0
+
+                      // Kolory tła: priorytet: pominięte > faktyczne > modyfikacja > brak
+                      const bgColor = skip ? '#FEF2F2' : hasAct ? '#F0FDF4' : mod ? '#1A2E4520' : undefined
+
                       return (
-                        <td key={`${row.exId}-${ci}`} style={{ padding: '0.45rem 0.65rem', textAlign: 'center', borderBottom: `1px solid ${C.grayLight}`, background: skip ? '#FEF2F2' : hasAct ? '#F0FDF4' : mod ? C.navyLight : undefined }}>
+                        <td key={`${row.exId}-${ci}`} style={{ padding: '0.4rem 0.6rem', textAlign: 'center', borderBottom: `1px solid ${C.grayLight}`, verticalAlign: 'middle', background: bgColor }}>
                           {skip ? (
-                            <span style={{ fontFamily: mono, fontSize: '0.62rem', color: C.red }}>pominięte</span>
+                            // CZERWONY — pominięte przez trenera
+                            <span style={{ fontFamily: mono, fontSize: '0.6rem', color: C.red, fontWeight: 700 }}>pominięte</span>
                           ) : hasAct ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-                              <span style={{ fontFamily: mono, fontWeight: 900, fontSize: '0.95rem', color: '#16A34A' }}>
-                                {act.weight !== null ? `${act.weight} kg` : '—'}
-                              </span>
-                              <span style={{ fontFamily: mono, fontSize: '0.58rem', color: '#16A34A' }}>{act.sets} serii</span>
-                              {planW !== null && act.weight !== null && act.weight !== planW && (
-                                <span style={{ fontFamily: mono, fontSize: '0.52rem', color: C.gray }}>plan: {planW} kg</span>
+                            // ZIELONY — faktyczne dane z set_logs
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                              {act.sets.map((s, si) => (
+                                <div key={si} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <span style={{ fontFamily: mono, fontSize: '0.55rem', color: '#16A34A', minWidth: 14 }}>S{s.num}</span>
+                                  <span style={{ fontFamily: mono, fontSize: '0.72rem', fontWeight: 800, color: '#16A34A' }}>
+                                    {s.weight !== null ? `${s.weight} kg` : '—'}
+                                  </span>
+                                  {s.reps !== null && (
+                                    <span style={{ fontFamily: mono, fontSize: '0.55rem', color: '#4ADE80' }}>{s.reps}p</span>
+                                  )}
+                                </div>
+                              ))}
+                              {mod && (
+                                <span style={{ fontFamily: mono, fontSize: '0.5rem', color: C.gold, marginTop: 1 }}>✎ mod.</span>
                               )}
                             </div>
+                          ) : mod ? (
+                            // ZŁOTY — modyfikacja trenera, brak danych treningowych
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                              {planW !== null && (
+                                <span style={{ fontFamily: mono, fontSize: '0.72rem', fontWeight: 800, color: C.gold }}>{planW} kg</span>
+                              )}
+                              <span style={{ fontFamily: mono, fontSize: '0.55rem', color: C.gold }}>
+                                {planS}×{planR || '—'}{planT ? ` ${planT}` : ''}
+                              </span>
+                              <span style={{ fontFamily: mono, fontSize: '0.5rem', color: C.gold }}>✎ mod.</span>
+                            </div>
                           ) : (
+                            // SZARY — plan bazowy, brak danych
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
                               {planW !== null ? (
-                                <span style={{ fontFamily: mono, fontWeight: 900, fontSize: '0.95rem', color: mod ? C.gold : C.gray }}>{planW} kg</span>
+                                <span style={{ fontFamily: mono, fontSize: '0.72rem', fontWeight: 700, color: C.gray }}>{planW} kg</span>
                               ) : (
-                                <span style={{ fontFamily: mono, fontSize: '0.68rem', color: C.grayLight }}>—</span>
+                                <span style={{ fontFamily: mono, fontSize: '0.65rem', color: C.grayLight }}>—</span>
                               )}
-                              <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, whiteSpace: 'nowrap' }}>
+                              <span style={{ fontFamily: mono, fontSize: '0.55rem', color: C.grayLight, whiteSpace: 'nowrap' }}>
                                 {planS}×{planR || '—'}{planT ? ` ${planT}` : ''}
                               </span>
                             </div>
@@ -1513,35 +1539,30 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
     const sessionAthleteMap: Record<number, number> = {}
     for (const s of (sessionsForPlan || [])) sessionAthleteMap[s.id] = s.athlete_id
 
-    // set_logs dla tych sesji
-    type ActualEntry = { weight: number | null; sets: number; repsRange: string }
-    const actualMap: Record<number, Record<number, ActualEntry>> = {} // exId → athleteId → dane
+    // set_logs dla tych sesji — zbieramy wszystkie serie per zawodniczka per ćwiczenie
+    type _ActualSet = { num: number; weight: number | null; reps: number | null }
+    type _ActualEntry = { sets: _ActualSet[] }
+    const actualMap: Record<number, Record<number, _ActualEntry>> = {}
 
     if (sessionIds.length > 0 && allExIds.length > 0) {
       const { data: logs } = await sb
         .from('set_logs')
-        .select('workout_session_id, block_exercise_id, weight, reps_completed, completed, is_warmup')
+        .select('workout_session_id, block_exercise_id, set_number, weight, reps_completed, completed, is_warmup')
         .in('workout_session_id', sessionIds)
         .in('block_exercise_id', allExIds)
-        .eq('completed', true)
         .eq('is_warmup', false)
+        .order('set_number', { ascending: true })
 
       for (const l of (logs || [])) {
         const athleteId = sessionAthleteMap[l.workout_session_id]
         if (!athleteId) continue
         if (!actualMap[l.block_exercise_id]) actualMap[l.block_exercise_id] = {}
-        const prev = actualMap[l.block_exercise_id][athleteId]
-        const w = l.weight ?? null
-        if (!prev) {
-          actualMap[l.block_exercise_id][athleteId] = { weight: w, sets: 1, repsRange: l.reps_completed?.toString() || '—' }
-        } else {
-          // Maksymalny ciężar + liczba serii
-          actualMap[l.block_exercise_id][athleteId] = {
-            weight: w !== null && (prev.weight === null || w > prev.weight) ? w : prev.weight,
-            sets: prev.sets + 1,
-            repsRange: prev.repsRange,
-          }
-        }
+        if (!actualMap[l.block_exercise_id][athleteId]) actualMap[l.block_exercise_id][athleteId] = { sets: [] }
+        actualMap[l.block_exercise_id][athleteId].sets.push({
+          num: l.set_number,
+          weight: l.weight ?? null,
+          reps: l.reps_completed ?? null,
+        })
       }
     }
 
