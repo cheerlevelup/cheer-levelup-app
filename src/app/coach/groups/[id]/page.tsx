@@ -40,7 +40,7 @@ export default async function CoachGroupDetailPage({ params }: Props) {
 
   const athleteIds = athletes.map((a: any) => a.id)
 
-  // Przypisania planów do grupy lub zawodniczek
+  // Aktywne przypisania planów
   const { data: groupAssignments } = await supabase
     .from('athlete_workout_assignments')
     .select('*, plan:workout_plans(*)')
@@ -54,6 +54,20 @@ export default async function CoachGroupDetailPage({ params }: Props) {
     .eq('is_active', true)
 
   const allAssignments = [...(groupAssignments || []), ...(athleteAssignments || [])]
+
+  // Historia wszystkich przypisań (aktywne + archiwalne)
+  const { data: allGroupAssignmentsHistory } = await supabase
+    .from('athlete_workout_assignments')
+    .select('*, plan:workout_plans(*)')
+    .eq('group_id', groupId)
+    .order('created_at', { ascending: false })
+
+  // Wszystkie plany z archiwum
+  const { data: archivedPlans } = await supabase
+    .from('workout_plans')
+    .select('id, name, is_archived, created_at')
+    .eq('is_archived', true)
+    .order('created_at', { ascending: false })
 
   // Pobierz dni treningowe dla wszystkich planów
   let days: any[] = []
@@ -135,6 +149,8 @@ export default async function CoachGroupDetailPage({ params }: Props) {
       wellnessWeek={wellnessWeek}
       feedbacks={feedbacks || []}
       dietLogs={dietLogs || []}
+      assignmentsHistory={allGroupAssignmentsHistory || []}
+      archivedPlans={archivedPlans || []}
     />
   )
 }

@@ -133,7 +133,7 @@ function AssignPlanModal({ athletes, plans, onClose, onAssigned }: {
   )
 }
 
-type Tab = 'plan' | 'wellness' | 'diet' | 'athletes'
+type Tab = 'trening' | 'wellness' | 'diet' | 'athletes'
 
 // ── Wellness helpers ──────────────────────────────────────────────────────────
 
@@ -199,24 +199,66 @@ function getAthleteWellnessSummary(athleteId: number, logs: any[]) {
 
 // ── AthleteEditCard ───────────────────────────────────────────────────────────
 
+type ProfileTab = 'profil' | 'umiejetnosci' | 'kontuzje'
+
+const CHEER_JUMPS = ['Herkie', 'Pike', 'Toe touch', 'Hurdler', 'Spread eagle', 'Double nine', 'Around the world', 'Tuck', 'X jump']
+const DANCE_JUMPS = ['Grand jeté', 'Switch leap', 'Turning jump', 'Stag', 'Cabriole']
+const ACRO_SKILLS = ['Rondad', 'Flik', 'Salto przodem', 'Salto tyłem', 'Arabian', 'Full', 'Double full', 'Layout', 'Tuck salto', 'Pike salto', 'Handspring']
+const DANCE_STYLES = ['Jazz', 'Hip-hop', 'Lyrical', 'Contemporary', 'Pom', 'Cheerleading', 'Balet', 'Taniec nowoczesny']
+
 function AthleteEditCard({ athlete, onSaved }: { athlete: any; onSaved: (updated: any) => void }) {
   const supabase = createClient()
   const [open, setOpen] = useState(false)
-  const [fullName, setFullName] = useState(athlete.full_name || '')
-  const [birthYear, setBirthYear] = useState(athlete.birth_year?.toString() || '')
-  const [phone, setPhone]       = useState(athlete.phone || '')
-  const [position, setPosition] = useState(athlete.position || '')
-  const [height, setHeight]     = useState(athlete.height_cm?.toString() || '')
-  const [bodyWeight, setBodyWeight] = useState(athlete.body_weight_kg?.toString() || '')
-  const [notes, setNotes]       = useState(athlete.notes || '')
-  const [saving, setSaving]     = useState(false)
-  const [saved, setSaved]       = useState(false)
+  const [profileTab, setProfileTab] = useState<ProfileTab>('profil')
 
-  const inp: React.CSSProperties = { width: '100%', minHeight: 38, border: `1.5px solid ${C.grayLight}`, borderRadius: 8, background: C.offWhite, color: C.navy, padding: '0 0.75rem', fontFamily: sans, fontSize: '0.88rem', outline: 'none' }
+  // Profil
+  const [fullName, setFullName]     = useState(athlete.full_name || '')
+  const [birthYear, setBirthYear]   = useState(athlete.birth_year?.toString() || '')
+  const [phone, setPhone]           = useState(athlete.phone || '')
+  const [position, setPosition]     = useState(athlete.position || '')
+  const [height, setHeight]         = useState(athlete.height_cm?.toString() || '')
+  const [bodyWeight, setBodyWeight] = useState(athlete.body_weight_kg?.toString() || '')
+  const [notes, setNotes]           = useState(athlete.notes || '')
+
+  // Umiejętności (trzymane w skills jsonb)
+  const initSkills = athlete.skills || {}
+  const [pirCount, setPirCount]     = useState(initSkills.pirouettes?.toString() || '')
+  const [pirNotes, setPirNotes]     = useState(initSkills.pirouettes_notes || '')
+  const [cheerJumps, setCheerJumps] = useState<string[]>(initSkills.cheer_jumps || [])
+  const [danceJumps, setDanceJumps] = useState<string[]>(initSkills.dance_jumps || [])
+  const [acroSkills, setAcroSkills] = useState<string[]>(initSkills.acro_skills || [])
+  const [danceStyles, setDanceStyles] = useState<string[]>(initSkills.dance_styles || [])
+  const [stunts, setStunts]         = useState(initSkills.stunts || '')
+  const [pyramids, setPyramids]     = useState(initSkills.pyramids || '')
+  const [skillsNotes, setSkillsNotes] = useState(initSkills.notes || '')
+
+  // Kontuzje
+  const [injuries, setInjuries]     = useState<{date: string; type: string; status: string; note: string}[]>(athlete.injuries || [])
+
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved]   = useState(false)
+
+  const inp: React.CSSProperties = { width: '100%', minHeight: 36, border: `1.5px solid ${C.grayLight}`, borderRadius: 8, background: C.offWhite, color: C.navy, padding: '0 0.75rem', fontFamily: sans, fontSize: '0.86rem', outline: 'none' }
   const lbl: React.CSSProperties = { fontFamily: mono, fontSize: '0.58rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4, fontWeight: 700 }
+
+  function toggleArr(arr: string[], setArr: (v: string[]) => void, val: string) {
+    setArr(arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val])
+  }
+
+  function addInjury() {
+    setInjuries(prev => [...prev, { date: new Date().toISOString().split('T')[0], type: '', status: 'aktywna', note: '' }])
+  }
 
   async function handleSave() {
     setSaving(true)
+    const skillsPayload = {
+      pirouettes: pirCount ? parseInt(pirCount) : null,
+      pirouettes_notes: pirNotes || null,
+      cheer_jumps: cheerJumps, dance_jumps: danceJumps,
+      acro_skills: acroSkills, dance_styles: danceStyles,
+      stunts: stunts || null, pyramids: pyramids || null,
+      notes: skillsNotes || null,
+    }
     const { data, error } = await supabase.from('athletes').update({
       full_name: fullName.trim(),
       birth_year: birthYear ? parseInt(birthYear) : null,
@@ -225,24 +267,43 @@ function AthleteEditCard({ athlete, onSaved }: { athlete: any; onSaved: (updated
       height_cm: height ? parseFloat(height) : null,
       body_weight_kg: bodyWeight ? parseFloat(bodyWeight) : null,
       notes: notes.trim() || null,
+      skills: skillsPayload,
+      injuries,
     }).eq('id', athlete.id).select().single()
     setSaving(false)
     if (!error && data) { setSaved(true); onSaved(data); setTimeout(() => setSaved(false), 2000) }
   }
 
+  const chips = (options: string[], selected: string[], setSelected: (v: string[]) => void) => (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 4 }}>
+      {options.map(o => {
+        const on = selected.includes(o)
+        return (
+          <button key={o} onClick={() => toggleArr(selected, setSelected, o)} style={{ borderRadius: 7, border: `1.5px solid ${on ? C.gold : C.grayLight}`, background: on ? C.navy : C.offWhite, color: on ? C.gold : C.navy, padding: '3px 10px', fontFamily: mono, fontSize: '0.65rem', fontWeight: on ? 800 : 600, cursor: 'pointer' }}>
+            {o}
+          </button>
+        )
+      })}
+    </div>
+  )
+
   return (
     <div style={{ border: `1.5px solid ${C.grayLight}`, borderRadius: 12, background: C.white, overflow: 'hidden', boxShadow: '0 2px 8px rgba(13,27,42,0.04)' }}>
       {/* Header */}
       <button onClick={() => setOpen(v => !v)} style={{ width: '100%', background: 'none', border: 'none', padding: '0.875rem 1.25rem', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', textAlign: 'left' }}>
-        <div style={{ width: 40, height: 40, borderRadius: '50%', background: C.navy, color: C.gold, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: mono, fontWeight: 800, fontSize: '1rem', flexShrink: 0 }}>
+        <div style={{ width: 42, height: 42, borderRadius: '50%', background: C.navy, color: C.gold, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: mono, fontWeight: 800, fontSize: '1.1rem', flexShrink: 0 }}>
           {fullName.charAt(0).toUpperCase()}
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 800, fontSize: '0.95rem', color: C.navy }}>{fullName}</div>
-          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, marginTop: 2 }}>
-            {birthYear && `ur. ${birthYear}`}
-            {position && ` · ${position}`}
-            {height && ` · ${height} cm`}
+          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, marginTop: 2, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {birthYear && <span>ur. {birthYear}</span>}
+            {position && <span>· {position}</span>}
+            {height && <span>· {height} cm</span>}
+            {initSkills.pirouettes && <span style={{ color: C.gold }}>· {initSkills.pirouettes} piruety</span>}
+            {injuries.filter(inj => inj.status === 'aktywna').length > 0 && (
+              <span style={{ color: C.red }}>· ⚠️ {injuries.filter(inj => inj.status === 'aktywna').length} aktywna kontuzja</span>
+            )}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -251,44 +312,134 @@ function AthleteEditCard({ athlete, onSaved }: { athlete: any; onSaved: (updated
         </div>
       </button>
 
-      {/* Edit form */}
       {open && (
-        <div style={{ padding: '0 1.25rem 1.25rem', borderTop: `1.5px solid ${C.grayLight}` }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: '1rem' }}>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={lbl}>Imię i nazwisko</label>
-              <input value={fullName} onChange={e => setFullName(e.target.value)} style={inp} />
-            </div>
-            <div>
-              <label style={lbl}>Rok urodzenia</label>
-              <input type="number" value={birthYear} onChange={e => setBirthYear(e.target.value)} placeholder="np. 2005" style={inp} />
-            </div>
-            <div>
-              <label style={lbl}>Telefon</label>
-              <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+48 000 000 000" style={inp} />
-            </div>
-            <div>
-              <label style={lbl}>Pozycja / rola</label>
-              <input value={position} onChange={e => setPosition(e.target.value)} placeholder="np. flyer, baza" style={inp} />
-            </div>
-            <div>
-              <label style={lbl}>Wzrost (cm)</label>
-              <input type="number" value={height} onChange={e => setHeight(e.target.value)} placeholder="np. 165" style={inp} />
-            </div>
-            <div>
-              <label style={lbl}>Masa ciała (kg)</label>
-              <input type="number" value={bodyWeight} onChange={e => setBodyWeight(e.target.value)} placeholder="np. 55" style={inp} />
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={lbl}>Notatki trenerskie</label>
-              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Kontuzje, uwagi, cele..." style={{ ...inp, minHeight: 64, padding: '0.5rem 0.75rem', resize: 'none', display: 'block' }} />
-            </div>
+        <div style={{ borderTop: `1.5px solid ${C.grayLight}` }}>
+          {/* Sub-tabs */}
+          <div style={{ display: 'flex', borderBottom: `1.5px solid ${C.grayLight}` }}>
+            {([{ id: 'profil', label: '👤 Profil' }, { id: 'umiejetnosci', label: '⭐ Umiejętności' }, { id: 'kontuzje', label: '🩹 Kontuzje' }] as { id: ProfileTab; label: string }[]).map(t => (
+              <button key={t.id} onClick={() => setProfileTab(t.id)} style={{ flex: 1, padding: '0.6rem', border: 'none', background: profileTab === t.id ? C.white : C.offWhite, color: profileTab === t.id ? C.navy : C.gray, fontWeight: profileTab === t.id ? 800 : 600, fontFamily: mono, fontSize: '0.65rem', borderBottom: profileTab === t.id ? `2px solid ${C.gold}` : '2px solid transparent', cursor: 'pointer' }}>
+                {t.label}
+              </button>
+            ))}
           </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: '0.875rem', justifyContent: 'flex-end' }}>
-            <button onClick={() => setOpen(false)} style={{ padding: '0.55rem 0.875rem', borderRadius: 8, border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.gray, fontWeight: 700, cursor: 'pointer' }}>Anuluj</button>
-            <button onClick={handleSave} disabled={saving || !fullName.trim()} style={{ padding: '0.55rem 1rem', borderRadius: 8, border: 'none', background: saved ? C.green : C.navy, color: saved ? C.white : C.gold, fontWeight: 800, cursor: 'pointer', minWidth: 90 }}>
-              {saving ? 'Zapisuję...' : saved ? '✓ Zapisano' : 'Zapisz'}
-            </button>
+
+          <div style={{ padding: '1rem 1.25rem 1.25rem' }}>
+            {/* ── Profil ── */}
+            {profileTab === 'profil' && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={lbl}>Imię i nazwisko</label>
+                  <input value={fullName} onChange={e => setFullName(e.target.value)} style={inp} />
+                </div>
+                <div><label style={lbl}>Rok urodzenia</label><input type="number" value={birthYear} onChange={e => setBirthYear(e.target.value)} placeholder="2005" style={inp} /></div>
+                <div><label style={lbl}>Telefon</label><input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+48 000 000 000" style={inp} /></div>
+                <div><label style={lbl}>Pozycja / rola</label><input value={position} onChange={e => setPosition(e.target.value)} placeholder="flyer, baza, back spot..." style={inp} /></div>
+                <div><label style={lbl}>Wzrost (cm)</label><input type="number" value={height} onChange={e => setHeight(e.target.value)} placeholder="165" style={inp} /></div>
+                <div><label style={lbl}>Masa ciała (kg)</label><input type="number" value={bodyWeight} onChange={e => setBodyWeight(e.target.value)} placeholder="55" style={inp} /></div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={lbl}>Notatki trenerskie</label>
+                  <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Uwagi ogólne, cele, dyspozycje..." style={{ ...inp, minHeight: 60, padding: '0.5rem 0.75rem', resize: 'none', display: 'block' }} />
+                </div>
+              </div>
+            )}
+
+            {/* ── Umiejętności ── */}
+            {profileTab === 'umiejetnosci' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div>
+                  <div style={{ ...lbl, marginBottom: 8 }}>🌀 Piruety</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 8 }}>
+                    <div>
+                      <label style={{ ...lbl, fontSize: '0.55rem' }}>Ilość</label>
+                      <input type="number" value={pirCount} onChange={e => setPirCount(e.target.value)} placeholder="0" min="0" max="10" style={inp} />
+                    </div>
+                    <div>
+                      <label style={{ ...lbl, fontSize: '0.55rem' }}>Uwagi</label>
+                      <input value={pirNotes} onChange={e => setPirNotes(e.target.value)} placeholder="np. tylko w prawo, praca nad balansem..." style={inp} />
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <div style={{ ...lbl, marginBottom: 4 }}>🤸 Skoki cheer</div>
+                  {chips(CHEER_JUMPS, cheerJumps, setCheerJumps)}
+                </div>
+                <div>
+                  <div style={{ ...lbl, marginBottom: 4 }}>💃 Skoki dance</div>
+                  {chips(DANCE_JUMPS, danceJumps, setDanceJumps)}
+                </div>
+                <div>
+                  <div style={{ ...lbl, marginBottom: 4 }}>🎪 Elementy akrobatyczne</div>
+                  {chips(ACRO_SKILLS, acroSkills, setAcroSkills)}
+                </div>
+                <div>
+                  <div style={{ ...lbl, marginBottom: 4 }}>🎵 Style taneczne</div>
+                  {chips(DANCE_STYLES, danceStyles, setDanceStyles)}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <div>
+                    <label style={lbl}>Stunty (opis)</label>
+                    <textarea value={stunts} onChange={e => setStunts(e.target.value)} rows={2} placeholder="np. lib, scorpion, full up..." style={{ ...inp, minHeight: 56, padding: '0.5rem 0.75rem', resize: 'none', display: 'block' }} />
+                  </div>
+                  <div>
+                    <label style={lbl}>Piramidy (opis)</label>
+                    <textarea value={pyramids} onChange={e => setPyramids(e.target.value)} rows={2} placeholder="np. 2-2-1, pełne wrzuty..." style={{ ...inp, minHeight: 56, padding: '0.5rem 0.75rem', resize: 'none', display: 'block' }} />
+                  </div>
+                </div>
+                <div>
+                  <label style={lbl}>Dodatkowe uwagi do umiejętności</label>
+                  <textarea value={skillsNotes} onChange={e => setSkillsNotes(e.target.value)} rows={2} placeholder="Inne elementy, cele treningowe..." style={{ ...inp, minHeight: 56, padding: '0.5rem 0.75rem', resize: 'none', display: 'block' }} />
+                </div>
+              </div>
+            )}
+
+            {/* ── Kontuzje ── */}
+            {profileTab === 'kontuzje' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {injuries.length === 0 && (
+                  <div style={{ fontFamily: mono, fontSize: '0.72rem', color: C.gray, textAlign: 'center', padding: '1rem' }}>Brak zapisanych kontuzji</div>
+                )}
+                {injuries.map((inj, i) => (
+                  <div key={i} style={{ border: `1.5px solid ${inj.status === 'aktywna' ? C.red : C.grayLight}`, borderRadius: 10, padding: '0.75rem', background: inj.status === 'aktywna' ? '#FFF5F5' : C.offWhite }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, marginBottom: 6 }}>
+                      <div>
+                        <label style={lbl}>Data</label>
+                        <input type="date" value={inj.date} onChange={e => setInjuries(prev => prev.map((x, j) => j === i ? { ...x, date: e.target.value } : x))} style={inp} />
+                      </div>
+                      <div>
+                        <label style={lbl}>Status</label>
+                        <select value={inj.status} onChange={e => setInjuries(prev => prev.map((x, j) => j === i ? { ...x, status: e.target.value } : x))} style={{ ...inp, appearance: 'none' }}>
+                          <option value="aktywna">Aktywna</option>
+                          <option value="w leczeniu">W leczeniu</option>
+                          <option value="wyleczona">Wyleczona</option>
+                          <option value="przewlekla">Przewlekła</option>
+                        </select>
+                      </div>
+                      <button onClick={() => setInjuries(prev => prev.filter((_, j) => j !== i))} style={{ border: 'none', background: 'transparent', color: C.red, cursor: 'pointer', fontSize: '1rem', alignSelf: 'flex-end', paddingBottom: 4 }}>✕</button>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: 8 }}>
+                      <div>
+                        <label style={lbl}>Rodzaj / lokalizacja</label>
+                        <input value={inj.type} onChange={e => setInjuries(prev => prev.map((x, j) => j === i ? { ...x, type: e.target.value } : x))} placeholder="np. naciągnięcie kostki, ból kolana..." style={inp} />
+                      </div>
+                      <div>
+                        <label style={lbl}>Notatka</label>
+                        <input value={inj.note} onChange={e => setInjuries(prev => prev.map((x, j) => j === i ? { ...x, note: e.target.value } : x))} placeholder="Leczenie, ograniczenia, uwagi..." style={inp} />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <button onClick={addInjury} style={{ border: `1.5px dashed ${C.grayLight}`, background: C.white, color: C.gray, borderRadius: 10, padding: '0.6rem', fontFamily: mono, fontSize: '0.68rem', cursor: 'pointer', fontWeight: 700 }}>
+                  + Dodaj kontuzję
+                </button>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, marginTop: '1rem', justifyContent: 'flex-end' }}>
+              <button onClick={() => setOpen(false)} style={{ padding: '0.55rem 0.875rem', borderRadius: 8, border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.gray, fontWeight: 700, cursor: 'pointer' }}>Zamknij</button>
+              <button onClick={handleSave} disabled={saving || !fullName.trim()} style={{ padding: '0.55rem 1rem', borderRadius: 8, border: 'none', background: saved ? C.green : C.navy, color: saved ? C.white : C.gold, fontWeight: 800, cursor: 'pointer', minWidth: 90 }}>
+                {saving ? 'Zapisuję...' : saved ? '✓ Zapisano' : 'Zapisz'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -413,12 +564,12 @@ function filterByDays(logs: any[], days: number, dateField = 'date') {
   })
 }
 
-export default function CoachGroupDetailClient({ group, athletes, assignments, days, sessions, plans, wellnessLogs = [], wellnessWeek = [], feedbacks = [], dietLogs = [] }: any) {
+export default function CoachGroupDetailClient({ group, athletes, assignments, days, sessions, plans, wellnessLogs = [], wellnessWeek = [], feedbacks = [], dietLogs = [], assignmentsHistory = [], archivedPlans = [] }: any) {
   const router = useRouter()
   const supabase = createClient()
   const [showAssignModal, setShowAssignModal] = useState(false)
   const [assignedMsg, setAssignedMsg] = useState('')
-  const [activeTab, setActiveTab] = useState<Tab>('plan')
+  const [activeTab, setActiveTab] = useState<Tab>('trening')
   const [moduleConfig, setModuleConfig] = useState<'wellness' | 'diet' | null>(null)
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null)
   const [wellnessPeriod, setWellnessPeriod] = useState(14)
@@ -473,29 +624,17 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
       <div style={{ minHeight: '100vh', background: C.offWhite, fontFamily: sans, color: C.navy }}>
         <header style={{ background: C.navy, padding: '1rem 1.25rem 1.35rem', position: 'sticky', top: 0, zIndex: 10 }}>
           <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: '0.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <button onClick={() => router.push('/coach')} style={{ border: 'none', background: C.navyLight, color: C.gray, borderRadius: 10, padding: '0.55rem 0.75rem', fontFamily: mono, fontSize: '0.68rem', fontWeight: 700 }}>← Panel</button>
               <div style={{ flex: 1 }}>
-                <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 2 }}>Grupa</div>
+                <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 2 }}>Grupa · {athletes.length} zawodniczek</div>
                 <h1 style={{ color: C.white, fontSize: '1.25rem', fontWeight: 800 }}>{group.name}</h1>
+                <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray, marginTop: 3 }}>
+                  Trener motoryczny: <span style={{ color: C.white, fontWeight: 700 }}>{group.trainer_name || 'Urszula Papka'}</span>
+                  {currentPlan && <span style={{ marginLeft: 12, color: C.gold }}>📋 {currentPlan.name}</span>}
+                  {assignedMsg && <span style={{ marginLeft: 12, color: C.green }}>✓ {assignedMsg}</span>}
+                </div>
               </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                {assignments.length > 1 && (
-                  <select value={selectedPlanId ?? ''} onChange={e => setSelectedPlanId(e.target.value ? parseInt(e.target.value) : null)}
-                    style={{ border: `1.5px solid ${C.navyBorder}`, background: C.navyLight, color: C.white, borderRadius: 9, padding: '0.5rem 0.65rem', fontFamily: "'Space Mono',monospace", fontSize: '0.7rem', outline: 'none' }}>
-                    <option value="">Aktualny plan</option>
-                    {assignments.map((a: any) => <option key={a.plan_id} value={a.plan_id}>{a.plan?.name}</option>)}
-                  </select>
-                )}
-                <button onClick={() => setShowAssignModal(true)} style={{ border: 'none', background: C.gold, color: C.navy, borderRadius: 10, padding: '0.65rem 0.875rem', fontWeight: 800, fontSize: '0.82rem', flexShrink: 0 }}>
-                  + Przypisz plan
-                </button>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 16 }}>
-              <span style={{ fontFamily: mono, fontSize: '0.7rem', color: C.gray }}>{athletes.length} zawodniczek</span>
-              {currentPlan && <span style={{ fontFamily: mono, fontSize: '0.7rem', color: C.gold }}>📋 {currentPlan.name}</span>}
-              {assignedMsg && <span style={{ fontFamily: mono, fontSize: '0.7rem', color: C.green }}>✓ {assignedMsg}</span>}
             </div>
           </div>
         </header>
@@ -504,7 +643,7 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
         <div style={{ background: C.navyLight, borderBottom: `1.5px solid ${C.navyBorder}` }}>
           <div style={{ maxWidth: 1100, margin: '0 auto', display: 'flex', gap: 0 }}>
             {([
-              { id: 'plan',     label: '📋 Plan' },
+              { id: 'trening',  label: '🏋️ Trening' },
               { id: 'wellness', label: '🩺 Wellness' },
               { id: 'diet',     label: '🥗 Dieta' },
               { id: 'athletes', label: '👤 Zawodniczki' },
@@ -690,26 +829,49 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
             </div>
           )}
 
-          {/* ── Plan tab ── */}
-          {activeTab === 'plan' && athletes.length === 0 ? (
+          {/* ══ TRENING TAB ═══════════════════════════════════════════════════════ */}
+          {activeTab === 'trening' && athletes.length === 0 && (
             <Card><div style={{ padding: '2rem', textAlign: 'center', color: C.gray }}>Brak zawodniczek w tej grupie.</div></Card>
-          ) : activeTab === 'plan' && (
+          )}
+          {activeTab === 'trening' && athletes.length > 0 && (
             <>
-              {assignments.length > 0 && (
-                <Card style={{ marginBottom: '1.25rem' }}>
-                  <div style={{ padding: '1rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                    <div>
-                      <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 3 }}>Realizacja planu</div>
-                      <div style={{ fontWeight: 800, color: C.navy }}>{currentPlan?.name} · {activePlanDays.length} treningów</div>
-                    </div>
+              {/* ── Akcje planu ── */}
+              <Card style={{ marginBottom: '1.25rem' }}>
+                <div style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 2 }}>Aktualny plan</div>
+                    <div style={{ fontWeight: 800, color: C.navy, fontSize: '0.95rem' }}>{currentPlan?.name ?? '— brak przypisanego planu —'}</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {assignments.length > 1 && (
+                      <select value={selectedPlanId ?? ''} onChange={e => setSelectedPlanId(e.target.value ? parseInt(e.target.value) : null)}
+                        style={{ border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.navy, borderRadius: 8, padding: '0.45rem 0.65rem', fontFamily: mono, fontSize: '0.7rem', outline: 'none' }}>
+                        <option value="">Aktualny</option>
+                        {assignments.map((a: any) => <option key={a.plan_id} value={a.plan_id}>{a.plan?.name}</option>)}
+                      </select>
+                    )}
                     {currentPlan && !currentPlan.is_archived && (
-                      <button onClick={() => archivePlan(currentPlan.id)} style={{ border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.gray, borderRadius: 8, padding: '0.35rem 0.7rem', fontFamily: mono, fontSize: '0.62rem', fontWeight: 700, flexShrink: 0 }}>
-                        📦 Archiwizuj plan
+                      <button onClick={() => router.push(`/coach/plans/${currentPlan.id}`)} style={{ border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.navy, borderRadius: 8, padding: '0.45rem 0.75rem', fontFamily: mono, fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}>
+                        ✏️ Edytuj plan
                       </button>
                     )}
-                    {currentPlan?.is_archived && (
-                      <span style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, background: C.offWhite, border: `1.5px solid ${C.grayLight}`, borderRadius: 8, padding: '0.35rem 0.7rem' }}>📦 Zarchiwizowany</span>
+                    {currentPlan && !currentPlan.is_archived && (
+                      <button onClick={() => archivePlan(currentPlan.id)} style={{ border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.gray, borderRadius: 8, padding: '0.45rem 0.75rem', fontFamily: mono, fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}>
+                        📦 Archiwizuj
+                      </button>
                     )}
+                    <button onClick={() => setShowAssignModal(true)} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 8, padding: '0.45rem 0.85rem', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer' }}>
+                      + Przypisz plan
+                    </button>
+                  </div>
+                </div>
+              </Card>
+
+              {assignments.length > 0 && (
+                <Card style={{ marginBottom: '1.25rem' }}>
+                  <div style={{ padding: '0.875rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}` }}>
+                    <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 3 }}>Realizacja planu</div>
+                    <div style={{ fontWeight: 800, color: C.navy }}>{currentPlan?.name} · {activePlanDays.length} treningów</div>
                   </div>
                   {/* ── TABELA 1: Realizacja planu (treningi) ── */}
                   <div style={{ overflowX: 'auto' }}>
@@ -897,28 +1059,51 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                 style={{ marginBottom: '1.25rem' }}
               />
 
-              <Card>
-                <div style={{ padding: '1rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}` }}>
-                  <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Zawodniczki</div>
-                </div>
-                {athletes.map((athlete: any, i: number) => {
-                  const progress = getAthleteProgress(athlete.id)
-                  const pct = progress ? Math.round((progress.done / progress.total) * 100) : 0
-                  return (
-                    <button key={athlete.id} onClick={() => router.push(`/coach/athletes/${athlete.id}`)}
-                      style={{ width: '100%', background: 'none', border: 'none', borderBottom: i < athletes.length - 1 ? `1.5px solid ${C.grayLight}` : 'none', padding: '0.875rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', textAlign: 'left' }}>
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: '0.92rem', color: C.navy }}>{athlete.full_name}</div>
-                        {athlete.birth_year && <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray, marginTop: 2 }}>ur. {athlete.birth_year}</div>}
+              {/* Historia przypisanych planów */}
+              {assignmentsHistory.length > 0 && (
+                <Card style={{ marginBottom: '1.25rem' }}>
+                  <div style={{ padding: '0.875rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}` }}>
+                    <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Historia przypisanych planów</div>
+                  </div>
+                  {assignmentsHistory.map((a: any, i: number) => (
+                    <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0.65rem 1.25rem', borderBottom: i < assignmentsHistory.length - 1 ? `1px solid ${C.grayLight}` : 'none' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 700, color: C.navy, fontSize: '0.88rem' }}>{a.plan?.name ?? '—'}</div>
+                        <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, marginTop: 2 }}>
+                          {new Date(a.created_at).toLocaleDateString('pl-PL')}
+                          {a.is_active ? <span style={{ marginLeft: 8, color: C.green, fontWeight: 700 }}>● aktywny</span> : <span style={{ marginLeft: 8, color: C.gray }}>zakończony</span>}
+                          {a.plan?.is_archived && <span style={{ marginLeft: 8, color: C.gray }}>📦 zarchiwizowany</span>}
+                        </div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        {progress && <div style={{ fontFamily: mono, fontSize: '0.72rem', fontWeight: 800, color: pct === 100 ? C.green : C.navy }}>{pct}%</div>}
-                        <span style={{ color: C.gray }}>›</span>
+                      {a.plan && !a.plan.is_archived && (
+                        <button onClick={() => router.push(`/coach/plans/${a.plan_id}`)} style={{ border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.navy, borderRadius: 7, padding: '0.3rem 0.6rem', fontFamily: mono, fontSize: '0.62rem', fontWeight: 700, cursor: 'pointer' }}>
+                          Edytuj →
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </Card>
+              )}
+
+              {/* Archiwum planów */}
+              {archivedPlans.length > 0 && (
+                <Card>
+                  <div style={{ padding: '0.875rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}` }}>
+                    <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase' }}>📦 Archiwum planów</div>
+                  </div>
+                  {archivedPlans.map((plan: any, i: number) => (
+                    <div key={plan.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0.65rem 1.25rem', borderBottom: i < archivedPlans.length - 1 ? `1px solid ${C.grayLight}` : 'none' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, color: C.gray, fontSize: '0.88rem' }}>{plan.name}</div>
+                        <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.grayLight, marginTop: 2 }}>
+                          Utworzony {new Date(plan.created_at).toLocaleDateString('pl-PL')}
+                        </div>
                       </div>
-                    </button>
-                  )
-                })}
-              </Card>
+                      <span style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, background: C.offWhite, border: `1px solid ${C.grayLight}`, borderRadius: 6, padding: '2px 8px' }}>zarchiwizowany</span>
+                    </div>
+                  ))}
+                </Card>
+              )}
             </>
           )}
         </main>
