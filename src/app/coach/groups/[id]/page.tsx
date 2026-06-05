@@ -122,7 +122,7 @@ export default async function CoachGroupDetailPage({ params }: Props) {
   // Feedback po sesjach (RPE, nastrój)
   const { data: feedbacks } = await supabase
     .from('post_session_feedback')
-    .select('athlete_id, session_rpe, created_at, workout_session_id')
+    .select('*, workout_session:workout_sessions(workout_day_id, date_completed)')
     .in('athlete_id', athleteIds)
     .gte('created_at', thirtyDaysAgo.toISOString())
     .order('created_at', { ascending: false })

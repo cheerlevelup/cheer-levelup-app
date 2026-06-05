@@ -133,6 +133,357 @@ function AssignPlanModal({ athletes, plans, onClose, onAssigned }: {
   )
 }
 
+// ── SessionReportModal ────────────────────────────────────────────────────────
+
+function SessionReportModal({ session, feedback, athleteName, dayName, onClose }: {
+  session: any; feedback: any | null; athleteName: string; dayName: string; onClose: () => void
+}) {
+  const dateStr = session.date_completed
+    ? new Date(session.date_completed).toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' })
+    : '—'
+
+  const rpeColor = (rpe: number) => rpe >= 9 ? C.red : rpe >= 7 ? '#F97316' : rpe >= 5 ? C.gold : C.green
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(13,27,42,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: sans }} onClick={onClose}>
+      <div style={{ width: '100%', maxWidth: 480, background: C.white, borderRadius: 18, border: `1.5px solid ${C.grayLight}`, maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div style={{ background: C.navy, padding: '1rem 1.25rem', borderRadius: '16px 16px 0 0' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 3 }}>Raport z treningu</div>
+          <div style={{ color: C.white, fontWeight: 800, fontSize: '1.05rem' }}>{dayName}</div>
+          <div style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray, marginTop: 3 }}>
+            {athleteName} · {dateStr}
+          </div>
+        </div>
+        <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* Status */}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ flex: 1, background: C.green + '18', border: `1.5px solid ${C.green}`, borderRadius: 10, padding: '0.7rem', textAlign: 'center' }}>
+              <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.green, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 3 }}>Status</div>
+              <div style={{ fontFamily: mono, fontWeight: 800, color: C.green }}>✓ Ukończony</div>
+            </div>
+            {feedback?.session_rpe != null && (
+              <div style={{ flex: 1, background: rpeColor(feedback.session_rpe) + '18', border: `1.5px solid ${rpeColor(feedback.session_rpe)}`, borderRadius: 10, padding: '0.7rem', textAlign: 'center' }}>
+                <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 3 }}>RPE</div>
+                <div style={{ fontFamily: mono, fontWeight: 900, fontSize: '1.4rem', color: rpeColor(feedback.session_rpe) }}>{feedback.session_rpe}</div>
+              </div>
+            )}
+            {feedback?.mood_after != null && (
+              <div style={{ flex: 1, background: C.offWhite, border: `1.5px solid ${C.grayLight}`, borderRadius: 10, padding: '0.7rem', textAlign: 'center' }}>
+                <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 3 }}>Nastrój</div>
+                <div style={{ fontFamily: mono, fontWeight: 800, fontSize: '1.1rem', color: C.navy }}>{feedback.mood_after}/10</div>
+              </div>
+            )}
+            {feedback?.energy_level != null && (
+              <div style={{ flex: 1, background: C.offWhite, border: `1.5px solid ${C.grayLight}`, borderRadius: 10, padding: '0.7rem', textAlign: 'center' }}>
+                <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 3 }}>Energia</div>
+                <div style={{ fontFamily: mono, fontWeight: 800, fontSize: '1.1rem', color: C.navy }}>{feedback.energy_level}/10</div>
+              </div>
+            )}
+          </div>
+
+          {feedback?.what_went_well && (
+            <div style={{ background: '#F0FDF4', border: `1.5px solid ${C.green}`, borderRadius: 10, padding: '0.875rem' }}>
+              <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.green, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 5 }}>Co poszło dobrze</div>
+              <div style={{ fontSize: '0.88rem', color: C.navy, lineHeight: 1.5, fontStyle: 'italic' }}>&ldquo;{feedback.what_went_well}&rdquo;</div>
+            </div>
+          )}
+          {feedback?.what_to_improve && (
+            <div style={{ background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 10, padding: '0.875rem' }}>
+              <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#92400E', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 5 }}>Do poprawy</div>
+              <div style={{ fontSize: '0.88rem', color: C.navy, lineHeight: 1.5, fontStyle: 'italic' }}>&ldquo;{feedback.what_to_improve}&rdquo;</div>
+            </div>
+          )}
+          {feedback?.notes && (
+            <div style={{ background: C.offWhite, border: `1.5px solid ${C.grayLight}`, borderRadius: 10, padding: '0.875rem' }}>
+              <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 5 }}>Notatki</div>
+              <div style={{ fontSize: '0.88rem', color: C.navy, lineHeight: 1.5 }}>{feedback.notes}</div>
+            </div>
+          )}
+          {!feedback && (
+            <div style={{ textAlign: 'center', padding: '1rem', fontFamily: mono, fontSize: '0.72rem', color: C.gray }}>
+              Brak szczegółowego feedbacku po sesji.
+            </div>
+          )}
+          <button onClick={onClose} style={{ padding: '0.75rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 10, fontWeight: 800, fontFamily: sans }}>
+            Zamknij
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Wellness read-only helpers ────────────────────────────────────────────────
+
+const WC = {
+  sleepQ:   ['Brak regenerującego snu','Bardzo słaby sen','Słaby sen','Sen raczej płytki','Poniżej optymalnie','Średnia jakość snu','Całkiem dobry sen','Dobry sen','Bardzo dobry sen','Świetna regeneracja','Maksymalnie regenerujący sen'],
+  readiness:['Bardzo duże zmęczenie','Ciało prosi o spokojniejszy start','Niska gotowość','Raczej zmęczona','Lekko poniżej normy','Normalnie','Całkiem wypoczęta','Dobra gotowość','Bardzo wypoczęta','Świetna gotowość','Pełna gotowość'],
+  energy:   ['Brak energii','Bardzo niska energia','Trzeba oszczędzać baterie','Energia poniżej normy','Trochę ciężki start','Stabilnie','Energia w porządku','Dobra energia','Bardzo dobra energia','Wysoka energia','Pełna moc'],
+  stress:   ['Pełny spokój','Bardzo niski stres','Spokojna głowa','Lekki stres','Do ogarnięcia','Umiarkowanie','Podwyższone napięcie','Warto obserwować','Dużo stresu','Bardzo duże obciążenie','Alarmowo wysoki stres'],
+  soreness: ['Brak zakwasów','Ledwo wyczuwalne','Lekkie zakwasy','Czuć mięśnie, ale bez problemu','Umiarkowane zakwasy','Wyraźne zakwasy','Mogą wpływać na ruch','Mocne zakwasy','Ciężko wejść w trening','Bardzo mocne obciążenie mięśni','Regeneracja priorytetem'],
+  pain:     ['Brak bólu','Minimalny sygnał','Lekki dyskomfort','Do obserwacji','Umiarkowany ból','Wyraźny ból','Może ograniczać trening','Ważne dla trenera','Mocno ogranicza','Bardzo silny ból','Alarmowo — nie ignorować'],
+}
+
+function wScaleColor(v: number, max: number, inverse: boolean) {
+  const pct = (v / max) * 100
+  const risk = inverse ? pct : 100 - pct
+  if (risk <= 30) return C.green
+  if (risk <= 55) return C.gold
+  if (risk <= 75) return '#F97316'
+  return C.red
+}
+function wComment(v: number, arr: string[]) { return arr[Math.max(0, Math.min(arr.length - 1, Math.round(v)))] }
+function readinessEmoji(v: number) { return v <= 1 ? '😴' : v <= 3 ? '😪' : v <= 5 ? '😐' : v <= 8 ? '😊' : '⚡' }
+
+function WScale({ label, emoji, value, max, unit, comments, inverse }: { label: string; emoji?: string; value: number | null | undefined; max: number; unit?: string; comments?: string[]; inverse?: boolean }) {
+  if (value == null) return null
+  const pct = Math.min(100, Math.max(0, (value / max) * 100))
+  const color = wScaleColor(value, max, !!inverse)
+  const comment = comments ? wComment(value, comments) : null
+  return (
+    <div style={{ marginBottom: '0.875rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 800, color: C.navy, fontSize: '0.9rem' }}>
+          {emoji && <span style={{ fontSize: '1.15rem' }}>{emoji}</span>}
+          <span>{label}</span>
+        </div>
+        <span style={{ fontFamily: mono, fontWeight: 900, color, fontSize: '1rem' }}>{value}{unit}</span>
+      </div>
+      <div style={{ height: 8, background: C.grayLight, borderRadius: 4, overflow: 'hidden', marginBottom: comment ? 4 : 0 }}>
+        <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 4 }} />
+      </div>
+      {comment && <div style={{ fontSize: '0.72rem', fontWeight: 700, color, textAlign: 'center', marginTop: 3 }}>{comment}</div>}
+    </div>
+  )
+}
+
+const motivationLabels: Record<number, { label: string; emoji: string }> = { 1: { label: 'Zerowa', emoji: '😴' }, 2: { label: 'Niska', emoji: '🙄' }, 3: { label: 'Średnia', emoji: '😐' }, 4: { label: 'Wysoka', emoji: '💪' }, 5: { label: 'Ogień!', emoji: '🔥' } }
+const feelingLabels: Record<string, string> = { swietnie: '🤩 Świetnie', dobrze: '😊 Dobrze', ok: '😐 OK', zmeczona: '😓 Zmęczona', slabo: '😞 Słabo' }
+const goalLabels: Record<string, string> = { tak: '✅ Zrealizowała', czesciowo: '⚡ Częściowo', nie: '❌ Nie', brak: '— Brak planu' }
+const cycleColors: Record<string, { color: string; bg: string }> = { menstruacja: { color: '#EF4444', bg: '#FEF2F2' }, folikularna: { color: '#F59E0B', bg: '#FFFBEB' }, owulacja: { color: '#22C55E', bg: '#F0FDF4' }, lutealna: { color: '#A78BFA', bg: '#F5F3FF' } }
+
+function WellnessFullReport({ w }: { w: any }) {
+  const act = w.activity_data || {}
+  const pain = w.pain_data || {}
+  const cycle = w.cycle_phase
+  const cycleStyle = cycle ? (cycleColors[cycle] || { color: C.gray, bg: C.offWhite }) : null
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1.25rem' }}>
+
+      {/* ── BASIC ── */}
+      <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, padding: '1rem' }}>
+        <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.875rem', fontWeight: 700 }}>Basic — najważniejsze</div>
+        {w.sleep_hours != null && (
+          <div style={{ marginBottom: '0.875rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+              <span style={{ fontWeight: 800, color: C.navy }}>🌙 Sen — ilość godzin</span>
+              <span style={{ fontFamily: mono, fontWeight: 900, color: wScaleColor(w.sleep_hours, 12, false), fontSize: '1rem' }}>{w.sleep_hours}h</span>
+            </div>
+            <div style={{ height: 8, background: C.grayLight, borderRadius: 4, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${Math.min(100, (w.sleep_hours / 12) * 100)}%`, background: wScaleColor(w.sleep_hours, 12, false), borderRadius: 4 }} />
+            </div>
+          </div>
+        )}
+        <WScale label="Jakość snu" value={w.sleep_quality} max={10} comments={WC.sleepQ} />
+        <WScale label={`${readinessEmoji(w.readiness ?? 5)} Poziom wypoczęcia`} value={w.readiness} max={10} comments={WC.readiness} />
+        <WScale label="Energia" value={w.energy} max={10} comments={WC.energy} />
+        <WScale label="Obciążenie stresem" value={w.stress} max={10} comments={WC.stress} inverse />
+        {w.body_weight_kg && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.6rem 0.875rem', background: C.offWhite, borderRadius: 9, fontFamily: mono }}>
+            <span style={{ fontSize: '0.72rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Masa ciała</span>
+            <span style={{ fontWeight: 800, color: C.navy }}>{w.body_weight_kg} kg</span>
+          </div>
+        )}
+        {cycle && cycleStyle && (
+          <div style={{ marginTop: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: 8, padding: '0.5rem 0.875rem', background: cycleStyle.bg, border: `1.5px solid ${cycleStyle.color}55`, borderRadius: 9 }}>
+            <div style={{ width: 10, height: 10, borderRadius: '50%', background: cycleStyle.color }} />
+            <span style={{ fontWeight: 800, color: cycleStyle.color, fontSize: '0.88rem' }}>{cycle.charAt(0).toUpperCase() + cycle.slice(1)}</span>
+            {w.cycle_day && <span style={{ fontFamily: mono, fontSize: '0.7rem', color: cycleStyle.color }}>dzień {w.cycle_day}</span>}
+          </div>
+        )}
+      </div>
+
+      {/* ── AKTYWNOŚĆ ── */}
+      {(act.type || act.duration) && (
+        <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, padding: '1rem' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.875rem', fontWeight: 700 }}>Aktywność dnia</div>
+          {act.type && (
+            <div style={{ display: 'inline-block', padding: '0.4rem 0.875rem', background: C.navyLight, color: C.gold, borderRadius: 8, fontWeight: 800, fontSize: '0.88rem', marginBottom: '0.75rem' }}>{act.type}</div>
+          )}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+            {act.time && <span style={{ fontFamily: mono, fontSize: '0.75rem', color: C.gray }}>🕐 {act.time}</span>}
+            {act.duration && <span style={{ fontFamily: mono, fontSize: '0.75rem', color: C.gray }}>⏱ {act.duration} min</span>}
+            {act.motivation && motivationLabels[act.motivation] && (
+              <span style={{ fontFamily: mono, fontSize: '0.75rem', color: C.gray }}>{motivationLabels[act.motivation].emoji} motywacja: {motivationLabels[act.motivation].label}</span>
+            )}
+          </div>
+          {act.rpe != null && act.rpe > 0 && (
+            <WScale label="RPE — ciężkość wysiłku" value={act.rpe} max={10} inverse />
+          )}
+          {act.feelingAfter && feelingLabels[act.feelingAfter] && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.55rem 0.875rem', background: C.offWhite, borderRadius: 9, marginBottom: '0.5rem' }}>
+              <span style={{ fontSize: '0.8rem', color: C.gray }}>Samopoczucie po</span>
+              <span style={{ fontWeight: 800, color: C.navy }}>{feelingLabels[act.feelingAfter]}</span>
+            </div>
+          )}
+          {act.satisfaction != null && (
+            <WScale label="Satysfakcja z treningu" value={act.satisfaction} max={10} />
+          )}
+          {act.goal && goalLabels[act.goal] && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.55rem 0.875rem', background: C.offWhite, borderRadius: 9, marginBottom: '0.5rem' }}>
+              <span style={{ fontSize: '0.8rem', color: C.gray }}>Plan zrealizowany?</span>
+              <span style={{ fontWeight: 800, color: C.navy }}>{goalLabels[act.goal]}</span>
+            </div>
+          )}
+          {act.goalComment && <div style={{ fontSize: '0.82rem', color: C.gray, fontStyle: 'italic', marginTop: '0.25rem' }}>{act.goalComment}</div>}
+          {act.note && <div style={{ marginTop: '0.5rem', padding: '0.6rem 0.875rem', background: C.offWhite, borderRadius: 9, fontSize: '0.84rem', color: C.navy }}>{act.note}</div>}
+        </div>
+      )}
+
+      {/* ── BÓL ── */}
+      {(pain.painDuring > 0 || pain.location || w.muscle_sorness > 0 || pain.headache > 0 || pain.anxiety > 0 || pain.mentalOverload > 0) && (
+        <div style={{ background: '#FEF2F2', border: `1.5px solid #FCA5A5`, borderRadius: 14, padding: '1rem' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.red, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.875rem', fontWeight: 700 }}>Ból i obciążenie</div>
+          {w.muscle_sorness > 0 && <WScale label="Zakwasy" value={w.muscle_sorness} max={10} comments={WC.soreness} inverse />}
+          {pain.painDuring > 0 && <WScale label="Ból podczas treningu" value={pain.painDuring} max={10} comments={WC.pain} inverse />}
+          {pain.location && (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: '0.5rem', fontSize: '0.84rem', color: C.navy }}>
+              <span>📍</span><span style={{ fontWeight: 700 }}>{pain.location}</span>
+            </div>
+          )}
+          {pain.note && <div style={{ fontSize: '0.82rem', color: C.gray, fontStyle: 'italic' }}>{pain.note}</div>}
+          {pain.headache > 0 && <WScale label="Ból głowy" value={pain.headache} max={10} inverse />}
+          {pain.anxiety > 0 && <WScale label="Lęk / niepokój" value={pain.anxiety} max={10} inverse />}
+          {pain.mentalOverload > 0 && <WScale label="Przeciążenie mentalne" value={pain.mentalOverload} max={10} inverse />}
+          {(pain.anxietySources?.length > 0 || pain.mentalSources?.length > 0) && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: '0.5rem' }}>
+              {[...(pain.anxietySources || []), ...(pain.mentalSources || [])].map((s: string) => (
+                <span key={s} style={{ padding: '2px 9px', background: '#FEE2E2', color: C.red, borderRadius: 999, fontSize: '0.72rem', fontWeight: 700 }}>{s}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── UWAGI ── */}
+      {w.concerns && (
+        <div style={{ background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 14, padding: '1rem' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#92400E', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.5rem', fontWeight: 700 }}>Uwagi dla trenera</div>
+          <div style={{ fontSize: '0.9rem', color: C.navy, lineHeight: 1.6, fontStyle: 'italic' }}>&ldquo;{w.concerns}&rdquo;</div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── AthleteQuickReportModal ───────────────────────────────────────────────────
+
+function WellnessEntryDetail({ w, onClose }: { w: any; onClose: () => void }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(13,27,42,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: sans }} onClick={onClose}>
+      <div style={{ width: '100%', maxWidth: 520, background: C.offWhite, borderRadius: 18, border: `1.5px solid ${C.grayLight}`, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+        <div style={{ background: C.navy, padding: '1rem 1.25rem', borderRadius: '16px 16px 0 0', flexShrink: 0 }}>
+          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 3 }}>Raport wellness</div>
+          <div style={{ color: C.white, fontWeight: 800, fontSize: '1.05rem' }}>{new Date(w.date || w.created_at).toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+        </div>
+        <div style={{ overflowY: 'auto', flex: 1 }}>
+          <WellnessFullReport w={w} />
+        </div>
+        <div style={{ padding: '0.875rem 1.25rem', borderTop: `1.5px solid ${C.grayLight}`, flexShrink: 0 }}>
+          <button onClick={onClose} style={{ width: '100%', padding: '0.75rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 10, fontWeight: 800, fontFamily: sans }}>Zamknij</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AthleteQuickReportModal({ athlete, wellnessLogs, dietLogs, onClose, onGoToProfile }: { athlete: any; wellnessLogs: any[]; dietLogs: any[]; onClose: () => void; onGoToProfile: () => void }) {
+  const [reportTab, setReportTab] = useState<'wellness' | 'diet'>('wellness')
+  const [detailEntry, setDetailEntry] = useState<any | null>(null)
+
+  const myWellness = wellnessLogs.filter((l: any) => l.athlete_id === athlete.id).sort((a: any, b: any) => b.date?.localeCompare(a.date ?? '') || 0)
+  const myDiet = dietLogs.filter((d: any) => d.athlete_id === athlete.id).sort((a: any, b: any) => b.date?.localeCompare(a.date ?? '') || 0)
+
+  return (
+    <>
+      {detailEntry && <WellnessEntryDetail w={detailEntry} onClose={() => setDetailEntry(null)} />}
+      <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(13,27,42,0.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: sans }} onClick={onClose}>
+        <div style={{ width: '100%', maxWidth: 520, background: C.white, borderRadius: 18, border: `1.5px solid ${C.grayLight}`, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+          {/* Header */}
+          <div style={{ background: C.navy, padding: '1rem 1.25rem', borderRadius: '16px 16px 0 0', flexShrink: 0 }}>
+            <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 3 }}>Raporty zawodniczki</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+              <h2 style={{ color: C.white, fontSize: '1.1rem', fontWeight: 800 }}>{athlete.full_name}</h2>
+              <button onClick={onGoToProfile} style={{ border: 'none', background: C.gold, color: C.navy, borderRadius: 8, padding: '0.4rem 0.75rem', fontFamily: mono, fontSize: '0.66rem', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                Pełny profil →
+              </button>
+            </div>
+          </div>
+          {/* Tab bar */}
+          <div style={{ display: 'flex', borderBottom: `1.5px solid ${C.grayLight}`, flexShrink: 0 }}>
+            {([{ id: 'wellness', label: '🩺 Wellness' }, { id: 'diet', label: '🥗 Dieta' }] as { id: 'wellness' | 'diet'; label: string }[]).map(t => (
+              <button key={t.id} onClick={() => setReportTab(t.id)} style={{ flex: 1, padding: '0.65rem', border: 'none', background: reportTab === t.id ? C.white : C.offWhite, color: reportTab === t.id ? C.navy : C.gray, fontWeight: reportTab === t.id ? 800 : 600, fontFamily: mono, fontSize: '0.7rem', borderBottom: reportTab === t.id ? `2px solid ${C.gold}` : '2px solid transparent', cursor: 'pointer' }}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          {/* Content */}
+          <div style={{ overflowY: 'auto', flex: 1 }}>
+            {reportTab === 'wellness' && (
+              myWellness.length === 0
+                ? <div style={{ padding: '2rem', textAlign: 'center', fontFamily: mono, fontSize: '0.72rem', color: C.gray }}>Brak wpisów wellness (ostatnie 30 dni)</div>
+                : myWellness.map((w: any, i: number) => {
+                    const hasDetail = w.sleep_hours != null || w.energy != null || w.stress != null || w.readiness != null || w.pain_data?.painDuring != null
+                    return (
+                      <button key={w.date || i} onClick={() => hasDetail && setDetailEntry(w)}
+                        style={{ width: '100%', background: 'none', border: 'none', borderBottom: i < myWellness.length - 1 ? `1.5px solid ${C.grayLight}` : 'none', padding: '0.7rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: hasDetail ? 'pointer' : 'default', textAlign: 'left' }}
+                        onMouseEnter={e => hasDetail && (e.currentTarget.style.background = C.offWhite)}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                        <div style={{ fontFamily: mono, fontSize: '0.75rem', fontWeight: 700, color: C.navy }}>
+                          {new Date(w.date || w.created_at).toLocaleDateString('pl-PL', { weekday: 'short', day: 'numeric', month: 'short' })}
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          {w.energy != null && <span style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gold }}>⚡{w.energy}</span>}
+                          {w.sleep_hours != null && <span style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray }}>🌙{w.sleep_hours}h</span>}
+                          {w.readiness != null && <span style={{ fontFamily: mono, fontSize: '0.68rem', color: C.green }}>💪{w.readiness}</span>}
+                          {w.stress != null && <span style={{ fontFamily: mono, fontSize: '0.68rem', color: w.stress >= 7 ? C.red : C.gray }}>🧠{w.stress}</span>}
+                          {w.pain_data?.painDuring > 0 && <span style={{ fontFamily: mono, fontSize: '0.68rem', color: C.red }}>🩹{w.pain_data.painDuring}</span>}
+                          {hasDetail && <span style={{ color: C.gray, fontSize: '0.8rem' }}>›</span>}
+                        </div>
+                      </button>
+                    )
+                  })
+            )}
+            {reportTab === 'diet' && (
+              myDiet.length === 0
+                ? <div style={{ padding: '2rem', textAlign: 'center', fontFamily: mono, fontSize: '0.72rem', color: C.gray }}>Brak wpisów diety (ostatnie 30 dni)</div>
+                : myDiet.map((d: any, i: number) => (
+                    <div key={d.date || i} style={{ padding: '0.7rem 1.25rem', borderBottom: i < myDiet.length - 1 ? `1.5px solid ${C.grayLight}` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ fontFamily: mono, fontSize: '0.75rem', fontWeight: 700, color: C.navy }}>
+                        {new Date(d.date).toLocaleDateString('pl-PL', { weekday: 'short', day: 'numeric', month: 'short' })}
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        {d.had_breakfast && <span style={{ fontFamily: mono, fontSize: '0.65rem', color: C.green }}>🌅śniad.</span>}
+                        {d.meal_count > 0 && <span style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray }}>🍽️{d.meal_count}</span>}
+                        {d.water_ml > 0 && <span style={{ fontFamily: mono, fontSize: '0.68rem', color: C.navy }}>💧{d.water_ml}ml</span>}
+                        {d.coffee_count > 0 && <span style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray }}>☕{d.coffee_count}</span>}
+                        {d.hunger_level != null && <span style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray }}>głód:{d.hunger_level}</span>}
+                      </div>
+                    </div>
+                  ))
+            )}
+          </div>
+          <div style={{ padding: '0.875rem 1.25rem', borderTop: `1.5px solid ${C.grayLight}`, flexShrink: 0 }}>
+            <button onClick={onClose} style={{ width: '100%', padding: '0.7rem', border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.gray, borderRadius: 10, fontWeight: 700, fontFamily: sans, cursor: 'pointer' }}>Zamknij</button>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
 type Tab = 'trening' | 'wellness' | 'diet' | 'athletes'
 
 // ── Wellness helpers ──────────────────────────────────────────────────────────
@@ -427,6 +778,11 @@ function AthleteEditCard({ athlete, groupId, onSaved }: { athlete: any; groupId:
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           {saved && <span style={{ fontFamily: mono, fontSize: '0.62rem', color: C.green }}>✓ Zapisano</span>}
+          <a href={`/coach/athletes/${athlete.id}`} onClick={e => e.stopPropagation()}
+            style={{ border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.navy, borderRadius: 7, padding: '0.3rem 0.6rem', fontFamily: mono, fontSize: '0.6rem', fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}
+            title="Pełny profil z raportami wellness i diety">
+            📊 Raporty
+          </a>
           <span style={{ color: C.gray, fontSize: '1rem', transition: 'transform 0.2s', transform: open ? 'rotate(90deg)' : 'none' }}>›</span>
         </div>
       </button>
@@ -782,6 +1138,130 @@ function filterByDays(logs: any[], days: number, dateField = 'date') {
   })
 }
 
+// ── PlanExerciseTable ─────────────────────────────────────────────────────────
+
+function PlanExerciseTable({ rows, athletes, overrides, uniqueDays }: {
+  rows: { exId: number; name: string; block: string; day: string; dayId: number; sets: number; reps: string; tempo: string; weight: number | null }[]
+  athletes: any[]
+  overrides: Record<number, Record<number, any>>
+  uniqueDays: { id: number; label: string }[]
+}) {
+  const [selDayId, setSelDayId] = useState(uniqueDays[0]?.id ?? 0)
+  const filtered = rows.filter(r => r.dayId === selDayId)
+
+  function effectiveWeight(exId: number, athleteId: number, planWeight: number | null) {
+    const o = overrides[exId]?.[athleteId]
+    if (!o || o.skip) return planWeight
+    return o.weight_override ?? planWeight
+  }
+  function effectiveSets(exId: number, athleteId: number, planSets: number) {
+    const o = overrides[exId]?.[athleteId]
+    if (!o || o.skip) return planSets
+    return o.sets_override ?? planSets
+  }
+  function effectiveReps(exId: number, athleteId: number, planReps: string) {
+    const o = overrides[exId]?.[athleteId]
+    if (!o || o.skip) return planReps
+    return o.reps_override ?? planReps
+  }
+  function effectiveTempo(exId: number, athleteId: number, planTempo: string) {
+    const o = overrides[exId]?.[athleteId]
+    if (!o || o.skip) return planTempo
+    return o.tempo_override ?? planTempo
+  }
+  function isSkipped(exId: number, athleteId: number) {
+    return overrides[exId]?.[athleteId]?.skip === true
+  }
+  function hasOverride(exId: number, athleteId: number) {
+    const o = overrides[exId]?.[athleteId]
+    return !!o && !o.skip
+  }
+
+  return (
+    <div>
+      {/* Day tabs */}
+      <div style={{ display: 'flex', overflowX: 'auto', borderBottom: `1.5px solid ${C.grayLight}`, background: C.offWhite }}>
+        {uniqueDays.map(d => (
+          <button key={d.id} onClick={() => setSelDayId(d.id)}
+            style={{ flexShrink: 0, padding: '0.55rem 1rem', border: 'none', background: selDayId === d.id ? C.white : 'transparent', color: selDayId === d.id ? C.navy : C.gray, fontWeight: selDayId === d.id ? 800 : 500, fontFamily: mono, fontSize: '0.68rem', borderBottom: selDayId === d.id ? `2px solid ${C.gold}` : '2px solid transparent', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            {d.label}
+          </button>
+        ))}
+      </div>
+      {filtered.length === 0 && (
+        <div style={{ padding: '1.5rem', textAlign: 'center', fontFamily: mono, fontSize: '0.72rem', color: C.gray }}>Brak ćwiczeń w tym treningu.</div>
+      )}
+      {filtered.length > 0 && (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ borderCollapse: 'collapse', minWidth: '100%' }}>
+            <thead>
+              <tr style={{ background: C.navy }}>
+                {/* sticky first col: athlete name */}
+                <th style={{ padding: '0.6rem 1rem', textAlign: 'left', fontFamily: mono, fontSize: '0.58rem', color: C.gold, letterSpacing: '0.07em', textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: `1.5px solid ${C.navyBorder}`, position: 'sticky', left: 0, zIndex: 2, background: C.navy }}>Zawodniczka</th>
+                {filtered.map((row, ci) => (
+                  <th key={`${row.exId}-${ci}`} style={{ padding: '0.5rem 0.65rem', textAlign: 'center', fontFamily: mono, fontSize: '0.56rem', color: C.gold, letterSpacing: '0.05em', textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: `1.5px solid ${C.navyBorder}`, minWidth: 100, verticalAlign: 'bottom' }}>
+                    <div style={{ color: C.white, fontWeight: 700, marginBottom: 2 }}>{row.name}</div>
+                    <div style={{ color: C.gray, fontSize: '0.52rem' }}>{row.block}</div>
+                    <div style={{ color: C.gray, fontSize: '0.52rem' }}>{row.sets}×{row.reps || '—'}{row.weight !== null ? ` · ${row.weight}kg` : ''}{row.tempo ? ` · ${row.tempo}` : ''}</div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {athletes.map((a: any, ri: number) => {
+                const rowBg = ri % 2 === 0 ? C.white : '#FAFBFC'
+                return (
+                  <tr key={a.id} style={{ background: rowBg }}>
+                    <td style={{ padding: '0.6rem 1rem', fontWeight: 700, color: C.navy, borderBottom: `1px solid ${C.grayLight}`, fontSize: '0.88rem', whiteSpace: 'nowrap', position: 'sticky', left: 0, zIndex: 1, background: rowBg }}>
+                      {a.full_name}
+                    </td>
+                    {filtered.map((row, ci) => {
+                      const skip = isSkipped(row.exId, a.id)
+                      const mod = hasOverride(row.exId, a.id)
+                      const w = effectiveWeight(row.exId, a.id, row.weight)
+                      const s = effectiveSets(row.exId, a.id, row.sets)
+                      const r = effectiveReps(row.exId, a.id, row.reps)
+                      const t = effectiveTempo(row.exId, a.id, row.tempo)
+                      return (
+                        <td key={`${row.exId}-${ci}`} style={{ padding: '0.45rem 0.65rem', textAlign: 'center', borderBottom: `1px solid ${C.grayLight}`, background: skip ? '#FEF2F2' : mod ? C.navyLight : undefined }}>
+                          {skip ? (
+                            <span style={{ fontFamily: mono, fontSize: '0.62rem', color: C.red }}>—</span>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                              {w !== null ? (
+                                <span style={{ fontFamily: mono, fontWeight: 900, fontSize: '0.95rem', color: mod ? C.gold : C.navy }}>{w} kg</span>
+                              ) : (
+                                <span style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray }}>—</span>
+                              )}
+                              <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, whiteSpace: 'nowrap' }}>
+                                {s}×{r || '—'}{t ? ` ${t}` : ''}
+                              </span>
+                            </div>
+                          )}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div style={{ padding: '0.6rem 1rem', borderTop: `1.5px solid ${C.grayLight}`, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <div style={{ width: 10, height: 10, borderRadius: 3, background: C.gold }} />
+          <span style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray }}>Zmodyfikowane indywidualnie</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <div style={{ width: 10, height: 10, borderRadius: 3, background: C.red + '55', border: `1px solid ${C.red}` }} />
+          <span style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray }}>Pominięte</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function CoachGroupDetailClient({ group, athletes, assignments, days, sessions, plans, wellnessLogs = [], wellnessWeek = [], feedbacks = [], dietLogs = [], assignmentsHistory = [], archivedPlans = [] }: any) {
   const router = useRouter()
   const supabase = createClient()
@@ -794,6 +1274,53 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
   const [dietPeriod, setDietPeriod] = useState(14)
   const [trainingPeriod, setTrainingPeriod] = useState(30)
   const [localAthletes, setLocalAthletes] = useState<any[]>(athletes)
+  const [quickReportAthlete, setQuickReportAthlete] = useState<any | null>(null)
+  const [sessionReport, setSessionReport] = useState<{ session: any; feedback: any | null; athleteName: string; dayName: string } | null>(null)
+  const [planExData, setPlanExData] = useState<{ blocks: any[]; overrides: Record<number, Record<number, any>> } | null>(null)
+  const [planExLoading, setPlanExLoading] = useState(false)
+
+  function openQuickReport(athleteId: number) {
+    const found = athletes.find((a: any) => a.id === athleteId)
+    if (found) setQuickReportAthlete(found)
+  }
+
+  const feedbackBySessionId: Record<number, any> = {}
+  for (const f of feedbacks) {
+    const sid = f.workout_session_id || f.session_id
+    if (sid) feedbackBySessionId[sid] = f
+  }
+
+  function openSessionReport(session: any, athleteName: string, dayName: string) {
+    const fb = feedbackBySessionId[session.id] || null
+    setSessionReport({ session, feedback: fb, athleteName, dayName })
+  }
+
+  async function loadPlanExercises() {
+    if (planExData || planExLoading || !activePlanId) return
+    setPlanExLoading(true)
+    const sb = createClient()
+    const planDayIds = activePlanDays.map((d: any) => d.id)
+    const { data: blocks } = await sb
+      .from('workout_day_blocks')
+      .select('id, day_id, block_name, block_order, rounds, workout_block_exercises(id, exercise_id, exercise_code, exercise_order, sets, reps, weight_kg, tempo, rir, coach_comment, exercise:exercises(name))')
+      .in('day_id', planDayIds)
+      .order('block_order')
+    const allExIds = (blocks || []).flatMap((b: any) => (b.workout_block_exercises || []).map((e: any) => e.id))
+    const athleteIds2 = athletes.map((a: any) => a.id)
+    const { data: ovrs } = allExIds.length > 0
+      ? await sb.from('athlete_exercise_overrides')
+          .select('athlete_id, block_exercise_id, weight_override, sets_override, reps_override, tempo_override, skip')
+          .in('block_exercise_id', allExIds)
+          .in('athlete_id', athleteIds2)
+      : { data: [] }
+    const ovrMap: Record<number, Record<number, any>> = {}
+    for (const o of (ovrs || [])) {
+      if (!ovrMap[o.block_exercise_id]) ovrMap[o.block_exercise_id] = {}
+      ovrMap[o.block_exercise_id][o.athlete_id] = o
+    }
+    setPlanExData({ blocks: blocks || [], overrides: ovrMap })
+    setPlanExLoading(false)
+  }
 
   const sessionIndex: Record<string, any> = {}
   for (const s of sessions) {
@@ -836,6 +1363,24 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
           groupId={group.id}
           module={moduleConfig}
           onClose={() => setModuleConfig(null)}
+        />
+      )}
+      {sessionReport && (
+        <SessionReportModal
+          session={sessionReport.session}
+          feedback={sessionReport.feedback}
+          athleteName={sessionReport.athleteName}
+          dayName={sessionReport.dayName}
+          onClose={() => setSessionReport(null)}
+        />
+      )}
+      {quickReportAthlete && (
+        <AthleteQuickReportModal
+          athlete={quickReportAthlete}
+          wellnessLogs={wellnessLogs}
+          dietLogs={dietLogs}
+          onClose={() => setQuickReportAthlete(null)}
+          onGoToProfile={() => { setQuickReportAthlete(null); router.push(`/coach/athletes/${quickReportAthlete.id}`) }}
         />
       )}
 
@@ -947,7 +1492,7 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                     ],
                   }
                 })}
-                onAthleteClick={id => router.push(`/coach/athletes/${id}`)}
+                onAthleteClick={openQuickReport}
               />
             </div>
           )}
@@ -1014,7 +1559,7 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                     ],
                   }
                 })}
-                onAthleteClick={id => router.push(`/coach/athletes/${id}`)}
+                onAthleteClick={openQuickReport}
               />
             </div>
           )}
@@ -1066,7 +1611,7 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                       <select value={selectedPlanId ?? ''} onChange={e => setSelectedPlanId(e.target.value ? parseInt(e.target.value) : null)}
                         style={{ border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.navy, borderRadius: 8, padding: '0.45rem 0.65rem', fontFamily: mono, fontSize: '0.7rem', outline: 'none' }}>
                         <option value="">Aktualny</option>
-                        {assignments.map((a: any) => <option key={a.plan_id} value={a.plan_id}>{a.plan?.name}</option>)}
+                        {assignments.map((a: any, i: number) => <option key={`${a.plan_id}-${i}`} value={a.plan_id}>{a.plan?.name}</option>)}
                       </select>
                     )}
                     {currentPlan && !currentPlan.is_archived && (
@@ -1130,13 +1675,20 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                                   </div>
                                 ) : <span style={{ color: C.grayLight, fontSize: '0.75rem' }}>—</span>}
                               </td>
-                              {activePlanDays.map((day: any) => (
-                                <td key={day.id} style={{ padding: '0.5rem', textAlign: 'center', borderBottom: `1px solid ${C.grayLight}` }}>
-                                  <div style={{ display: 'flex', justifyContent: 'center' }}>
-                                    <CellStatus session={sessionIndex[`${athlete.id}_${day.id}`] || null} />
-                                  </div>
-                                </td>
-                              ))}
+                              {activePlanDays.map((day: any) => {
+                                const sess = sessionIndex[`${athlete.id}_${day.id}`] || null
+                                const clickable = sess?.completed
+                                return (
+                                  <td key={day.id} style={{ padding: '0.5rem', textAlign: 'center', borderBottom: `1px solid ${C.grayLight}` }}>
+                                    <div
+                                      onClick={() => clickable && openSessionReport(sess, athlete.full_name, day.day_name || `Trening ${day.id}`)}
+                                      title={clickable ? 'Kliknij aby zobaczyć raport' : undefined}
+                                      style={{ display: 'flex', justifyContent: 'center', cursor: clickable ? 'pointer' : 'default' }}>
+                                      <CellStatus session={sess} />
+                                    </div>
+                                  </td>
+                                )
+                              })}
                             </tr>
                           )
                         })}
@@ -1158,6 +1710,59 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                   </div>
                 </Card>
               )}
+
+              {/* ── TABELA 1b: Obciążenia z planu ── */}
+              {assignments.length > 0 && activePlanDays.length > 0 && (() => {
+                const fmt = (s: string) => s.replace(/-/g, ' ')
+                return (
+                  <Card style={{ marginBottom: '1.25rem' }}>
+                    <div style={{ padding: '0.875rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                      <div>
+                        <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Obciążenia z planu</div>
+                        <div style={{ fontWeight: 800, color: C.navy, marginTop: 2 }}>{currentPlan?.name} — ćwiczenia × zawodniczki</div>
+                      </div>
+                      {!planExData && (
+                        <button onClick={loadPlanExercises} disabled={planExLoading}
+                          style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 8, padding: '0.5rem 0.9rem', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer', opacity: planExLoading ? 0.6 : 1 }}>
+                          {planExLoading ? 'Ładuję...' : '⚡ Załaduj tabelę'}
+                        </button>
+                      )}
+                    </div>
+                    {planExData && (() => {
+                      // Flatten exercises with day/block context, deduplicate by name for display
+                      type ExRow = { exId: number; name: string; block: string; day: string; dayId: number; sets: number; reps: string; tempo: string; weight: number | null }
+                      const rows: ExRow[] = []
+                      for (const day of activePlanDays) {
+                        const dayBlocks = planExData.blocks.filter((b: any) => b.day_id === day.id).sort((a: any, z: any) => a.block_order - z.block_order)
+                        for (const block of dayBlocks) {
+                          const exs = (block.workout_block_exercises || []).sort((a: any, z: any) => a.exercise_order - z.exercise_order)
+                          for (const ex of exs) {
+                            rows.push({
+                              exId: ex.id,
+                              name: ex.exercise?.name ? fmt(ex.exercise.name) : (ex.exercise_code || 'Ćwiczenie'),
+                              block: block.block_name,
+                              day: day.day_name || `T${activePlanDays.indexOf(day) + 1}`,
+                              dayId: day.id,
+                              sets: ex.sets ?? 0,
+                              reps: ex.reps ?? '',
+                              tempo: ex.tempo ?? '',
+                              weight: ex.weight_kg ?? null,
+                            })
+                          }
+                        }
+                      }
+
+                      if (rows.length === 0) return (
+                        <div style={{ padding: '1.5rem', textAlign: 'center', fontFamily: mono, fontSize: '0.72rem', color: C.gray }}>Brak ćwiczeń w planie.</div>
+                      )
+
+                      // Day tabs
+                      const uniqueDays = activePlanDays.map((d: any, i: number) => ({ id: d.id, label: d.day_name || `T${i + 1}` }))
+                      return <PlanExerciseTable rows={rows} athletes={athletes} overrides={planExData.overrides} uniqueDays={uniqueDays} />
+                    })()}
+                  </Card>
+                )
+              })()}
 
               {/* ── TABELA 2: Dane wellness (7 dni) ── */}
               {athletes.length > 0 && (
@@ -1205,7 +1810,7 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                               onMouseEnter={e => (e.currentTarget.style.background = '#ECFDF5')}
                               onMouseLeave={e => (e.currentTarget.style.background = rowBg)}>
                               <td style={{ padding: '0.7rem 1.25rem', fontWeight: 700, color: C.navy, borderBottom: `1px solid #E0F2EA`, whiteSpace: 'nowrap' }}>
-                                <button onClick={() => router.push(`/coach/athletes/${athlete.id}`)} style={{ background: 'none', border: 'none', color: C.navy, fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', padding: 0 }}>{athlete.full_name}</button>
+                                <button onClick={() => openQuickReport(athlete.id)} style={{ background: 'none', border: 'none', color: C.navy, fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', padding: 0 }}>{athlete.full_name}</button>
                               </td>
                               <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid #E0F2EA` }}>
                                 <span title={ws.hasToday ? 'Uzupełniła dziś' : ws.entryCount > 0 ? 'Wpis w tym tygodniu' : 'Brak wpisów'} style={{ fontSize: '1rem' }}>

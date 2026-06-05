@@ -629,26 +629,39 @@ function PostWorkoutSection({ sessionId, athleteId, onFinish }: { sessionId: num
     if (!feeling && sendReport) return
     setSaving(true)
 
-    await supabase.from('post_session_feedback').insert({
-      session_id: sessionId, workout_session_id: sessionId,
-      athlete_id: athleteId, session_rpe: rpe,
-      feeling_after: feeling, what_went_well: whatWell,
-      pain_after_comment: pain, general_notes: notes,
-    })
+    try {
+      // 1. Zapisz feedback
+      await supabase.from('post_session_feedback').insert({
+        session_id: sessionId,
+        workout_session_id: sessionId,
+        athlete_id: athleteId,
+        session_rpe: rpe,
+        feeling_after: feeling,
+        what_went_well: whatWell,
+        pain_after_comment: pain,
+        general_notes: notes,
+      })
 
-    await supabase.from('workout_sessions').update({
-      completed: true, date_completed: new Date().toISOString(),
-    }).eq('id', sessionId)
+      // 2. Oznacz sesję jako ukończoną
+      await supabase.from('workout_sessions').update({
+        completed: true,
+        date_completed: new Date().toISOString(),
+      }).eq('id', sessionId)
 
-    if (sendReport) {
-      try {
-        await fetch('/api/send-report', {
+      // 3. Wyślij raport e-mailem (API pobierze dane z bazy)
+      if (sendReport) {
+        const res = await fetch('/api/send-report', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId, athleteId, rpe, feeling, whatWentWell: whatWell, painComment: pain, generalNotes: notes }),
+          body: JSON.stringify({ sessionId, athleteId }),
         })
-        await supabase.from('workout_sessions').update({ report_sent: true }).eq('id', sessionId)
-      } catch (e) { console.error(e) }
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          console.error('Błąd wysyłki raportu:', err)
+        }
+      }
+    } catch (e) {
+      console.error('Błąd finish():', e)
     }
 
     setSaving(false)
