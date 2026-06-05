@@ -248,53 +248,81 @@ function SessionReportModal({ session, athleteId, athleteName, dayName, onClose 
                 </div>
               )}
 
-              {/* Serie — główna treść */}
-              {hasSetLogs ? (
-                <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 12, overflow: 'hidden' }}>
-                  <div style={{ padding: '0.75rem 1rem', background: C.offWhite, borderBottom: `1.5px solid ${C.grayLight}`, fontFamily: mono, fontSize: '0.62rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>
-                    🏋️ Wykonane serie
-                  </div>
-                  {orderedExIds.filter(id => logsByEx[id]?.length > 0).map(exId => {
-                    const logs = logsByEx[exId].sort((a: any, b: any) => a.set_number - b.set_number)
-                    const plan = exPlanMap[exId]
-                    const name = exNameMap[exId] || `Ćw. #${exId}`
-                    const mainLogs = logs.filter((l: any) => !l.is_warmup)
-                    const warmupLogs = logs.filter((l: any) => l.is_warmup)
-                    return (
-                      <div key={exId} style={{ borderBottom: `1px solid ${C.grayLight}`, padding: '0.75rem 1rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-                          <div style={{ fontWeight: 700, color: C.navy, fontSize: '0.9rem' }}>{name}</div>
-                          {plan && <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray }}>plan: {plan.sets}×{plan.reps}{plan.weight ? ` · ${plan.weight}kg` : ''}</div>}
-                        </div>
-                        {warmupLogs.length > 0 && warmupLogs.map((l: any) => (
-                          <div key={l.id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '4px 0', opacity: 0.65 }}>
-                            <span style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray, minWidth: 36 }}>Rozg</span>
-                            <span style={{ fontFamily: mono, fontSize: '0.78rem', color: C.navy }}>{l.weight ? `${l.weight} kg` : '—'}</span>
-                            <span style={{ fontFamily: mono, fontSize: '0.72rem', color: C.gray }}>{l.reps_completed ? `${l.reps_completed} powt.` : '—'}</span>
-                          </div>
-                        ))}
-                        {mainLogs.map((l: any, i: number) => (
-                          <div key={l.id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '5px 0', borderTop: i === 0 && warmupLogs.length > 0 ? `1px solid ${C.grayLight}` : 'none' }}>
-                            <span style={{ fontFamily: mono, fontSize: '0.65rem', color: l.completed ? C.gold : C.gray, fontWeight: 800, minWidth: 36 }}>S{l.set_number}</span>
-                            <span style={{ fontFamily: mono, fontSize: '0.92rem', fontWeight: 900, color: l.weight ? C.navy : C.gray }}>
-                              {l.weight ? `${l.weight} kg` : '—'}
-                            </span>
-                            <span style={{ fontFamily: mono, fontSize: '0.75rem', color: C.gray }}>{l.reps_completed ? `${l.reps_completed} powt.` : '—'}</span>
-                            {!l.completed && <span style={{ fontFamily: mono, fontSize: '0.55rem', color: C.gray, background: C.offWhite, padding: '1px 6px', borderRadius: 4 }}>nie ukończona</span>}
-                          </div>
-                        ))}
+              {/* Serie — wszystkie ćwiczenia z planu */}
+              <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 12, overflow: 'hidden' }}>
+                <div style={{ padding: '0.75rem 1rem', background: C.offWhite, borderBottom: `1.5px solid ${C.grayLight}`, fontFamily: mono, fontSize: '0.62rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>
+                  🏋️ Ćwiczenia z treningu
+                </div>
+                {blocks.length === 0 && (
+                  <div style={{ padding: '1rem', fontFamily: mono, fontSize: '0.72rem', color: C.gray, textAlign: 'center' }}>Brak danych o planie.</div>
+                )}
+                {blocks.map((block: any) => {
+                  const blockExs = (block.workout_block_exercises || []).sort((a: any, b: any) => a.exercise_order - b.exercise_order)
+                  if (blockExs.length === 0) return null
+                  return (
+                    <div key={block.id}>
+                      {/* Nagłówek bloku */}
+                      <div style={{ padding: '0.5rem 1rem', background: C.navyLight, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{block.block_name}</span>
+                        {block.rounds > 1 && <span style={{ fontFamily: mono, fontSize: '0.55rem', color: C.gray }}>{block.rounds} rundy</span>}
                       </div>
-                    )
-                  })}
-                  {orderedExIds.filter(id => logsByEx[id]?.length > 0).length === 0 && (
-                    <div style={{ padding: '1rem', fontFamily: mono, fontSize: '0.72rem', color: C.gray, textAlign: 'center' }}>Brak zapisanych serii.</div>
-                  )}
-                </div>
-              ) : (
-                <div style={{ background: C.offWhite, border: `1.5px solid ${C.grayLight}`, borderRadius: 12, padding: '1rem', fontFamily: mono, fontSize: '0.72rem', color: C.gray, textAlign: 'center' }}>
-                  Brak zapisanych serii dla tej sesji.
-                </div>
-              )}
+                      {blockExs.map((ex: any, exIdx: number) => {
+                        const name = ex.exercise?.name ? ex.exercise.name.replace(/-/g, ' ') : (ex.exercise_code || `Ćw. #${ex.id}`)
+                        const plan = exPlanMap[ex.id]
+                        const logs = (logsByEx[ex.id] || []).sort((a: any, b: any) => a.set_number - b.set_number)
+                        const warmupLogs = logs.filter((l: any) => l.is_warmup)
+                        const mainLogs = logs.filter((l: any) => !l.is_warmup)
+                        const hasLogs = logs.length > 0
+                        const isLast = exIdx === blockExs.length - 1
+
+                        return (
+                          <div key={ex.id} style={{ borderBottom: isLast ? 'none' : `1px solid ${C.grayLight}`, padding: '0.75rem 1rem', background: !hasLogs ? '#FAFAFA' : C.white }}>
+                            {/* Nazwa ćwiczenia + plan */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: hasLogs ? 8 : 0 }}>
+                              <div style={{ fontWeight: 700, color: hasLogs ? C.navy : C.gray, fontSize: '0.9rem' }}>{name}</div>
+                              <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray }}>
+                                {plan ? `${plan.sets}×${plan.reps}${plan.weight ? ` · ${plan.weight}kg` : ''}` : ''}
+                              </div>
+                            </div>
+
+                            {/* Brak danych */}
+                            {!hasLogs && (
+                              <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray, fontStyle: 'italic', marginTop: 2 }}>
+                                nie wykonano / brak danych
+                              </div>
+                            )}
+
+                            {/* Rozgrzewka */}
+                            {warmupLogs.map((l: any) => (
+                              <div key={l.id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '4px 0', opacity: 0.6 }}>
+                                <span style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, minWidth: 42 }}>Rozg</span>
+                                <span style={{ fontFamily: mono, fontSize: '0.78rem', color: C.gray }}>{l.weight ? `${l.weight} kg` : '—'}</span>
+                                <span style={{ fontFamily: mono, fontSize: '0.7rem', color: C.gray }}>{l.reps_completed ? `${l.reps_completed} powt.` : '—'}</span>
+                              </div>
+                            ))}
+
+                            {/* Serie właściwe */}
+                            {mainLogs.map((l: any, i: number) => (
+                              <div key={l.id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '5px 0', borderTop: i === 0 && warmupLogs.length > 0 ? `1px dashed ${C.grayLight}` : 'none' }}>
+                                <span style={{ fontFamily: mono, fontSize: '0.65rem', color: l.completed ? C.gold : C.gray, fontWeight: 800, minWidth: 42 }}>S{l.set_number}</span>
+                                <span style={{ fontFamily: mono, fontSize: '0.92rem', fontWeight: 900, color: l.weight ? C.navy : C.gray }}>
+                                  {l.weight ? `${l.weight} kg` : '—'}
+                                </span>
+                                <span style={{ fontFamily: mono, fontSize: '0.75rem', color: C.gray }}>
+                                  {l.reps_completed ? `${l.reps_completed} powt.` : '—'}
+                                </span>
+                                {!l.completed && (
+                                  <span style={{ fontFamily: mono, fontSize: '0.52rem', color: C.gray, background: C.offWhite, padding: '1px 5px', borderRadius: 4 }}>nieukończona</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })}
+              </div>
 
               {/* Feedback tekstowy */}
               {feedback && (feedback.what_went_well || feedback.pain_after_comment || feedback.general_notes) && (
