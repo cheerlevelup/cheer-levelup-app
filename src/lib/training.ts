@@ -160,17 +160,46 @@ export async function getWorkoutDayWithBlocks(
 
   const overrideMap = new Map((overrides || []).map((o: any) => [o.block_exercise_id, o]))
 
+  // Pobierz dodatkowe ćwiczenia trenera dla tej zawodniczki
+  const blockIds = (day.workout_day_blocks || []).map((b: any) => b.id)
+  const { data: extraExercises } = blockIds.length > 0
+    ? await supabase
+        .from('athlete_extra_exercises')
+        .select('*, exercise:exercises(*)')
+        .eq('athlete_id', athleteId)
+        .in('block_id', blockIds)
+        .order('exercise_order', { ascending: true })
+    : { data: [] }
+
+  const extraByBlock = new Map<number, any[]>()
+  for (const ex of (extraExercises || [])) {
+    if (!extraByBlock.has(ex.block_id)) extraByBlock.set(ex.block_id, [])
+    extraByBlock.get(ex.block_id)!.push(ex)
+  }
+
   const blocks: WorkoutDayBlock[] = (day.workout_day_blocks || [])
     .sort((a: any, b: any) => a.block_order - b.block_order)
-    .map((block: any) => ({
-      ...block,
-      exercises: (block.workout_block_exercises || [])
+    .map((block: any) => {
+      const planExercises = (block.workout_block_exercises || [])
         .sort((a: any, b: any) => a.exercise_order - b.exercise_order)
         .map((ex: any) => ({
           ...ex,
           override: overrideMap.get(ex.id) || null,
-        })),
-    }))
+          is_extra: false,
+        }))
+        .filter((ex: any) => !ex.override?.skip) // ukryj pominięte
+
+      const extras = (extraByBlock.get(block.id) || []).map((ex: any) => ({
+        ...ex,
+        is_extra: true,
+        override: null,
+      }))
+
+      return {
+        ...block,
+        exercises: [...planExercises, ...extras],
+      }
+    })
 
   const { data: session } = await supabase
     .from('workout_sessions')

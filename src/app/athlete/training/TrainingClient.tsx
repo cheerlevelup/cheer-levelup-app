@@ -559,6 +559,19 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
   const effectiveReps = exercise.override?.reps_override || exercise.reps || '—'
   const effectiveTempo = exercise.override?.tempo_override || exercise.tempo
   const effectiveTempoNote = exercise.override?.coach_note_override || exercise.coach_comment
+  const effectiveRir = exercise.override?.rir ?? exercise.rir ?? null
+
+  // Nazwa ćwiczenia — uwzględnia zamiennik trenera
+  function getEffectiveName(): string {
+    if (exercise.override?.exercise_code_override) return exercise.override.exercise_code_override
+    // exercise_id_override — nazwa pobrana przez serwer w override lub z exercise
+    if (exercise.override?.is_substitution && exercise.override.exercise_id_override) {
+      return `Zamiennik #${exercise.override.exercise_id_override}` // fallback jeśli brak join
+    }
+    return formatExerciseName(exercise.exercise?.name || exercise.exercise_code || 'Ćwiczenie')
+  }
+  const isSubstituted = !!exercise.override?.is_substitution && !exercise.override.skip
+  const isExtra = !!(exercise as any).is_extra
 
   const warmupSets: TrainingWarmupSet[] = Array.isArray(exercise.warmup_sets) ? exercise.warmup_sets : []
   const legacyWarmupSets: TrainingWarmupSet[] = !warmupSets.length && exercise.warmup_reps
@@ -570,7 +583,7 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
   const completedSets = exSetLogs.filter(l => l.completed && !l.is_warmup).length
   const allDone = completedSets >= effectiveSets
   const isAmrap = typeof effectiveReps === 'string' && effectiveReps.toUpperCase() === 'AMRAP'
-  const exerciseName = formatExerciseName(exercise.exercise?.name || exercise.exercise_code || 'Ćwiczenie')
+  const exerciseName = getEffectiveName()
 
   async function savePain() {
     await supabase.from('pain_logs').insert({
@@ -585,7 +598,7 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
     <>
       {tempoOpen && effectiveTempo && <TempoModal tempo={effectiveTempo} note={effectiveTempoNote || undefined} onClose={() => setTempoOpen(false)} />}
       {videoOpen && <VideoModal exerciseName={exerciseName} onClose={() => setVideoOpen(false)} />}
-      {rirOpen && exercise.rir != null && <RirModal rir={exercise.rir} onClose={() => setRirOpen(false)} />}
+      {rirOpen && effectiveRir != null && <RirModal rir={effectiveRir} onClose={() => setRirOpen(false)} />}
 
       <div style={{ background: '#fff', borderRadius: 14, border: allDone ? '1.5px solid #86EFAC' : `1.5px solid ${C.grayLight}`, marginBottom: 10, overflow: 'hidden', boxShadow: expanded ? '0 4px 20px rgba(13,27,42,0.08)' : 'none', transition: 'all 0.2s', fontFamily: sans }}>
 
@@ -595,7 +608,11 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
             <span style={{ fontWeight: 800, fontSize: '0.7rem', color: C.gold, fontFamily: mono }}>{exercise.exercise_order ? `${String.fromCharCode(64 + Math.ceil(exercise.exercise_order / 10))}${exercise.exercise_order}` : '—'}</span>
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 700, fontSize: '0.95rem', color: C.navy, marginBottom: 4 }}>{exerciseName}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+              {isExtra && <span style={{ fontFamily: mono, fontSize: '0.55rem', background: C.green, color: C.white, borderRadius: 4, padding: '1px 5px', fontWeight: 800 }}>+DODANE</span>}
+              {isSubstituted && <span style={{ fontFamily: mono, fontSize: '0.55rem', background: '#F97316', color: C.white, borderRadius: 4, padding: '1px 5px', fontWeight: 800 }}>ZAMIANA</span>}
+              <span style={{ fontWeight: 700, fontSize: '0.95rem', color: C.navy }}>{exerciseName}</span>
+            </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
               {(effectiveTempo || effectiveTempoNote) && (
                 <button onClick={e => { e.stopPropagation(); setTempoOpen(true) }}
@@ -606,10 +623,10 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
               <span style={{ padding: '2px 8px', background: C.grayLight, borderRadius: 6, fontSize: '0.7rem', color: C.gray, fontWeight: 500 }}>
                 {effectiveSets}×{effectiveReps}
               </span>
-              {exercise.rir != null && (
+              {effectiveRir != null && (
                 <button onClick={e => { e.stopPropagation(); setRirOpen(true) }}
                   style={{ padding: '2px 8px', background: C.navyLight, border: 'none', borderRadius: 6, fontSize: '0.68rem', color: C.gold, fontWeight: 700, cursor: 'pointer', fontFamily: mono }}>
-                  RIR {exercise.rir} ❓
+                  RIR {effectiveRir} ❓
                 </button>
               )}
             </div>

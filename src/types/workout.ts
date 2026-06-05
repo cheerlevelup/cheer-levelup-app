@@ -97,12 +97,16 @@ export interface AthleteExerciseOverride {
   id: number
   athlete_id: number
   block_exercise_id: number
-  sets_override?: number
-  reps_override?: string
-  weight_override?: number
-  tempo_override?: string
-  coach_note_override?: string
+  sets_override?: number | null
+  reps_override?: string | null
+  weight_override?: number | null
+  tempo_override?: string | null
+  coach_note_override?: string | null
   is_substitution: boolean
+  skip?: boolean | null
+  exercise_id_override?: number | null
+  exercise_code_override?: string | null
+  rir?: number | null
 }
 
 export interface SetLog {
