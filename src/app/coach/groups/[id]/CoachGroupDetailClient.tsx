@@ -135,79 +135,207 @@ function AssignPlanModal({ athletes, plans, onClose, onAssigned }: {
 
 // ── SessionReportModal ────────────────────────────────────────────────────────
 
-function SessionReportModal({ session, feedback, athleteName, dayName, onClose }: {
-  session: any; feedback: any | null; athleteName: string; dayName: string; onClose: () => void
+const feelingLabelMap: Record<string, string> = {
+  swietnie: '💪 Świetnie', dobrze: '😊 Dobrze', srednie: '😐 Średnio',
+  zmeczona: '😓 Zmęczona', slabo: '😞 Słabo',
+}
+
+function SessionReportModal({ session, athleteId, athleteName, dayName, onClose }: {
+  session: any; athleteId: number; athleteName: string; dayName: string; onClose: () => void
 }) {
+  const [loading, setLoading] = useState(true)
+  const [feedback, setFeedback] = useState<any | null>(null)
+  const [setLogs, setSetLogs] = useState<any[]>([])
+  const [blocks, setBlocks] = useState<any[]>([])
+
+  useEffect(() => {
+    async function load() {
+      const sb = createClient()
+      const [fbRes, logsRes, blocksRes] = await Promise.all([
+        sb.from('post_session_feedback')
+          .select('*')
+          .eq('workout_session_id', session.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        sb.from('set_logs')
+          .select('*')
+          .eq('workout_session_id', session.id)
+          .order('set_number', { ascending: true }),
+        sb.from('workout_day_blocks')
+          .select('*, workout_block_exercises(id, exercise_id, exercise_code, sets, reps, weight_kg, exercise:exercises(name))')
+          .eq('day_id', session.workout_day_id)
+          .order('block_order', { ascending: true }),
+      ])
+      setFeedback(fbRes.data || null)
+      setSetLogs(logsRes.data || [])
+      setBlocks(blocksRes.data || [])
+      setLoading(false)
+    }
+    load()
+  }, [session.id, session.workout_day_id])
+
   const dateStr = session.date_completed
     ? new Date(session.date_completed).toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' })
     : '—'
 
-  const rpeColor = (rpe: number) => rpe >= 9 ? C.red : rpe >= 7 ? '#F97316' : rpe >= 5 ? C.gold : C.green
+  const rpeC = (rpe: number) => rpe >= 9 ? C.red : rpe >= 7 ? '#F97316' : rpe >= 5 ? C.gold : C.green
+
+  // Mapa nazw ćwiczeń
+  const exNameMap: Record<number, string> = {}
+  const exPlanMap: Record<number, { sets: number; reps: string; weight: number | null }> = {}
+  for (const block of blocks) {
+    for (const ex of (block.workout_block_exercises || [])) {
+      const name = ex.exercise?.name ? ex.exercise.name.replace(/-/g, ' ') : (ex.exercise_code || `Ćw. #${ex.id}`)
+      exNameMap[ex.id] = name
+      exPlanMap[ex.id] = { sets: ex.sets, reps: ex.reps || '—', weight: ex.weight_kg }
+    }
+  }
+
+  // Grupuj set_logs po exercise
+  const logsByEx: Record<number, any[]> = {}
+  for (const l of setLogs) {
+    if (!l.block_exercise_id) continue
+    if (!logsByEx[l.block_exercise_id]) logsByEx[l.block_exercise_id] = []
+    logsByEx[l.block_exercise_id].push(l)
+  }
+
+  // Kolejność ćwiczeń wg bloków
+  const orderedExIds: number[] = []
+  for (const block of blocks) {
+    for (const ex of (block.workout_block_exercises || [])) {
+      orderedExIds.push(ex.id)
+    }
+  }
+
+  const hasSetLogs = setLogs.length > 0
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(13,27,42,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: sans }} onClick={onClose}>
-      <div style={{ width: '100%', maxWidth: 480, background: C.white, borderRadius: 18, border: `1.5px solid ${C.grayLight}`, maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
-        {/* Header */}
-        <div style={{ background: C.navy, padding: '1rem 1.25rem', borderRadius: '16px 16px 0 0' }}>
-          <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 3 }}>Raport z treningu</div>
-          <div style={{ color: C.white, fontWeight: 800, fontSize: '1.05rem' }}>{dayName}</div>
-          <div style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray, marginTop: 3 }}>
-            {athleteName} · {dateStr}
-          </div>
-        </div>
-        <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {/* Status */}
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ flex: 1, background: C.green + '18', border: `1.5px solid ${C.green}`, borderRadius: 10, padding: '0.7rem', textAlign: 'center' }}>
-              <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.green, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 3 }}>Status</div>
-              <div style={{ fontFamily: mono, fontWeight: 800, color: C.green }}>✓ Ukończony</div>
-            </div>
-            {feedback?.session_rpe != null && (
-              <div style={{ flex: 1, background: rpeColor(feedback.session_rpe) + '18', border: `1.5px solid ${rpeColor(feedback.session_rpe)}`, borderRadius: 10, padding: '0.7rem', textAlign: 'center' }}>
-                <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 3 }}>RPE</div>
-                <div style={{ fontFamily: mono, fontWeight: 900, fontSize: '1.4rem', color: rpeColor(feedback.session_rpe) }}>{feedback.session_rpe}</div>
-              </div>
-            )}
-            {feedback?.mood_after != null && (
-              <div style={{ flex: 1, background: C.offWhite, border: `1.5px solid ${C.grayLight}`, borderRadius: 10, padding: '0.7rem', textAlign: 'center' }}>
-                <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 3 }}>Nastrój</div>
-                <div style={{ fontFamily: mono, fontWeight: 800, fontSize: '1.1rem', color: C.navy }}>{feedback.mood_after}/10</div>
-              </div>
-            )}
-            {feedback?.energy_level != null && (
-              <div style={{ flex: 1, background: C.offWhite, border: `1.5px solid ${C.grayLight}`, borderRadius: 10, padding: '0.7rem', textAlign: 'center' }}>
-                <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 3 }}>Energia</div>
-                <div style={{ fontFamily: mono, fontWeight: 800, fontSize: '1.1rem', color: C.navy }}>{feedback.energy_level}/10</div>
-              </div>
-            )}
-          </div>
+      <div style={{ width: '100%', maxWidth: 520, background: C.offWhite, borderRadius: 18, border: `1.5px solid ${C.grayLight}`, maxHeight: '92vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
 
-          {feedback?.what_went_well && (
-            <div style={{ background: '#F0FDF4', border: `1.5px solid ${C.green}`, borderRadius: 10, padding: '0.875rem' }}>
-              <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.green, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 5 }}>Co poszło dobrze</div>
-              <div style={{ fontSize: '0.88rem', color: C.navy, lineHeight: 1.5, fontStyle: 'italic' }}>&ldquo;{feedback.what_went_well}&rdquo;</div>
+        {/* Header */}
+        <div style={{ background: C.navy, padding: '1rem 1.25rem', borderRadius: '16px 16px 0 0', flexShrink: 0 }}>
+          <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 3 }}>Raport z treningu</div>
+          <div style={{ color: C.white, fontWeight: 800, fontSize: '1.1rem' }}>{dayName}</div>
+          <div style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray, marginTop: 3 }}>{athleteName} · {dateStr}</div>
+        </div>
+
+        <div style={{ overflowY: 'auto', flex: 1, padding: '1rem' }}>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '2rem', fontFamily: mono, fontSize: '0.72rem', color: C.gray }}>Ładowanie danych...</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+
+              {/* RPE + samopoczucie */}
+              {feedback && (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {feedback.session_rpe != null && (
+                    <div style={{ flex: 1, background: rpeC(feedback.session_rpe) + '18', border: `1.5px solid ${rpeC(feedback.session_rpe)}`, borderRadius: 12, padding: '0.875rem', textAlign: 'center' }}>
+                      <div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>RPE</div>
+                      <div style={{ fontFamily: mono, fontWeight: 900, fontSize: '1.8rem', color: rpeC(feedback.session_rpe), lineHeight: 1 }}>{feedback.session_rpe}</div>
+                      <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, marginTop: 3 }}>
+                        {feedback.session_rpe <= 3 ? 'Lekki' : feedback.session_rpe <= 5 ? 'Umiarkowany' : feedback.session_rpe <= 7 ? 'Ciężki' : feedback.session_rpe <= 9 ? 'Bardzo ciężki' : 'Maksymalny'}
+                      </div>
+                    </div>
+                  )}
+                  {feedback.feeling_after && (
+                    <div style={{ flex: 1.5, background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 12, padding: '0.875rem', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                      <div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>Po treningu</div>
+                      <div style={{ fontWeight: 800, color: C.navy, fontSize: '1rem' }}>{feelingLabelMap[feedback.feeling_after] || feedback.feeling_after}</div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Serie — główna treść */}
+              {hasSetLogs ? (
+                <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 12, overflow: 'hidden' }}>
+                  <div style={{ padding: '0.75rem 1rem', background: C.offWhite, borderBottom: `1.5px solid ${C.grayLight}`, fontFamily: mono, fontSize: '0.62rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>
+                    🏋️ Wykonane serie
+                  </div>
+                  {orderedExIds.filter(id => logsByEx[id]?.length > 0).map(exId => {
+                    const logs = logsByEx[exId].sort((a: any, b: any) => a.set_number - b.set_number)
+                    const plan = exPlanMap[exId]
+                    const name = exNameMap[exId] || `Ćw. #${exId}`
+                    const mainLogs = logs.filter((l: any) => !l.is_warmup)
+                    const warmupLogs = logs.filter((l: any) => l.is_warmup)
+                    return (
+                      <div key={exId} style={{ borderBottom: `1px solid ${C.grayLight}`, padding: '0.75rem 1rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                          <div style={{ fontWeight: 700, color: C.navy, fontSize: '0.9rem' }}>{name}</div>
+                          {plan && <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray }}>plan: {plan.sets}×{plan.reps}{plan.weight ? ` · ${plan.weight}kg` : ''}</div>}
+                        </div>
+                        {warmupLogs.length > 0 && warmupLogs.map((l: any) => (
+                          <div key={l.id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '4px 0', opacity: 0.65 }}>
+                            <span style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray, minWidth: 36 }}>Rozg</span>
+                            <span style={{ fontFamily: mono, fontSize: '0.78rem', color: C.navy }}>{l.weight ? `${l.weight} kg` : '—'}</span>
+                            <span style={{ fontFamily: mono, fontSize: '0.72rem', color: C.gray }}>{l.reps_completed ? `${l.reps_completed} powt.` : '—'}</span>
+                          </div>
+                        ))}
+                        {mainLogs.map((l: any, i: number) => (
+                          <div key={l.id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '5px 0', borderTop: i === 0 && warmupLogs.length > 0 ? `1px solid ${C.grayLight}` : 'none' }}>
+                            <span style={{ fontFamily: mono, fontSize: '0.65rem', color: l.completed ? C.gold : C.gray, fontWeight: 800, minWidth: 36 }}>S{l.set_number}</span>
+                            <span style={{ fontFamily: mono, fontSize: '0.92rem', fontWeight: 900, color: l.weight ? C.navy : C.gray }}>
+                              {l.weight ? `${l.weight} kg` : '—'}
+                            </span>
+                            <span style={{ fontFamily: mono, fontSize: '0.75rem', color: C.gray }}>{l.reps_completed ? `${l.reps_completed} powt.` : '—'}</span>
+                            {!l.completed && <span style={{ fontFamily: mono, fontSize: '0.55rem', color: C.gray, background: C.offWhite, padding: '1px 6px', borderRadius: 4 }}>nie ukończona</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })}
+                  {orderedExIds.filter(id => logsByEx[id]?.length > 0).length === 0 && (
+                    <div style={{ padding: '1rem', fontFamily: mono, fontSize: '0.72rem', color: C.gray, textAlign: 'center' }}>Brak zapisanych serii.</div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ background: C.offWhite, border: `1.5px solid ${C.grayLight}`, borderRadius: 12, padding: '1rem', fontFamily: mono, fontSize: '0.72rem', color: C.gray, textAlign: 'center' }}>
+                  Brak zapisanych serii dla tej sesji.
+                </div>
+              )}
+
+              {/* Feedback tekstowy */}
+              {feedback && (feedback.what_went_well || feedback.pain_after_comment || feedback.general_notes) && (
+                <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 12, overflow: 'hidden' }}>
+                  <div style={{ padding: '0.75rem 1rem', background: C.offWhite, borderBottom: `1.5px solid ${C.grayLight}`, fontFamily: mono, fontSize: '0.62rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>
+                    💬 Feedback zawodniczki
+                  </div>
+                  <div style={{ padding: '0.875rem 1rem', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {feedback.what_went_well && (
+                      <div>
+                        <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.green, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3, fontWeight: 700 }}>Co poszło dobrze</div>
+                        <div style={{ fontSize: '0.88rem', color: C.navy, lineHeight: 1.5, fontStyle: 'italic' }}>&ldquo;{feedback.what_went_well}&rdquo;</div>
+                      </div>
+                    )}
+                    {feedback.pain_after_comment && (
+                      <div>
+                        <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.red, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3, fontWeight: 700 }}>Ból / dyskomfort</div>
+                        <div style={{ fontSize: '0.88rem', color: C.navy, lineHeight: 1.5, fontStyle: 'italic' }}>&ldquo;{feedback.pain_after_comment}&rdquo;</div>
+                      </div>
+                    )}
+                    {feedback.general_notes && (
+                      <div>
+                        <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3, fontWeight: 700 }}>Dodatkowe uwagi</div>
+                        <div style={{ fontSize: '0.88rem', color: C.navy, lineHeight: 1.5 }}>{feedback.general_notes}</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {!feedback && !hasSetLogs && (
+                <div style={{ textAlign: 'center', padding: '1rem', fontFamily: mono, fontSize: '0.72rem', color: C.gray }}>
+                  Zawodniczka nie wypełniła jeszcze feedbacku po tej sesji.
+                </div>
+              )}
             </div>
           )}
-          {feedback?.what_to_improve && (
-            <div style={{ background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 10, padding: '0.875rem' }}>
-              <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#92400E', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 5 }}>Do poprawy</div>
-              <div style={{ fontSize: '0.88rem', color: C.navy, lineHeight: 1.5, fontStyle: 'italic' }}>&ldquo;{feedback.what_to_improve}&rdquo;</div>
-            </div>
-          )}
-          {feedback?.notes && (
-            <div style={{ background: C.offWhite, border: `1.5px solid ${C.grayLight}`, borderRadius: 10, padding: '0.875rem' }}>
-              <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 5 }}>Notatki</div>
-              <div style={{ fontSize: '0.88rem', color: C.navy, lineHeight: 1.5 }}>{feedback.notes}</div>
-            </div>
-          )}
-          {!feedback && (
-            <div style={{ textAlign: 'center', padding: '1rem', fontFamily: mono, fontSize: '0.72rem', color: C.gray }}>
-              Brak szczegółowego feedbacku po sesji.
-            </div>
-          )}
-          <button onClick={onClose} style={{ padding: '0.75rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 10, fontWeight: 800, fontFamily: sans }}>
-            Zamknij
-          </button>
+        </div>
+
+        <div style={{ padding: '0.875rem 1rem', borderTop: `1.5px solid ${C.grayLight}`, flexShrink: 0 }}>
+          <button onClick={onClose} style={{ width: '100%', padding: '0.75rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 10, fontWeight: 800, fontFamily: sans }}>Zamknij</button>
         </div>
       </div>
     </div>
@@ -1140,10 +1268,13 @@ function filterByDays(logs: any[], days: number, dateField = 'date') {
 
 // ── PlanExerciseTable ─────────────────────────────────────────────────────────
 
-function PlanExerciseTable({ rows, athletes, overrides, uniqueDays }: {
+type ActualEntry = { weight: number | null; sets: number; repsRange: string }
+
+function PlanExerciseTable({ rows, athletes, overrides, actual, uniqueDays }: {
   rows: { exId: number; name: string; block: string; day: string; dayId: number; sets: number; reps: string; tempo: string; weight: number | null }[]
   athletes: any[]
   overrides: Record<number, Record<number, any>>
+  actual: Record<number, Record<number, ActualEntry>>
   uniqueDays: { id: number; label: string }[]
 }) {
   const [selDayId, setSelDayId] = useState(uniqueDays[0]?.id ?? 0)
@@ -1218,23 +1349,35 @@ function PlanExerciseTable({ rows, athletes, overrides, uniqueDays }: {
                     {filtered.map((row, ci) => {
                       const skip = isSkipped(row.exId, a.id)
                       const mod = hasOverride(row.exId, a.id)
-                      const w = effectiveWeight(row.exId, a.id, row.weight)
-                      const s = effectiveSets(row.exId, a.id, row.sets)
-                      const r = effectiveReps(row.exId, a.id, row.reps)
-                      const t = effectiveTempo(row.exId, a.id, row.tempo)
+                      const planW = effectiveWeight(row.exId, a.id, row.weight)
+                      const planS = effectiveSets(row.exId, a.id, row.sets)
+                      const planR = effectiveReps(row.exId, a.id, row.reps)
+                      const planT = effectiveTempo(row.exId, a.id, row.tempo)
+                      const act = actual[row.exId]?.[a.id] ?? null
+                      const hasAct = act !== null
                       return (
-                        <td key={`${row.exId}-${ci}`} style={{ padding: '0.45rem 0.65rem', textAlign: 'center', borderBottom: `1px solid ${C.grayLight}`, background: skip ? '#FEF2F2' : mod ? C.navyLight : undefined }}>
+                        <td key={`${row.exId}-${ci}`} style={{ padding: '0.45rem 0.65rem', textAlign: 'center', borderBottom: `1px solid ${C.grayLight}`, background: skip ? '#FEF2F2' : hasAct ? '#F0FDF4' : mod ? C.navyLight : undefined }}>
                           {skip ? (
-                            <span style={{ fontFamily: mono, fontSize: '0.62rem', color: C.red }}>—</span>
+                            <span style={{ fontFamily: mono, fontSize: '0.62rem', color: C.red }}>pominięte</span>
+                          ) : hasAct ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                              <span style={{ fontFamily: mono, fontWeight: 900, fontSize: '0.95rem', color: '#16A34A' }}>
+                                {act.weight !== null ? `${act.weight} kg` : '—'}
+                              </span>
+                              <span style={{ fontFamily: mono, fontSize: '0.58rem', color: '#16A34A' }}>{act.sets} serii</span>
+                              {planW !== null && act.weight !== null && act.weight !== planW && (
+                                <span style={{ fontFamily: mono, fontSize: '0.52rem', color: C.gray }}>plan: {planW} kg</span>
+                              )}
+                            </div>
                           ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-                              {w !== null ? (
-                                <span style={{ fontFamily: mono, fontWeight: 900, fontSize: '0.95rem', color: mod ? C.gold : C.navy }}>{w} kg</span>
+                              {planW !== null ? (
+                                <span style={{ fontFamily: mono, fontWeight: 900, fontSize: '0.95rem', color: mod ? C.gold : C.gray }}>{planW} kg</span>
                               ) : (
-                                <span style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray }}>—</span>
+                                <span style={{ fontFamily: mono, fontSize: '0.68rem', color: C.grayLight }}>—</span>
                               )}
                               <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, whiteSpace: 'nowrap' }}>
-                                {s}×{r || '—'}{t ? ` ${t}` : ''}
+                                {planS}×{planR || '—'}{planT ? ` ${planT}` : ''}
                               </span>
                             </div>
                           )}
@@ -1250,8 +1393,12 @@ function PlanExerciseTable({ rows, athletes, overrides, uniqueDays }: {
       )}
       <div style={{ padding: '0.6rem 1rem', borderTop: `1.5px solid ${C.grayLight}`, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <div style={{ width: 10, height: 10, borderRadius: 3, background: '#16A34A' }} />
+          <span style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray }}>Faktyczne (z treningu)</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <div style={{ width: 10, height: 10, borderRadius: 3, background: C.gold }} />
-          <span style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray }}>Zmodyfikowane indywidualnie</span>
+          <span style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray }}>Zmodyfikowane przez trenera</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <div style={{ width: 10, height: 10, borderRadius: 3, background: C.red + '55', border: `1px solid ${C.red}` }} />
@@ -1275,8 +1422,8 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
   const [trainingPeriod, setTrainingPeriod] = useState(30)
   const [localAthletes, setLocalAthletes] = useState<any[]>(athletes)
   const [quickReportAthlete, setQuickReportAthlete] = useState<any | null>(null)
-  const [sessionReport, setSessionReport] = useState<{ session: any; feedback: any | null; athleteName: string; dayName: string } | null>(null)
-  const [planExData, setPlanExData] = useState<{ blocks: any[]; overrides: Record<number, Record<number, any>> } | null>(null)
+  const [sessionReport, setSessionReport] = useState<{ session: any; athleteId: number; athleteName: string; dayName: string } | null>(null)
+  const [planExData, setPlanExData] = useState<{ blocks: any[]; overrides: Record<number, Record<number, any>>; actual: Record<number, Record<number, ActualEntry>> } | null>(null)
   const [planExLoading, setPlanExLoading] = useState(false)
 
   function openQuickReport(athleteId: number) {
@@ -1290,9 +1437,8 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
     if (sid) feedbackBySessionId[sid] = f
   }
 
-  function openSessionReport(session: any, athleteName: string, dayName: string) {
-    const fb = feedbackBySessionId[session.id] || null
-    setSessionReport({ session, feedback: fb, athleteName, dayName })
+  function openSessionReport(session: any, athleteId: number, athleteName: string, dayName: string) {
+    setSessionReport({ session, athleteId, athleteName, dayName })
   }
 
   async function loadPlanExercises() {
@@ -1300,25 +1446,78 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
     setPlanExLoading(true)
     const sb = createClient()
     const planDayIds = activePlanDays.map((d: any) => d.id)
+    const athleteIds2 = athletes.map((a: any) => a.id)
+
+    // Bloki + ćwiczenia z planu
     const { data: blocks } = await sb
       .from('workout_day_blocks')
       .select('id, day_id, block_name, block_order, rounds, workout_block_exercises(id, exercise_id, exercise_code, exercise_order, sets, reps, weight_kg, tempo, rir, coach_comment, exercise:exercises(name))')
       .in('day_id', planDayIds)
       .order('block_order')
+
     const allExIds = (blocks || []).flatMap((b: any) => (b.workout_block_exercises || []).map((e: any) => e.id))
-    const athleteIds2 = athletes.map((a: any) => a.id)
+
+    // Indywidualne modyfikacje (override planu przez trenera)
     const { data: ovrs } = allExIds.length > 0
       ? await sb.from('athlete_exercise_overrides')
           .select('athlete_id, block_exercise_id, weight_override, sets_override, reps_override, tempo_override, skip')
           .in('block_exercise_id', allExIds)
           .in('athlete_id', athleteIds2)
       : { data: [] }
+
     const ovrMap: Record<number, Record<number, any>> = {}
     for (const o of (ovrs || [])) {
       if (!ovrMap[o.block_exercise_id]) ovrMap[o.block_exercise_id] = {}
       ovrMap[o.block_exercise_id][o.athlete_id] = o
     }
-    setPlanExData({ blocks: blocks || [], overrides: ovrMap })
+
+    // Faktyczne dane treningowe z set_logs (sesje dla tych dni i zawodniczek)
+    const { data: sessionsForPlan } = await sb
+      .from('workout_sessions')
+      .select('id, athlete_id, workout_day_id')
+      .in('workout_day_id', planDayIds)
+      .in('athlete_id', athleteIds2)
+      .eq('completed', true)
+
+    const sessionIds = (sessionsForPlan || []).map((s: any) => s.id)
+
+    // Mapa: session_id → athlete_id
+    const sessionAthleteMap: Record<number, number> = {}
+    for (const s of (sessionsForPlan || [])) sessionAthleteMap[s.id] = s.athlete_id
+
+    // set_logs dla tych sesji
+    type ActualEntry = { weight: number | null; sets: number; repsRange: string }
+    const actualMap: Record<number, Record<number, ActualEntry>> = {} // exId → athleteId → dane
+
+    if (sessionIds.length > 0 && allExIds.length > 0) {
+      const { data: logs } = await sb
+        .from('set_logs')
+        .select('workout_session_id, block_exercise_id, weight, reps_completed, completed, is_warmup')
+        .in('workout_session_id', sessionIds)
+        .in('block_exercise_id', allExIds)
+        .eq('completed', true)
+        .eq('is_warmup', false)
+
+      for (const l of (logs || [])) {
+        const athleteId = sessionAthleteMap[l.workout_session_id]
+        if (!athleteId) continue
+        if (!actualMap[l.block_exercise_id]) actualMap[l.block_exercise_id] = {}
+        const prev = actualMap[l.block_exercise_id][athleteId]
+        const w = l.weight ?? null
+        if (!prev) {
+          actualMap[l.block_exercise_id][athleteId] = { weight: w, sets: 1, repsRange: l.reps_completed?.toString() || '—' }
+        } else {
+          // Maksymalny ciężar + liczba serii
+          actualMap[l.block_exercise_id][athleteId] = {
+            weight: w !== null && (prev.weight === null || w > prev.weight) ? w : prev.weight,
+            sets: prev.sets + 1,
+            repsRange: prev.repsRange,
+          }
+        }
+      }
+    }
+
+    setPlanExData({ blocks: blocks || [], overrides: ovrMap, actual: actualMap })
     setPlanExLoading(false)
   }
 
@@ -1368,7 +1567,7 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
       {sessionReport && (
         <SessionReportModal
           session={sessionReport.session}
-          feedback={sessionReport.feedback}
+          athleteId={sessionReport.athleteId}
           athleteName={sessionReport.athleteName}
           dayName={sessionReport.dayName}
           onClose={() => setSessionReport(null)}
@@ -1681,7 +1880,7 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                                 return (
                                   <td key={day.id} style={{ padding: '0.5rem', textAlign: 'center', borderBottom: `1px solid ${C.grayLight}` }}>
                                     <div
-                                      onClick={() => clickable && openSessionReport(sess, athlete.full_name, day.day_name || `Trening ${day.id}`)}
+                                      onClick={() => clickable && openSessionReport(sess, athlete.id, athlete.full_name, day.day_name || `Trening ${day.id}`)}
                                       title={clickable ? 'Kliknij aby zobaczyć raport' : undefined}
                                       style={{ display: 'flex', justifyContent: 'center', cursor: clickable ? 'pointer' : 'default' }}>
                                       <CellStatus session={sess} />
@@ -1758,7 +1957,7 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
 
                       // Day tabs
                       const uniqueDays = activePlanDays.map((d: any, i: number) => ({ id: d.id, label: d.day_name || `T${i + 1}` }))
-                      return <PlanExerciseTable rows={rows} athletes={athletes} overrides={planExData.overrides} uniqueDays={uniqueDays} />
+                      return <PlanExerciseTable rows={rows} athletes={athletes} overrides={planExData.overrides} actual={planExData.actual || {}} uniqueDays={uniqueDays} />
                     })()}
                   </Card>
                 )
