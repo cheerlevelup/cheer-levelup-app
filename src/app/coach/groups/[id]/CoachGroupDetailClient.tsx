@@ -191,37 +191,46 @@ function SessionReportModal({ session, athleteId, athleteName, dayName, onClose 
 
   useEffect(() => {
     async function load() {
-      const sb = createClient()
-      const sessionDate = session.date_completed
-        ? new Date(session.date_completed).toISOString().split('T')[0]
-        : new Date().toISOString().split('T')[0]
+      try {
+        const sb = createClient()
+        const sessionDate = session.date_completed
+          ? new Date(session.date_completed).toISOString().split('T')[0]
+          : new Date().toISOString().split('T')[0]
 
-      const [fbRes, logsRes, blocksRes, wellnessRes] = await Promise.all([
-        sb.from('post_session_feedback')
-          .select('*')
-          .eq('workout_session_id', session.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-        sb.from('set_logs')
-          .select('*')
-          .eq('workout_session_id', session.id)
-          .order('set_number', { ascending: true }),
-        sb.from('workout_day_blocks')
-          .select('*, workout_block_exercises(id, exercise_id, exercise_code, sets, reps, weight_kg, exercise:exercises(name))')
-          .eq('day_id', session.workout_day_id)
-          .order('block_order', { ascending: true }),
-        sb.from('wellness_logs')
-          .select('*')
-          .eq('athlete_id', athleteId)
-          .eq('date', sessionDate)
-          .maybeSingle(),
-      ])
-      setFeedback(fbRes.data || null)
-      setSetLogs(logsRes.data || [])
-      setBlocks(blocksRes.data || [])
-      setWellness(wellnessRes.data || null)
-      setLoading(false)
+        // Każde zapytanie niezależnie — błąd jednego nie blokuje reszty
+        let fbData = null, logsData: any[] = [], blocksData: any[] = [], wellnessData = null
+
+        try {
+          const r = await sb.from('post_session_feedback').select('*').eq('workout_session_id', session.id).order('created_at', { ascending: false }).limit(1).maybeSingle()
+          fbData = r.data || null
+        } catch {}
+
+        try {
+          const r = await sb.from('set_logs').select('*').eq('workout_session_id', session.id).order('set_number', { ascending: true })
+          logsData = r.data || []
+        } catch {}
+
+        if (session.workout_day_id) {
+          try {
+            const r = await sb.from('workout_day_blocks').select('*, workout_block_exercises(id, exercise_id, exercise_code, sets, reps, weight_kg, exercise:exercises(name))').eq('day_id', session.workout_day_id).order('block_order', { ascending: true })
+            blocksData = r.data || []
+          } catch {}
+        }
+
+        try {
+          const r = await sb.from('wellness_logs').select('*').eq('athlete_id', athleteId).eq('date', sessionDate).maybeSingle()
+          wellnessData = r.data || null
+        } catch {}
+
+        setFeedback(fbData)
+        setSetLogs(logsData)
+        setBlocks(blocksData)
+        setWellness(wellnessData)
+      } catch (e) {
+        console.error('SessionReportModal load error:', e)
+      } finally {
+        setLoading(false)
+      }
     }
     load()
   }, [session.id, session.workout_day_id, athleteId])
