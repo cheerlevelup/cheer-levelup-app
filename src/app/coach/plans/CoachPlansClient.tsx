@@ -32,6 +32,7 @@ export default function CoachPlansClient({ plans: initialPlans }: { plans: Plan[
   const supabase = createClient()
   const [plans, setPlans] = useState(initialPlans)
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [duplicatingId, setDuplicatingId] = useState<number | null>(null)
   const [error, setError] = useState('')
 
   async function deletePlan(plan: Plan) {
@@ -42,6 +43,86 @@ export default function CoachPlansClient({ plans: initialPlans }: { plans: Plan[
     if (err) { setError(`Błąd: ${err.message}`); setDeletingId(null); return }
     setPlans(prev => prev.filter(p => p.id !== plan.id))
     setDeletingId(null)
+  }
+
+  async function duplicatePlan(plan: Plan) {
+    setDuplicatingId(plan.id)
+    setError('')
+    try {
+      // 1. Nowy plan
+      const { data: newPlan, error: e1 } = await supabase
+        .from('workout_plans')
+        .insert({ name: `Kopia "${plan.name}"`, description: (plan as any).description || null })
+        .select()
+        .single()
+      if (e1 || !newPlan) throw e1 || new Error('Błąd tworzenia planu')
+
+      // 2. Pobierz pełną strukturę oryginału
+      const { data: weeks } = await supabase
+        .from('workout_weeks')
+        .select('id, week_number, name')
+        .eq('plan_id', plan.id)
+        .order('week_number')
+
+      for (const week of (weeks || [])) {
+        const { data: newWeek, error: e2 } = await supabase
+          .from('workout_weeks')
+          .insert({ plan_id: newPlan.id, week_number: week.week_number, name: week.name || null })
+          .select()
+          .single()
+        if (e2 || !newWeek) continue
+
+        const { data: days } = await supabase
+          .from('workout_days')
+          .select('id, day_name, day_order')
+          .eq('week_id', week.id)
+          .order('day_order')
+
+        for (const day of (days || [])) {
+          const { data: newDay, error: e3 } = await supabase
+            .from('workout_days')
+            .insert({ week_id: newWeek.id, day_name: day.day_name, day_order: day.day_order })
+            .select()
+            .single()
+          if (e3 || !newDay) continue
+
+          const { data: blocks } = await supabase
+            .from('workout_day_blocks')
+            .select('id, block_name, block_order, rounds')
+            .eq('day_id', day.id)
+            .order('block_order')
+
+          for (const block of (blocks || [])) {
+            const { data: newBlock, error: e4 } = await supabase
+              .from('workout_day_blocks')
+              .insert({ day_id: newDay.id, block_name: block.block_name, block_order: block.block_order, rounds: block.rounds })
+              .select()
+              .single()
+            if (e4 || !newBlock) continue
+
+            const { data: exercises } = await supabase
+              .from('workout_block_exercises')
+              .select('exercise_id, exercise_code, exercise_order, sets, reps, tempo, weight_kg, rir, is_warmup, warmup_sets, coach_comment, exercise_url')
+              .eq('block_id', block.id)
+              .order('exercise_order')
+
+            if (exercises && exercises.length > 0) {
+              await supabase.from('workout_block_exercises').insert(
+                exercises.map((ex: any) => ({ ...ex, block_id: newBlock.id }))
+              )
+            }
+          }
+        }
+      }
+
+      // Dodaj nowy plan do listy i przejdź do edycji
+      setPlans(prev => [{ id: newPlan.id, name: newPlan.name, description: newPlan.description, created_at: newPlan.created_at }, ...prev])
+      router.push(`/coach/plans/${newPlan.id}`)
+    } catch (e: any) {
+      setError(`Błąd duplikowania: ${e?.message || e}`)
+    } finally {
+      setDuplicatingId(null)
+    }
   }
 
   return (
@@ -84,10 +165,20 @@ export default function CoachPlansClient({ plans: initialPlans }: { plans: Plan[
                       <span style={{ color: C.gray, marginLeft: 12, flexShrink: 0 }}>›</span>
                     </button>
                     <button
+                      onClick={() => duplicatePlan(plan)}
+                      disabled={duplicatingId === plan.id}
+                      title="Duplikuj plan"
+                      style={{ padding: '0 0.9rem', background: 'none', border: 'none', borderLeft: `1.5px solid ${C.grayLight}`, color: duplicatingId === plan.id ? C.gray : C.navy, fontWeight: 700, fontSize: '0.82rem', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}
+                    >
+                      {duplicatingId === plan.id
+                        ? <span style={{ fontFamily: mono, fontSize: '0.7rem' }}>...</span>
+                        : <><span style={{ fontSize: '0.85rem' }}>⎘</span><span>Duplikuj</span></>}
+                    </button>
+                    <button
                       onClick={() => deletePlan(plan)}
                       disabled={deletingId === plan.id}
                       title="Usuń plan"
-                      style={{ padding: '0 1.1rem', background: 'none', border: 'none', borderLeft: `1.5px solid ${C.grayLight}`, color: deletingId === plan.id ? C.gray : C.red, fontWeight: 700, fontSize: '0.82rem', flexShrink: 0 }}
+                      style={{ padding: '0 1rem', background: 'none', border: 'none', borderLeft: `1.5px solid ${C.grayLight}`, color: deletingId === plan.id ? C.gray : C.red, fontWeight: 700, fontSize: '0.82rem', flexShrink: 0 }}
                     >
                       {deletingId === plan.id ? '...' : 'Usuń'}
                     </button>
