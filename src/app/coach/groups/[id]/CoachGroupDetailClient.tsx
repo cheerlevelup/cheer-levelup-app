@@ -582,24 +582,17 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                       <span style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, background: C.offWhite, border: `1.5px solid ${C.grayLight}`, borderRadius: 8, padding: '0.35rem 0.7rem' }}>📦 Zarchiwizowany</span>
                     )}
                   </div>
+                  {/* ── TABELA 1: Realizacja planu (treningi) ── */}
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ borderCollapse: 'collapse', minWidth: '100%' }}>
                       <thead>
-                        <tr>
-                          <th style={{ padding: '0.75rem 1.25rem', textAlign: 'left', fontFamily: mono, fontSize: '0.62rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', background: C.offWhite, position: 'sticky', left: 0, zIndex: 2, borderBottom: `1.5px solid ${C.grayLight}`, whiteSpace: 'nowrap' }}>Zawodniczka</th>
-                          <th style={thStyle}>Postęp</th>
-                          {/* Wellness cols */}
-                          <th style={{ ...thStyle, background: '#F0FDF4' }} title="Wellness dzisiaj uzupełniony">W</th>
-                          <th style={{ ...thStyle, background: '#F0FDF4' }} title="Średnia snu (7 dni)">Sen</th>
-                          <th style={{ ...thStyle, background: '#F0FDF4' }} title="Średni stres (7 dni)">Stres</th>
-                          <th style={{ ...thStyle, background: '#F0FDF4' }} title="Max ból (7 dni)">Ból</th>
-                          <th style={{ ...thStyle, background: '#F0FDF4' }} title="Aktywność (godz, 7 dni)">Akt.</th>
-                          <th style={{ ...thStyle, background: '#F0FDF4' }} title="Faza cyklu">🌸</th>
-                          {/* Training cols */}
+                        <tr style={{ background: C.navy }}>
+                          <th style={{ padding: '0.65rem 1.25rem', textAlign: 'left', fontFamily: mono, fontSize: '0.6rem', color: C.gold, letterSpacing: '0.08em', textTransform: 'uppercase', position: 'sticky', left: 0, zIndex: 2, background: C.navy, borderBottom: `1.5px solid ${C.navyBorder}`, whiteSpace: 'nowrap' }}>Zawodniczka</th>
+                          <th style={{ ...thStyle, background: C.navy, color: C.gold, borderBottom: `1.5px solid ${C.navyBorder}` }}>Postęp</th>
                           {activePlanDays.map((day: any, i: number) => (
-                            <th key={day.id} style={{ padding: '0.75rem 0.5rem', textAlign: 'center', fontFamily: mono, fontSize: '0.6rem', color: C.gray, background: C.offWhite, borderBottom: `1.5px solid ${C.grayLight}`, minWidth: 40 }}>
-                              <div style={{ fontWeight: 700, color: C.navy }}>T{i + 1}</div>
-                              <div style={{ fontSize: '0.55rem', marginTop: 1 }}>{(day.day_name || '').replace('Dzień ', '').replace('Trening ', '')}</div>
+                            <th key={day.id} style={{ padding: '0.6rem 0.5rem', textAlign: 'center', fontFamily: mono, fontSize: '0.6rem', color: C.gold, background: C.navy, borderBottom: `1.5px solid ${C.navyBorder}`, minWidth: 42 }}>
+                              <div style={{ fontWeight: 800 }}>T{i + 1}</div>
+                              <div style={{ fontSize: '0.52rem', marginTop: 2, color: C.gray }}>{(day.day_name || '').replace('Dzień ', '').replace('Trening ', '')}</div>
                             </th>
                           ))}
                         </tr>
@@ -608,75 +601,27 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                         {athletes.map((athlete: any, rowIdx: number) => {
                           const progress = getAthleteProgress(athlete.id)
                           const pct = progress ? Math.round((progress.done / progress.total) * 100) : 0
-                          const ws = getAthleteWellnessSummary(athlete.id, wellnessLogs)
-                          const rowBg = rowIdx % 2 === 0 ? C.white : C.offWhite
-                          const wsBg = rowIdx % 2 === 0 ? '#F7FFF9' : '#EFFAF2'
-
-                          const sleepColor = ws.sleepAvg === null ? C.grayLight
-                            : ws.sleepAvg <= 5 ? C.red
-                            : ws.sleepAvg <= 7 ? C.gold : C.green
-                          const stressColor = ws.stressAvg === null ? C.grayLight
-                            : ws.stressAvg >= 8 ? C.red
-                            : ws.stressAvg >= 5 ? C.gold : C.green
-                          const painColor = ws.maxPain === null ? C.grayLight
-                            : ws.maxPain >= 6 ? C.red
-                            : ws.maxPain >= 5 ? C.gold : C.green
-
+                          const rowBg = rowIdx % 2 === 0 ? C.white : '#FAFBFC'
                           return (
-                            <tr key={athlete.id} style={{ background: rowBg }}>
-                              <td style={{ padding: '0.75rem 1.25rem', position: 'sticky', left: 0, zIndex: 1, background: rowBg, borderBottom: `1.5px solid ${C.grayLight}`, whiteSpace: 'nowrap' }}>
-                                <button onClick={() => router.push(`/coach/athletes/${athlete.id}`)} style={{ background: 'none', border: 'none', color: C.navy, fontWeight: 700, fontSize: '0.88rem', cursor: 'pointer', padding: 0 }}>{athlete.full_name}</button>
+                            <tr key={athlete.id} style={{ background: rowBg }}
+                              onMouseEnter={e => (e.currentTarget.style.background = '#F0F4FF')}
+                              onMouseLeave={e => (e.currentTarget.style.background = rowBg)}>
+                              <td style={{ padding: '0.75rem 1.25rem', position: 'sticky', left: 0, zIndex: 1, background: 'inherit', borderBottom: `1px solid ${C.grayLight}`, whiteSpace: 'nowrap' }}>
+                                <button onClick={() => router.push(`/coach/athletes/${athlete.id}`)} style={{ background: 'none', border: 'none', color: C.navy, fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', padding: 0 }}>{athlete.full_name}</button>
                               </td>
-                              <td style={{ padding: '0.75rem', textAlign: 'center', borderBottom: `1.5px solid ${C.grayLight}`, background: rowBg }}>
+                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid ${C.grayLight}` }}>
                                 {progress ? (
                                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
                                     <div style={{ fontFamily: mono, fontSize: '0.72rem', fontWeight: 800, color: pct === 100 ? C.green : C.navy }}>{pct}%</div>
                                     <div style={{ width: 44, height: 4, background: C.grayLight, borderRadius: 2, overflow: 'hidden' }}>
                                       <div style={{ height: '100%', width: `${pct}%`, background: pct === 100 ? C.green : C.gold, borderRadius: 2 }} />
                                     </div>
-                                    <div style={{ fontFamily: mono, fontSize: '0.55rem', color: C.gray }}>{progress.done}/{progress.total}</div>
+                                    <div style={{ fontFamily: mono, fontSize: '0.52rem', color: C.gray }}>{progress.done}/{progress.total}</div>
                                   </div>
-                                ) : <span style={{ color: C.gray, fontSize: '0.75rem' }}>—</span>}
+                                ) : <span style={{ color: C.grayLight, fontSize: '0.75rem' }}>—</span>}
                               </td>
-                              {/* Wellness: filled today */}
-                              <td style={tdWs(wsBg)} title={ws.hasToday ? 'Uzupełniony dziś' : ws.entryCount > 0 ? `Ostatni wpis w ciągu 7 dni` : 'Brak wpisów w tym tygodniu'}>
-                                <div style={{ fontSize: '0.8rem' }}>{ws.hasToday ? '✅' : ws.entryCount > 0 ? <span style={{ color: C.gold }}>⚠️</span> : <span style={{ color: C.red }}>✗</span>}</div>
-                              </td>
-                              {/* Sleep avg */}
-                              <td style={tdWs(wsBg)}>
-                                {ws.sleepAvg !== null
-                                  ? <WellnessBadge value={ws.sleepAvg.toFixed(1)} label="h" color={sleepColor} />
-                                  : <span style={{ color: C.grayLight, fontSize: '0.7rem' }}>—</span>}
-                              </td>
-                              {/* Stress avg */}
-                              <td style={tdWs(wsBg)}>
-                                {ws.stressAvg !== null
-                                  ? <WellnessBadge value={ws.stressAvg.toFixed(1)} color={stressColor} />
-                                  : <span style={{ color: C.grayLight, fontSize: '0.7rem' }}>—</span>}
-                              </td>
-                              {/* Max pain */}
-                              <td style={tdWs(wsBg)}>
-                                {ws.maxPain !== null
-                                  ? <WellnessBadge value={String(ws.maxPain)} color={painColor} />
-                                  : <span style={{ color: C.grayLight, fontSize: '0.7rem' }}>—</span>}
-                              </td>
-                              {/* Activity hours */}
-                              <td style={tdWs(wsBg)}>
-                                {ws.activityHours !== null
-                                  ? <WellnessBadge value={`${ws.activityHours}h`} color={C.navy} />
-                                  : <span style={{ color: C.grayLight, fontSize: '0.7rem' }}>—</span>}
-                              </td>
-                              {/* Cycle */}
-                              <td style={tdWs(wsBg)}>
-                                {ws.latestCycle === 'menstruacja'
-                                  ? <span title="Menstruacja" style={{ fontSize: '0.8rem' }}>🔴</span>
-                                  : ws.latestCycle
-                                    ? <span title={ws.latestCycle} style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray }}>{ws.latestCycle.slice(0, 3)}</span>
-                                    : <span style={{ color: C.grayLight, fontSize: '0.7rem' }}>—</span>}
-                              </td>
-                              {/* Training sessions */}
                               {activePlanDays.map((day: any) => (
-                                <td key={day.id} style={{ padding: '0.5rem', textAlign: 'center', borderBottom: `1.5px solid ${C.grayLight}`, background: rowBg }}>
+                                <td key={day.id} style={{ padding: '0.5rem', textAlign: 'center', borderBottom: `1px solid ${C.grayLight}` }}>
                                   <div style={{ display: 'flex', justifyContent: 'center' }}>
                                     <CellStatus session={sessionIndex[`${athlete.id}_${day.id}`] || null} />
                                   </div>
@@ -688,13 +633,99 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                       </tbody>
                     </table>
                   </div>
-                  <div style={{ padding: '0.75rem 1.25rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                    {[{ symbol: '○', label: 'Niewykonany', bg: C.grayLight, color: C.gray }, { symbol: '✓', label: 'Wykonany', bg: C.green, color: C.white }, { symbol: '📋', label: 'Raport', bg: C.navy, color: C.white }, { symbol: '◑', label: 'W trakcie', bg: C.gold, color: C.navy }].map(item => (
+                  <div style={{ padding: '0.65rem 1.25rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', borderTop: `1.5px solid ${C.grayLight}` }}>
+                    {[
+                      { symbol: '○', label: 'Niewykonany', bg: C.grayLight, color: C.gray },
+                      { symbol: '✓', label: 'Wykonany', bg: C.green, color: C.white },
+                      { symbol: '📋', label: 'Raport wysłany', bg: C.navy, color: C.white },
+                      { symbol: '◑', label: 'W trakcie', bg: C.gold, color: C.navy },
+                    ].map(item => (
                       <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <div style={{ width: 18, height: 18, borderRadius: '50%', background: item.bg, color: item.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5rem' }}>{item.symbol}</div>
-                        <span style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray }}>{item.label}</span>
+                        <div style={{ width: 16, height: 16, borderRadius: '50%', background: item.bg, color: item.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5rem' }}>{item.symbol}</div>
+                        <span style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray }}>{item.label}</span>
                       </div>
                     ))}
+                  </div>
+                </Card>
+              )}
+
+              {/* ── TABELA 2: Dane wellness (7 dni) ── */}
+              {athletes.length > 0 && (
+                <Card style={{ marginBottom: '1.25rem' }}>
+                  <div style={{ padding: '0.875rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Wellness — przegląd tygodniowy</div>
+                      <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.navy, fontWeight: 700, marginTop: 2 }}>Dane z ostatnich 7 dni</div>
+                    </div>
+                  </div>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ borderCollapse: 'collapse', minWidth: '100%' }}>
+                      <thead>
+                        <tr style={{ background: '#0D2D1A' }}>
+                          <th style={{ padding: '0.65rem 1.25rem', textAlign: 'left', fontFamily: mono, fontSize: '0.6rem', color: '#86EFAC', letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: `1.5px solid #1A4D2E` }}>Zawodniczka</th>
+                          {[
+                            { label: 'Wellness', title: 'Czy uzupełniła dziś' },
+                            { label: '🌙 Sen śr.', title: 'Średnia snu (h)' },
+                            { label: '🧠 Stres', title: 'Średni stres (1-10)' },
+                            { label: '🩹 Max ból', title: 'Maks. ból podczas treningu' },
+                            { label: '🏃 Aktywność', title: 'Łączne godziny aktywności' },
+                            { label: '🌸 Cykl', title: 'Ostatnia zaznaczona faza' },
+                          ].map(h => (
+                            <th key={h.label} title={h.title} style={{ padding: '0.65rem 0.75rem', textAlign: 'center', fontFamily: mono, fontSize: '0.6rem', color: '#86EFAC', letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: `1.5px solid #1A4D2E`, minWidth: 80 }}>
+                              {h.label}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {athletes.map((athlete: any, rowIdx: number) => {
+                          const ws = getAthleteWellnessSummary(athlete.id, wellnessWeek)
+                          const rowBg = rowIdx % 2 === 0 ? C.white : '#F7FFF9'
+
+                          const sleepColor = ws.sleepAvg === null ? undefined : ws.sleepAvg <= 5 ? C.red : ws.sleepAvg <= 7 ? C.gold : C.green
+                          const stressColor = ws.stressAvg === null ? undefined : ws.stressAvg >= 8 ? C.red : ws.stressAvg >= 5 ? C.gold : C.green
+                          const painColor = ws.maxPain === null ? undefined : ws.maxPain >= 6 ? C.red : ws.maxPain >= 5 ? C.gold : C.green
+
+                          const pill = (val: string | number | null, color?: string) => val !== null ? (
+                            <span style={{ display: 'inline-block', background: (color ?? C.navy) + '1A', color: color ?? C.navy, borderRadius: 6, padding: '2px 8px', fontFamily: mono, fontSize: '0.75rem', fontWeight: 800 }}>{val}</span>
+                          ) : <span style={{ color: C.grayLight, fontFamily: mono, fontSize: '0.7rem' }}>—</span>
+
+                          return (
+                            <tr key={athlete.id} style={{ background: rowBg }}
+                              onMouseEnter={e => (e.currentTarget.style.background = '#ECFDF5')}
+                              onMouseLeave={e => (e.currentTarget.style.background = rowBg)}>
+                              <td style={{ padding: '0.7rem 1.25rem', fontWeight: 700, color: C.navy, borderBottom: `1px solid #E0F2EA`, whiteSpace: 'nowrap' }}>
+                                <button onClick={() => router.push(`/coach/athletes/${athlete.id}`)} style={{ background: 'none', border: 'none', color: C.navy, fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', padding: 0 }}>{athlete.full_name}</button>
+                              </td>
+                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid #E0F2EA` }}>
+                                <span title={ws.hasToday ? 'Uzupełniła dziś' : ws.entryCount > 0 ? 'Wpis w tym tygodniu' : 'Brak wpisów'} style={{ fontSize: '1rem' }}>
+                                  {ws.hasToday ? '✅' : ws.entryCount > 0 ? '⚠️' : '❌'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid #E0F2EA` }}>
+                                {pill(ws.sleepAvg !== null ? `${ws.sleepAvg.toFixed(1)}h` : null, sleepColor)}
+                              </td>
+                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid #E0F2EA` }}>
+                                {pill(ws.stressAvg !== null ? ws.stressAvg.toFixed(1) : null, stressColor)}
+                              </td>
+                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid #E0F2EA` }}>
+                                {pill(ws.maxPain !== null ? ws.maxPain : null, painColor)}
+                              </td>
+                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid #E0F2EA` }}>
+                                {pill(ws.activityHours !== null ? `${ws.activityHours}h` : null, C.navy)}
+                              </td>
+                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid #E0F2EA` }}>
+                                {ws.latestCycle === 'menstruacja'
+                                  ? <span title="Menstruacja">🔴</span>
+                                  : ws.latestCycle
+                                    ? <span style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray }}>{ws.latestCycle.slice(0, 7)}</span>
+                                    : <span style={{ color: C.grayLight, fontFamily: mono, fontSize: '0.7rem' }}>—</span>}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </Card>
               )}
