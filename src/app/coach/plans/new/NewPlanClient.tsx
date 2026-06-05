@@ -55,8 +55,15 @@ export default function NewPlanClient(_props?: any) {
   const router = useRouter()
   const supabase = createClient()
 
+  const DEFAULT_NOTES = `Skróty:
+iso = izometria, bb = barbell/sztanga, ssb = safety squat bar, kb = kettlebell, db = dumbbell/hantle, sl = single leg/jednonóż, BW = body weight (ciężar ciała), 1RM = max ciężar na 1 powtórzenie, 50% 1RM = 50% maksimum
+rampa = stopniowo zwiększaj ciężar w kolejnych seriach (np. 35/37,5/40 kg)
+30" = 30 sekund
+5" ecc = faza ekscentryczna trwa 5 sek (np. w przysiadzie = schodzenie w dół)
+RIR = powtórzenia w zapasie (kliknij RIR w ćwiczeniu po wyjaśnienie)`
+
   const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
+  const [description, setDescription] = useState(DEFAULT_NOTES)
   const [weeksCount, setWeeksCount] = useState(4)
   const [daysPerWeek, setDaysPerWeek] = useState(2)
   const [dayNames, setDayNames] = useState<string[]>(['Trening A', 'Trening B'])
@@ -158,12 +165,12 @@ export default function NewPlanClient(_props?: any) {
             </div>
 
             <div>
-              <label style={lbl()}>Opis (opcjonalnie)</label>
+              <label style={lbl()}>Notatki dla zawodniczek <span style={{ fontWeight: 400, textTransform: 'none', fontSize: '0.7rem' }}>— widoczne pod przyciskiem ℹ️ w widoku treningu</span></label>
               <textarea
                 value={description} onChange={e => setDescription(e.target.value)}
-                placeholder="Krótki opis planu, cel, uwagi dla zawodniczki..."
-                rows={2}
-                style={{ ...inp({ minHeight: 72, padding: '0.75rem 0.875rem', resize: 'none' }), display: 'block' }}
+                placeholder="Skróty, wskazówki, informacje dla zawodniczek..."
+                rows={5}
+                style={{ ...inp({ minHeight: 110, padding: '0.75rem 0.875rem', resize: 'vertical' }), display: 'block' }}
               />
             </div>
           </div>

@@ -550,6 +550,9 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
   const supabase = createClient()
 
   const [planName, setPlanName] = useState(plan.name)
+  const [planNotes, setPlanNotes] = useState((plan as any).description || '')
+  const [savingNotes, setSavingNotes] = useState(false)
+  const [notesSaved, setNotesSaved] = useState(false)
   const [savingName, setSavingName] = useState(false)
   const [localWeeks, setLocalWeeks] = useState<Week[]>(weeks)
   const [localDays, setLocalDays] = useState<Day[]>(days)
@@ -582,6 +585,14 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
     const { error } = await supabase.from('workout_plans').update({ name: planName }).eq('id', plan.id)
     if (error) showError(`Nie udało się zapisać nazwy planu: ${error.message}`)
     setSavingName(false)
+  }
+
+  async function savePlanNotes() {
+    setSavingNotes(true)
+    const { error } = await supabase.from('workout_plans').update({ description: planNotes || null }).eq('id', plan.id)
+    if (error) showError(`Błąd zapisu notatek: ${error.message}`)
+    else { setNotesSaved(true); setTimeout(() => setNotesSaved(false), 2500) }
+    setSavingNotes(false)
   }
 
   async function saveWholePlan() {
@@ -1020,14 +1031,27 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
       <div style={{ minHeight: '100vh', background: C.offWhite, fontFamily: sans, color: C.navy }}>
         <header style={{ background: C.navy, padding: '1rem 1.25rem 1.25rem', position: 'sticky', top: 0, zIndex: 10 }}>
           <div style={{ maxWidth: 1180, margin: '0 auto', display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr) auto', gap: 12, alignItems: 'center' }}>
-            <div>
-              <label style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>Edytor planu</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block' }}>Edytor planu</label>
               <input
                 value={planName}
                 onChange={event => setPlanName(event.target.value)}
                 onBlur={savePlanName}
                 style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', color: C.white, fontWeight: 800, fontSize: '1.35rem' }}
               />
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+                <textarea
+                  value={planNotes}
+                  onChange={e => setPlanNotes(e.target.value)}
+                  placeholder="Notatki dla zawodniczek (skróty, wskazówki) — widoczne w panelu ℹ️ podczas treningu..."
+                  rows={2}
+                  style={{ flex: 1, background: 'rgba(255,255,255,0.07)', border: `1px solid ${C.navyBorder}`, borderRadius: 8, color: C.white, padding: '0.4rem 0.6rem', fontFamily: sans, fontSize: '0.78rem', resize: 'none', outline: 'none', minWidth: 0 }}
+                />
+                <button onClick={savePlanNotes} disabled={savingNotes}
+                  style={{ flexShrink: 0, padding: '0.45rem 0.75rem', background: notesSaved ? '#22C55E' : C.gold, color: C.navy, border: 'none', borderRadius: 8, fontWeight: 800, fontSize: '0.72rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  {savingNotes ? '...' : notesSaved ? '✓ Zapisano' : 'Zapisz notatki'}
+                </button>
+              </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>

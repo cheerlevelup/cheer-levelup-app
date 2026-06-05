@@ -173,6 +173,106 @@ function TempoVisualizer({ tempo }: { tempo: string }) {
   )
 }
 
+// ─── RIR MODAL ────────────────────────────────────────────────────────────────
+
+function RirModal({ rir, onClose }: { rir: number; onClose: () => void }) {
+  const rows = [
+    { rir: 0, reserve: '0 powtórzeń w zapasie', intensity: 'Maksymalny wysiłek' },
+    { rir: 1, reserve: '1 powtórzenie w zapasie', intensity: 'Bardzo ciężki wysiłek' },
+    { rir: 2, reserve: '2 powtórzenia w zapasie', intensity: 'Intensywny wysiłek' },
+    { rir: 3, reserve: '3 powtórzenia w zapasie', intensity: 'Umiarkowany' },
+    { rir: 4, reserve: '4 powtórzenia w zapasie', intensity: 'Lekki wysiłek' },
+    { rir: 5, reserve: '5 powtórzeń w zapasie', intensity: 'Bardzo lekki wysiłek' },
+  ]
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(13,27,42,0.75)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }} onClick={onClose}>
+      <div style={{ width: '100%', maxWidth: 480, background: '#fff', borderRadius: '20px 20px 0 0', padding: '1.5rem', borderTop: `4px solid ${C.gold}`, fontFamily: sans }} onClick={e => e.stopPropagation()}>
+        <div style={{ width: 40, height: 4, background: '#E0E0E0', borderRadius: 2, margin: '0 auto 1.25rem' }} />
+        <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: C.navy, marginBottom: 4 }}>Skala RIR</h3>
+        <p style={{ fontSize: '0.82rem', color: C.gray, marginBottom: '1rem' }}>
+          <strong>RIR</strong> = Reps In Reserve = powtórzenia w zapasie. Ile powtórzeń mógłabyś jeszcze zrobić, gdybyś chciała?
+        </p>
+        <p style={{ fontSize: '0.82rem', color: C.navy, fontWeight: 700, marginBottom: '0.875rem' }}>
+          Twoje zadanie: <span style={{ color: C.gold }}>RIR {rir}</span> = zatrzymaj się gdy masz jeszcze {rir} powtórzenie{rir === 1 ? '' : rir < 5 ? 'a' : 'ń'} w zapasie.
+        </p>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '0.82rem' }}>
+            <thead>
+              <tr style={{ background: C.navy }}>
+                <th style={{ padding: '0.5rem 0.75rem', color: C.gold, fontFamily: '"Space Mono",monospace', fontSize: '0.65rem', letterSpacing: '0.08em', textAlign: 'center' }}>SKALA RIR</th>
+                <th style={{ padding: '0.5rem 0.75rem', color: C.gold, fontFamily: '"Space Mono",monospace', fontSize: '0.65rem', letterSpacing: '0.08em', textAlign: 'left' }}>ZAPAS</th>
+                <th style={{ padding: '0.5rem 0.75rem', color: C.gold, fontFamily: '"Space Mono",monospace', fontSize: '0.65rem', letterSpacing: '0.08em', textAlign: 'left' }}>INTENSYWNOŚĆ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.rir} style={{ background: r.rir === rir ? C.navy + '18' : r.rir % 2 === 0 ? '#F4F6F9' : '#fff', fontWeight: r.rir === rir ? 800 : 400 }}>
+                  <td style={{ padding: '0.5rem 0.75rem', fontFamily: '"Space Mono",monospace', fontWeight: 900, color: r.rir === rir ? C.gold : C.navy, textAlign: 'center', borderBottom: '1px solid #E8ECF2', fontSize: '1rem' }}>{r.rir}</td>
+                  <td style={{ padding: '0.5rem 0.75rem', color: C.navy, borderBottom: '1px solid #E8ECF2' }}>{r.reserve}</td>
+                  <td style={{ padding: '0.5rem 0.75rem', color: C.gray, borderBottom: '1px solid #E8ECF2' }}>{r.intensity}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <button onClick={onClose} style={{ width: '100%', marginTop: '1.25rem', padding: '0.875rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 12, fontWeight: 800, fontFamily: sans, fontSize: '0.95rem' }}>
+          Rozumiem ✓
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── LEGEND MODAL ─────────────────────────────────────────────────────────────
+
+const ABBREV = [
+  { short: 'iso', full: 'izometria — zatrzymanie bez ruchu' },
+  { short: 'bb', full: 'barbell — sztanga' },
+  { short: 'ssb', full: 'safety squat bar — sztanga bezpieczna' },
+  { short: 'kb', full: 'kettlebell' },
+  { short: 'db', full: 'dumbbell — hantle' },
+  { short: 'sl', full: 'single leg — jednonóż' },
+  { short: 'BW', full: 'body weight — ciężar ciała (bez dodatkowego obciążenia)' },
+  { short: '1RM', full: 'one repetition maximum — maksymalny ciężar na 1 powtórzenie' },
+  { short: '50% 1RM', full: 'obciążenie 50% Twojego maksimum' },
+  { short: 'rampa', full: 'stopniowe zwiększanie ciężaru w kolejnych seriach (np. 35 / 37,5 / 40 kg)' },
+  { short: '30"', full: '30 sekund' },
+  { short: '5" ecc', full: 'faza ekscentryczna (opuszczanie) trwa 5 sekund — np. w przysiadzie to faza schodzenia w dół' },
+]
+
+function LegendModal({ planNotes, onClose }: { planNotes?: string | null; onClose: () => void }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(13,27,42,0.75)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }} onClick={onClose}>
+      <div style={{ width: '100%', maxWidth: 480, background: '#fff', borderRadius: '20px 20px 0 0', borderTop: `4px solid ${C.gold}`, maxHeight: '85vh', overflowY: 'auto', fontFamily: sans }} onClick={e => e.stopPropagation()}>
+        <div style={{ padding: '1.5rem 1.5rem 0' }}>
+          <div style={{ width: 40, height: 4, background: '#E0E0E0', borderRadius: 2, margin: '0 auto 1.25rem' }} />
+          <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: C.navy, marginBottom: '1rem' }}>ℹ️ Skróty i legenda</h3>
+        </div>
+        {planNotes && (
+          <div style={{ margin: '0 1.5rem 1rem', padding: '0.875rem', background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 12 }}>
+            <div style={{ fontFamily: '"Space Mono",monospace', fontSize: '0.6rem', color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, fontWeight: 700 }}>Notatki od trenera</div>
+            <div style={{ fontSize: '0.84rem', color: C.navy, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{planNotes}</div>
+          </div>
+        )}
+        <div style={{ padding: '0 1.5rem' }}>
+          <div style={{ fontFamily: '"Space Mono",monospace', fontSize: '0.62rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.75rem', fontWeight: 700 }}>Skróty</div>
+          {ABBREV.map(a => (
+            <div key={a.short} style={{ display: 'flex', gap: 12, padding: '0.5rem 0', borderBottom: '1px solid #F0F4F8', alignItems: 'flex-start' }}>
+              <span style={{ fontFamily: '"Space Mono",monospace', fontWeight: 800, fontSize: '0.82rem', color: C.gold, minWidth: 70, flexShrink: 0 }}>{a.short}</span>
+              <span style={{ fontSize: '0.82rem', color: C.navy, lineHeight: 1.45 }}>{a.full}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: '1.25rem 1.5rem' }}>
+          <button onClick={onClose} style={{ width: '100%', padding: '0.875rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 12, fontWeight: 800, fontFamily: sans, fontSize: '0.95rem' }}>
+            Zamknij
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── TEMPO MODAL ──────────────────────────────────────────────────────────────
 
 function TempoModal({ tempo, note, onClose }: { tempo: string; note?: string; onClose: () => void }) {
@@ -449,6 +549,7 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
   const [tempoOpen, setTempoOpen] = useState(false)
   const [videoOpen, setVideoOpen] = useState(false)
   const [feelingOpen, setFeelingOpen] = useState(false)
+  const [rirOpen, setRirOpen] = useState(false)
   const [vas, setVas] = useState(0)
   const [painNote, setPainNote] = useState('')
   const [painSaved, setPainSaved] = useState(false)
@@ -484,6 +585,7 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
     <>
       {tempoOpen && effectiveTempo && <TempoModal tempo={effectiveTempo} note={effectiveTempoNote || undefined} onClose={() => setTempoOpen(false)} />}
       {videoOpen && <VideoModal exerciseName={exerciseName} onClose={() => setVideoOpen(false)} />}
+      {rirOpen && exercise.rir != null && <RirModal rir={exercise.rir} onClose={() => setRirOpen(false)} />}
 
       <div style={{ background: '#fff', borderRadius: 14, border: allDone ? '1.5px solid #86EFAC' : `1.5px solid ${C.grayLight}`, marginBottom: 10, overflow: 'hidden', boxShadow: expanded ? '0 4px 20px rgba(13,27,42,0.08)' : 'none', transition: 'all 0.2s', fontFamily: sans }}>
 
@@ -504,6 +606,12 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
               <span style={{ padding: '2px 8px', background: C.grayLight, borderRadius: 6, fontSize: '0.7rem', color: C.gray, fontWeight: 500 }}>
                 {effectiveSets}×{effectiveReps}
               </span>
+              {exercise.rir != null && (
+                <button onClick={e => { e.stopPropagation(); setRirOpen(true) }}
+                  style={{ padding: '2px 8px', background: C.navyLight, border: 'none', borderRadius: 6, fontSize: '0.68rem', color: C.gold, fontWeight: 700, cursor: 'pointer', fontFamily: mono }}>
+                  RIR {exercise.rir} ❓
+                </button>
+              )}
             </div>
           </div>
 
@@ -738,6 +846,7 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
   const [wellnessOpen, setWellnessOpen] = useState(!existingWellness)
   const [postOpen, setPostOpen] = useState(false)
   const [savedLocal, setSavedLocal] = useState(false)
+  const [legendOpen, setLegendOpen] = useState(false)
 
   const supabase = createClient()
 
@@ -771,6 +880,7 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
       `}</style>
 
       <FloatingTimer />
+      {legendOpen && <LegendModal planNotes={(plan as any)?.description || null} onClose={() => setLegendOpen(false)} />}
 
       <div style={{ minHeight: '100vh', background: C.offWhite, fontFamily: sans, color: C.navy }}>
 
@@ -806,7 +916,14 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
               </span>
             </div>
             <span style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', fontSize: '0.78rem', fontWeight: 700, color: C.white, textAlign: 'center', width: `min(60vw, ${contentMaxWidth}px)` }}>{plan?.name || day.day_name}</span>
-            <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: C.gray }}>{new Date().toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' })}</span>
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: '0.72rem', color: C.gray }}>{new Date().toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' })}</span>
+              <button onClick={() => setLegendOpen(true)}
+                style={{ width: 28, height: 28, borderRadius: '50%', background: C.navyLight, border: `1.5px solid ${C.navyBorder}`, color: C.gold, fontWeight: 900, fontFamily: mono, fontSize: '0.72rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                title="Legenda skrótów">
+                ℹ
+              </button>
+            </div>
           </div>
 
           {/* Pasek postępu */}
