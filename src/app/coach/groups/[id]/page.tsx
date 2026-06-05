@@ -114,7 +114,7 @@ export default async function CoachGroupDetailPage({ params }: Props) {
 
   const { data: wellnessLogs } = await supabase
     .from('wellness_logs')
-    .select('athlete_id, date, created_at, sleep_hours, sleep_quality, energy, stress, readiness, muscle_sorness, mood, body_weight_kg, hydration_glasses, pain_data, activity_data, cycle_phase')
+    .select('*')
     .in('athlete_id', athleteIds)
     .gte('date', thirtyDaysAgo.toISOString().split('T')[0])
     .order('date', { ascending: false })

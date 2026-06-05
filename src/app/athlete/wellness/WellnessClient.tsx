@@ -708,7 +708,7 @@ export default function WellnessClient({ athlete, existingWellness, dateIso }: P
     setSaving(true)
     setSaveError('')
 
-    const extendedPayload = {
+    const basePayload = {
       athlete_id: athlete.id,
       sleep_hours: sleepHours,
       sleep_quality: sleepQuality,
@@ -720,11 +720,7 @@ export default function WellnessClient({ athlete, existingWellness, dateIso }: P
       concerns: concerns.trim() || null,
       body_weight_kg: activeBasicModules.includes('bodyWeight') && bodyWeight ? parseFloat(bodyWeight) : null,
       hydration_glasses: activeBasicModules.includes('hydration') ? hydration : null,
-      resting_hr: activeBasicModules.includes('hrv') ? hrv : null,
       cycle_phase: activeBasicModules.includes('cycle') ? cyclePhase || null : null,
-      cycle_day: activeBasicModules.includes('cycle') && cycleDay ? parseInt(cycleDay) : null,
-      recovery_score: activeBasicModules.includes('recovery') ? recovery : null,
-      sitting_hours: activeBasicModules.includes('sitting') ? sittingHours : null,
       activity_data: {
         type: activityType,
         time: activityTime,
@@ -754,6 +750,14 @@ export default function WellnessClient({ athlete, existingWellness, dateIso }: P
         location: painLocation,
         note: painNote,
       },
+    }
+
+    // Pola opcjonalne które mogą nie istnieć w starszych wersjach schematu
+    const optionalFields: Record<string, any> = {
+      resting_hr: activeBasicModules.includes('hrv') ? hrv : null,
+      cycle_day: activeBasicModules.includes('cycle') && cycleDay ? parseInt(cycleDay) : null,
+      recovery_score: activeBasicModules.includes('recovery') ? recovery : null,
+      sitting_hours: activeBasicModules.includes('sitting') ? sittingHours : null,
       supplements_data: {
         counts: supplements,
         note: supplementNote,
@@ -762,41 +766,51 @@ export default function WellnessClient({ athlete, existingWellness, dateIso }: P
       },
     }
 
-    const { error } = existingWellness?.id
-      ? await supabase.from('wellness_logs').update(extendedPayload).eq('id', existingWellness.id)
-      : await supabase.from('wellness_logs').insert(extendedPayload)
+    async function doSave(payload: any) {
+      return existingWellness?.id
+        ? await supabase.from('wellness_logs').update(payload).eq('id', existingWellness.id)
+        : await supabase.from('wellness_logs').insert(payload)
+    }
 
-    if (error && (error.message.includes('body_weight_kg') || error.message.includes('activity_data') || error.message.includes('pain_data') || error.message.includes('supplements_data'))) {
-      const fallbackPayload = {
+    // Próba 1: pełny payload (base + opcjonalne)
+    let result = await doSave({ ...basePayload, ...optionalFields })
+
+    if (result.error) {
+      const msg = result.error.message || ''
+      // Próba 2: bez supplements_data (może nie istnieć w DB)
+      if (msg.includes('supplements_data') || msg.includes('column') || msg.includes('schema')) {
+        result = await doSave({ ...basePayload, resting_hr: optionalFields.resting_hr, cycle_day: optionalFields.cycle_day, recovery_score: optionalFields.recovery_score, sitting_hours: optionalFields.sitting_hours })
+      }
+    }
+
+    if (result.error) {
+      const msg = result.error.message || ''
+      // Próba 3: tylko base (bez żadnych opcjonalnych)
+      if (msg.includes('column') || msg.includes('schema') || msg.includes('resting_hr') || msg.includes('cycle_day') || msg.includes('recovery_score') || msg.includes('sitting_hours')) {
+        result = await doSave(basePayload)
+      }
+    }
+
+    if (result.error) {
+      // Próba 4: minimalny payload — zawsze powinien zadziałać
+      const minimalPayload = {
         athlete_id: athlete.id,
         sleep_hours: sleepHours,
         sleep_quality: sleepQuality,
-        energy,
-        stress,
+        energy, stress,
         mood: null,
         muscle_sorness: soreness,
         readiness,
         concerns: concerns.trim() || null,
       }
-      const fallbackResult = existingWellness?.id
-        ? await supabase.from('wellness_logs').update(fallbackPayload).eq('id', existingWellness.id)
-        : await supabase.from('wellness_logs').insert(fallbackPayload)
-      setSaving(false)
-      if (fallbackResult.error) {
-        setSaveError(fallbackResult.error.message)
-        return
-      }
-      setSaved(true)
-      router.push('/athlete')
-      return
+      result = await doSave(minimalPayload)
     }
 
     setSaving(false)
-    if (error) {
-      setSaveError(error.message)
+    if (result.error) {
+      setSaveError(result.error.message)
       return
     }
-
     setSaved(true)
     router.push('/athlete')
   }

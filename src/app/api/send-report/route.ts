@@ -105,39 +105,70 @@ function buildEmailHtml(data: {
   // Wellness HTML
   let wellnessHtml = ''
   if (wellness) {
-    const wRows = [
-      ['🌙 Sen', wellness.sleep_hours != null ? `${wellness.sleep_hours}h` : null],
-      ['💤 Jakość snu', wellness.sleep_quality != null ? `${wellness.sleep_quality}/10` : null],
-      ['⚡ Energia', wellness.energy != null ? `${wellness.energy}/10` : null],
-      ['🧠 Stres', wellness.stress != null ? `${wellness.stress}/10` : null],
-      ['💪 Gotowość', wellness.readiness != null ? `${wellness.readiness}/10` : null],
-      ['🔥 Zakwasy', wellness.muscle_sorness != null ? `${wellness.muscle_sorness}/10` : null],
-    ].filter(([, v]) => v != null)
+    function wRow(label: string, value: any, unit = '') {
+      if (value == null || value === '') return `
+        <tr>
+          <td style="padding:5px 0;font-size:13px;color:#aaa">${label}</td>
+          <td style="padding:5px 0;font-size:12px;text-align:right;color:#ccc;font-style:italic">nie wypełnione</td>
+        </tr>`
+      return `
+        <tr>
+          <td style="padding:5px 0;font-size:13px;color:#555">${label}</td>
+          <td style="padding:5px 0;font-size:14px;font-weight:700;text-align:right;color:#111">${value}${unit}</td>
+        </tr>`
+    }
 
-    const wRowsHtml = wRows.map(([label, value]) => `
-      <tr>
-        <td style="padding:6px 0;font-size:13px;color:#555">${label}</td>
-        <td style="padding:6px 0;font-size:14px;font-weight:700;text-align:right;color:#111">${value}</td>
-      </tr>`).join('')
+    const wRowsHtml = [
+      wRow('🌙 Sen — ilość godzin', wellness.sleep_hours, 'h'),
+      wRow('💤 Jakość snu', wellness.sleep_quality != null ? `${wellness.sleep_quality}/10` : null),
+      wRow(`${wellness.readiness != null && wellness.readiness <= 3 ? '😪' : wellness.readiness != null && wellness.readiness <= 5 ? '😐' : '😊'} Poziom wypoczęcia`, wellness.readiness != null ? `${wellness.readiness}/10` : null),
+      wRow('⚡ Energia', wellness.energy != null ? `${wellness.energy}/10` : null),
+      wRow('🧠 Stres', wellness.stress != null ? `${wellness.stress}/10` : null),
+      wRow('🔥 Zakwasy', wellness.muscle_sorness != null ? `${wellness.muscle_sorness}/10` : null),
+      wRow('⚖️ Masa ciała', wellness.body_weight_kg, ' kg'),
+      wRow('💧 Nawodnienie', wellness.hydration_glasses != null ? `${wellness.hydration_glasses} szkl.` : null),
+      wRow('❤️ Tętno spoczynkowe', wellness.resting_hr, ' bpm'),
+      wRow('🌸 Faza cyklu', wellness.cycle_phase ? `${wellness.cycle_phase}${wellness.cycle_day ? ` (dzień ${wellness.cycle_day})` : ''}` : null),
+      wRow('🔄 Regeneracja', wellness.recovery_score != null ? `${wellness.recovery_score}/10` : null),
+    ].join('')
 
     const act = wellness.activity_data
     const actHtml = act?.type ? `
       <div style="margin-top:10px;padding:10px;background:#fff;border-radius:6px;border:1px solid #e8e6e0">
-        <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px">Aktywność</div>
+        <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px">Aktywność dnia</div>
         <div style="font-size:13px;font-weight:700;color:#111">${act.type}</div>
         <div style="font-size:12px;color:#888;margin-top:2px">
           ${act.time ? act.time + ' · ' : ''}${act.duration ? act.duration + ' min' : ''}${act.rpe ? ' · RPE ' + act.rpe + '/10' : ''}
+          ${act.motivation ? ' · Motywacja: ' + act.motivation + '/5' : ''}
         </div>
+        ${act.feelingAfter ? `<div style="font-size:12px;color:#555;margin-top:4px">Po treningu: <strong>${act.feelingAfter}</strong></div>` : ''}
+        ${act.satisfaction != null ? `<div style="font-size:12px;color:#555;margin-top:2px">Satysfakcja: ${act.satisfaction}/10</div>` : ''}
+        ${act.goal ? `<div style="font-size:12px;color:#555;margin-top:2px">Plan zrealizowany: ${act.goal}</div>` : ''}
         ${act.note ? `<div style="font-size:12px;color:#666;margin-top:4px;font-style:italic">${act.note}</div>` : ''}
-      </div>` : ''
+      </div>` : `
+      <div style="margin-top:8px;font-size:12px;color:#ccc;font-style:italic">Aktywność: nie wypełnione</div>`
 
     const painD = wellness.pain_data
-    const painDHtml = (painD?.painDuring > 0 || painD?.location) ? `
+    const hasPain = (painD?.painDuring > 0) || painD?.location || (painD?.headache > 0) || (painD?.anxiety > 0) || (painD?.mentalOverload > 0)
+    const painDHtml = hasPain ? `
       <div style="margin-top:10px;padding:10px;background:#fef2f2;border-radius:6px;border:1px solid #fca5a5">
-        <div style="font-size:11px;color:#ef4444;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px">Ból</div>
-        ${painD?.painDuring > 0 ? `<div style="font-size:14px;font-weight:700;color:#ef4444">${painD.painDuring}/10</div>` : ''}
-        ${painD?.location ? `<div style="font-size:12px;color:#555;margin-top:3px">📍 ${painD.location}</div>` : ''}
-        ${painD?.note ? `<div style="font-size:12px;color:#666;margin-top:3px;font-style:italic">${painD.note}</div>` : ''}
+        <div style="font-size:11px;color:#ef4444;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;font-weight:600">Ból i obciążenie</div>
+        ${painD?.painDuring > 0 ? `<div style="font-size:13px;color:#ef4444;margin-bottom:3px">Ból podczas treningu: <strong>${painD.painDuring}/10</strong></div>` : ''}
+        ${painD?.location ? `<div style="font-size:12px;color:#555;margin-bottom:2px">📍 ${painD.location}</div>` : ''}
+        ${painD?.note ? `<div style="font-size:12px;color:#666;font-style:italic;margin-bottom:2px">${painD.note}</div>` : ''}
+        ${painD?.headache > 0 ? `<div style="font-size:12px;color:#ef4444">Ból głowy: ${painD.headache}/10</div>` : ''}
+        ${painD?.anxiety > 0 ? `<div style="font-size:12px;color:#7c3aed">Lęk/niepokój: ${painD.anxiety}/10</div>` : ''}
+        ${painD?.mentalOverload > 0 ? `<div style="font-size:12px;color:#b45309">Przeciążenie mentalne: ${painD.mentalOverload}/10</div>` : ''}
+      </div>` : ''
+
+    // Suplementy
+    const supp = wellness.supplements_data
+    const suppHtml = (supp?.counts && Object.values(supp.counts).some((v: any) => v > 0)) ? `
+      <div style="margin-top:10px;padding:10px;background:#fffbeb;border-radius:6px;border:1px solid #fde68a">
+        <div style="font-size:11px;color:#92400e;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;font-weight:600">💊 Suplementy</div>
+        ${Object.entries(supp.counts).filter(([, v]: any) => v > 0).map(([id, count]: any) => `<div style="font-size:12px;color:#555">${id.replace(/_/g,' ')}: ${count}×</div>`).join('')}
+        ${supp.note ? `<div style="font-size:12px;color:#666;font-style:italic;margin-top:4px">${supp.note}</div>` : ''}
+        ${supp.caffeineSources?.length > 0 ? `<div style="font-size:12px;color:#555;margin-top:3px">Kofeina: ${supp.caffeineSources.join(', ')}</div>` : ''}
       </div>` : ''
 
     const concernsHtml = wellness.concerns ? `
@@ -155,8 +186,7 @@ function buildEmailHtml(data: {
       <div style="background:#f9f8f5;border-radius:8px;padding:16px;margin-bottom:24px">
         <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:12px;font-weight:600">🩺 Wellness przed treningiem</div>
         <table style="width:100%;border-collapse:collapse">${wRowsHtml}</table>
-        ${wellness.body_weight_kg ? `<div style="margin-top:8px;font-size:12px;color:#888">Masa ciała: <strong>${wellness.body_weight_kg} kg</strong></div>` : ''}
-        ${actHtml}${painDHtml}${concernsHtml}${cycleHtml}
+        ${actHtml}${painDHtml}${suppHtml}${concernsHtml}
       </div>`
   }
 

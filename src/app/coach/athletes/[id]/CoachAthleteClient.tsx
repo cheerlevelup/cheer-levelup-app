@@ -180,6 +180,23 @@ function WellnessFullReport({ wellness: w }: { wellness: any }) {
           )}
         </div>
       )}
+      {/* SUPLEMENTY */}
+      {w.supplements_data?.counts && Object.values(w.supplements_data.counts).some((v: any) => v > 0) && (
+        <div style={{ background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 14, padding: '1rem' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#92400E', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.75rem', fontWeight: 700 }}>💊 Suplementy</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {Object.entries(w.supplements_data.counts)
+              .filter(([, v]: any) => v > 0)
+              .map(([id, count]: any) => (
+                <span key={id} style={{ padding: '3px 10px', background: '#FEF9C3', border: '1px solid #FDE68A', borderRadius: 8, fontFamily: mono, fontSize: '0.7rem', color: '#92400E', fontWeight: 700 }}>
+                  {id.replace(/_/g, ' ')} × {count}
+                </span>
+              ))}
+          </div>
+          {w.supplements_data.note && <div style={{ fontSize: '0.82rem', color: C.gray, marginTop: 8, fontStyle: 'italic' }}>{w.supplements_data.note}</div>}
+          {w.supplements_data.caffeineSources?.length > 0 && <div style={{ fontSize: '0.78rem', color: '#92400E', marginTop: 5 }}>Kofeina z: {w.supplements_data.caffeineSources.join(', ')}</div>}
+        </div>
+      )}
       {/* UWAGI */}
       {w.concerns && (
         <div style={{ background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 14, padding: '1rem' }}>

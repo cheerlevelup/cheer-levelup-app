@@ -347,6 +347,23 @@ function SessionReportModal({ session, athleteId, athleteName, dayName, onClose 
                     </div>
                   )}
                   {/* Uwagi */}
+                  {/* Suplementy */}
+                  {wellness?.supplements_data?.counts && Object.values(wellness.supplements_data.counts).some((v: any) => v > 0) && (
+                    <div style={{ marginTop: 8, padding: '0.6rem 0.75rem', background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 8 }}>
+                      <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#92400E', textTransform: 'uppercase', marginBottom: 4 }}>💊 Suplementy</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                        {Object.entries(wellness.supplements_data.counts)
+                          .filter(([, v]: any) => v > 0)
+                          .map(([id, count]: any) => (
+                            <span key={id} style={{ padding: '2px 8px', background: '#FEF9C3', border: '1px solid #FDE68A', borderRadius: 6, fontFamily: mono, fontSize: '0.65rem', color: '#92400E' }}>
+                              {id.replace(/_/g, ' ')}: {count}×
+                            </span>
+                          ))}
+                      </div>
+                      {wellness.supplements_data.note && <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: 4, fontStyle: 'italic' }}>{wellness.supplements_data.note}</div>}
+                      {wellness.supplements_data.caffeineSources?.length > 0 && <div style={{ fontSize: '0.75rem', color: '#92400E', marginTop: 3 }}>Kofeina: {wellness.supplements_data.caffeineSources.join(', ')}</div>}
+                    </div>
+                  )}
                   {wellness?.concerns && (
                     <div style={{ marginTop: 8, padding: '0.6rem 0.75rem', background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 8 }}>
                       <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#92400E', textTransform: 'uppercase', marginBottom: 3 }}>Uwagi dla trenera</div>
