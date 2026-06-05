@@ -14,6 +14,9 @@ const C = {
 const sans = "'Space Grotesk', sans-serif"
 const mono = "'Space Mono', monospace"
 
+const thStyle: React.CSSProperties = { padding: '0.75rem 0.5rem', textAlign: 'center', fontFamily: mono, fontSize: '0.6rem', color: C.gray, background: C.offWhite, borderBottom: `1.5px solid ${C.grayLight}`, whiteSpace: 'nowrap', minWidth: 44 }
+function tdWs(bg: string): React.CSSProperties { return { padding: '0.4rem 0.5rem', textAlign: 'center', borderBottom: `1.5px solid ${C.grayLight}`, background: bg, verticalAlign: 'middle' } }
+
 function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, overflow: 'hidden', boxShadow: '0 4px 20px rgba(13,27,42,0.05)', ...style }}>{children}</div>
 }
@@ -131,12 +134,76 @@ function AssignPlanModal({ athletes, plans, onClose, onAssigned }: {
 
 type Tab = 'plan' | 'wellness' | 'diet'
 
-export default function CoachGroupDetailClient({ group, athletes, assignments, days, sessions, plans }: any) {
+// ── Wellness helpers ──────────────────────────────────────────────────────────
+
+function avg(arr: number[]): number | null {
+  if (!arr.length) return null
+  return arr.reduce((a, b) => a + b, 0) / arr.length
+}
+
+function colorBand(val: number | null, thresholds: [number, number], colors: [string, string, string]): string {
+  if (val === null) return C.gray
+  if (val <= thresholds[0]) return colors[0]
+  if (val <= thresholds[1]) return colors[1]
+  return colors[2]
+}
+
+function Dot({ color, title }: { color: string; title?: string }) {
+  return <div title={title} style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0 }} />
+}
+
+function WellnessBadge({ value, label, color }: { value: string; label?: string; color: string }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+      <div style={{ fontFamily: "'Space Mono',monospace", fontSize: '0.72rem', fontWeight: 800, color }}>{value}</div>
+      {label && <div style={{ fontFamily: "'Space Mono',monospace", fontSize: '0.5rem', color: C.gray }}>{label}</div>}
+    </div>
+  )
+}
+
+function getAthleteWellnessSummary(athleteId: number, logs: any[]) {
+  const myLogs = logs.filter((l: any) => l.athlete_id === athleteId)
+  const today = new Date().toISOString().split('T')[0]
+  const hasToday = myLogs.some((l: any) => l.date === today)
+
+  const sleepVals = myLogs.map((l: any) => l.sleep_hours).filter((v: any) => v != null) as number[]
+  const stressVals = myLogs.map((l: any) => l.stress).filter((v: any) => v != null) as number[]
+
+  // Pain: max pain_during from last 7 days
+  const painVals = myLogs
+    .map((l: any) => l.pain_data?.painDuring ?? null)
+    .filter((v: any) => v != null) as number[]
+  const maxPain = painVals.length ? Math.max(...painVals) : null
+
+  // Activity hours
+  const totalMinutes = myLogs.reduce((sum: number, l: any) => {
+    const dur = parseInt(l.activity_data?.duration || '0') || 0
+    return sum + dur
+  }, 0)
+  const activityHours = totalMinutes > 0 ? +(totalMinutes / 60).toFixed(1) : null
+
+  // Cycle
+  const latestCycle = myLogs.find((l: any) => l.cycle_phase)?.cycle_phase ?? null
+
+  return {
+    hasToday,
+    sleepAvg: avg(sleepVals),
+    stressAvg: avg(stressVals),
+    maxPain,
+    activityHours,
+    latestCycle,
+    entryCount: myLogs.length,
+  }
+}
+
+export default function CoachGroupDetailClient({ group, athletes, assignments, days, sessions, plans, wellnessLogs = [] }: any) {
   const router = useRouter()
+  const supabase = createClient()
   const [showAssignModal, setShowAssignModal] = useState(false)
   const [assignedMsg, setAssignedMsg] = useState('')
   const [activeTab, setActiveTab] = useState<Tab>('plan')
   const [moduleConfig, setModuleConfig] = useState<'wellness' | 'diet' | null>(null)
+  const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null)
 
   const sessionIndex: Record<string, any> = {}
   for (const s of sessions) {
@@ -144,13 +211,24 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
     if (!sessionIndex[key] || new Date(s.created_at) > new Date(sessionIndex[key].created_at)) sessionIndex[key] = s
   }
 
+  const currentPlan = assignments[0]?.plan
+  const activePlanId = selectedPlanId ?? currentPlan?.id ?? null
+  const activePlanDays = activePlanId
+    ? days.filter((d: any) => d.week?.plan_id === activePlanId)
+    : days
+
   function getAthleteProgress(athleteId: number) {
-    if (days.length === 0) return null
-    const done = days.filter((d: any) => sessionIndex[`${athleteId}_${d.id}`]?.completed).length
-    return { done, total: days.length }
+    if (activePlanDays.length === 0) return null
+    const done = activePlanDays.filter((d: any) => sessionIndex[`${athleteId}_${d.id}`]?.completed).length
+    return { done, total: activePlanDays.length }
   }
 
-  const currentPlan = assignments[0]?.plan
+  // Archive plan
+  async function archivePlan(planId: number) {
+    if (!confirm('Zarchiwizować ten plan? Nie będzie można go edytować. Zawodniczki zachowają dostęp do historii.')) return
+    await supabase.from('workout_plans').update({ is_archived: true }).eq('id', planId)
+    router.refresh()
+  }
 
   return (
     <>
@@ -180,9 +258,18 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                 <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 2 }}>Grupa</div>
                 <h1 style={{ color: C.white, fontSize: '1.25rem', fontWeight: 800 }}>{group.name}</h1>
               </div>
-              <button onClick={() => setShowAssignModal(true)} style={{ border: 'none', background: C.gold, color: C.navy, borderRadius: 10, padding: '0.65rem 0.875rem', fontWeight: 800, fontSize: '0.82rem', flexShrink: 0 }}>
-                + Przypisz plan
-              </button>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                {assignments.length > 1 && (
+                  <select value={selectedPlanId ?? ''} onChange={e => setSelectedPlanId(e.target.value ? parseInt(e.target.value) : null)}
+                    style={{ border: `1.5px solid ${C.navyBorder}`, background: C.navyLight, color: C.white, borderRadius: 9, padding: '0.5rem 0.65rem', fontFamily: "'Space Mono',monospace", fontSize: '0.7rem', outline: 'none' }}>
+                    <option value="">Aktualny plan</option>
+                    {assignments.map((a: any) => <option key={a.plan_id} value={a.plan_id}>{a.plan?.name}</option>)}
+                  </select>
+                )}
+                <button onClick={() => setShowAssignModal(true)} style={{ border: 'none', background: C.gold, color: C.navy, borderRadius: 10, padding: '0.65rem 0.875rem', fontWeight: 800, fontSize: '0.82rem', flexShrink: 0 }}>
+                  + Przypisz plan
+                </button>
+              </div>
             </div>
             <div style={{ display: 'flex', gap: 16 }}>
               <span style={{ fontFamily: mono, fontSize: '0.7rem', color: C.gray }}>{athletes.length} zawodniczek</span>
@@ -269,20 +356,38 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
             <Card><div style={{ padding: '2rem', textAlign: 'center', color: C.gray }}>Brak zawodniczek w tej grupie.</div></Card>
           ) : activeTab === 'plan' && (
             <>
-              {assignments.length > 0 && days.length > 0 && (
+              {assignments.length > 0 && (
                 <Card style={{ marginBottom: '1.25rem' }}>
-                  <div style={{ padding: '1rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}` }}>
-                    <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 3 }}>Realizacja planu</div>
-                    <div style={{ fontWeight: 800, color: C.navy }}>{currentPlan?.name} · {days.length} dni</div>
+                  <div style={{ padding: '1rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                    <div>
+                      <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 3 }}>Realizacja planu</div>
+                      <div style={{ fontWeight: 800, color: C.navy }}>{currentPlan?.name} · {activePlanDays.length} treningów</div>
+                    </div>
+                    {currentPlan && !currentPlan.is_archived && (
+                      <button onClick={() => archivePlan(currentPlan.id)} style={{ border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.gray, borderRadius: 8, padding: '0.35rem 0.7rem', fontFamily: mono, fontSize: '0.62rem', fontWeight: 700, flexShrink: 0 }}>
+                        📦 Archiwizuj plan
+                      </button>
+                    )}
+                    {currentPlan?.is_archived && (
+                      <span style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, background: C.offWhite, border: `1.5px solid ${C.grayLight}`, borderRadius: 8, padding: '0.35rem 0.7rem' }}>📦 Zarchiwizowany</span>
+                    )}
                   </div>
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ borderCollapse: 'collapse', minWidth: '100%' }}>
                       <thead>
                         <tr>
                           <th style={{ padding: '0.75rem 1.25rem', textAlign: 'left', fontFamily: mono, fontSize: '0.62rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', background: C.offWhite, position: 'sticky', left: 0, zIndex: 2, borderBottom: `1.5px solid ${C.grayLight}`, whiteSpace: 'nowrap' }}>Zawodniczka</th>
-                          <th style={{ padding: '0.75rem 0.875rem', textAlign: 'center', fontFamily: mono, fontSize: '0.62rem', color: C.gray, background: C.offWhite, borderBottom: `1.5px solid ${C.grayLight}` }}>Postęp</th>
-                          {days.map((day: any, i: number) => (
-                            <th key={day.id} style={{ padding: '0.75rem 0.5rem', textAlign: 'center', fontFamily: mono, fontSize: '0.6rem', color: C.gray, background: C.offWhite, borderBottom: `1.5px solid ${C.grayLight}`, minWidth: 44 }}>
+                          <th style={thStyle}>Postęp</th>
+                          {/* Wellness cols */}
+                          <th style={{ ...thStyle, background: '#F0FDF4' }} title="Wellness dzisiaj uzupełniony">W</th>
+                          <th style={{ ...thStyle, background: '#F0FDF4' }} title="Średnia snu (7 dni)">Sen</th>
+                          <th style={{ ...thStyle, background: '#F0FDF4' }} title="Średni stres (7 dni)">Stres</th>
+                          <th style={{ ...thStyle, background: '#F0FDF4' }} title="Max ból (7 dni)">Ból</th>
+                          <th style={{ ...thStyle, background: '#F0FDF4' }} title="Aktywność (godz, 7 dni)">Akt.</th>
+                          <th style={{ ...thStyle, background: '#F0FDF4' }} title="Faza cyklu">🌸</th>
+                          {/* Training cols */}
+                          {activePlanDays.map((day: any, i: number) => (
+                            <th key={day.id} style={{ padding: '0.75rem 0.5rem', textAlign: 'center', fontFamily: mono, fontSize: '0.6rem', color: C.gray, background: C.offWhite, borderBottom: `1.5px solid ${C.grayLight}`, minWidth: 40 }}>
                               <div style={{ fontWeight: 700, color: C.navy }}>T{i + 1}</div>
                               <div style={{ fontSize: '0.55rem', marginTop: 1 }}>{(day.day_name || '').replace('Dzień ', '').replace('Trening ', '')}</div>
                             </th>
@@ -293,24 +398,75 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                         {athletes.map((athlete: any, rowIdx: number) => {
                           const progress = getAthleteProgress(athlete.id)
                           const pct = progress ? Math.round((progress.done / progress.total) * 100) : 0
+                          const ws = getAthleteWellnessSummary(athlete.id, wellnessLogs)
+                          const rowBg = rowIdx % 2 === 0 ? C.white : C.offWhite
+                          const wsBg = rowIdx % 2 === 0 ? '#F7FFF9' : '#EFFAF2'
+
+                          const sleepColor = ws.sleepAvg === null ? C.grayLight
+                            : ws.sleepAvg <= 5 ? C.red
+                            : ws.sleepAvg <= 7 ? C.gold : C.green
+                          const stressColor = ws.stressAvg === null ? C.grayLight
+                            : ws.stressAvg >= 8 ? C.red
+                            : ws.stressAvg >= 5 ? C.gold : C.green
+                          const painColor = ws.maxPain === null ? C.grayLight
+                            : ws.maxPain >= 6 ? C.red
+                            : ws.maxPain >= 5 ? C.gold : C.green
+
                           return (
-                            <tr key={athlete.id} style={{ background: rowIdx % 2 === 0 ? C.white : C.offWhite }}>
-                              <td style={{ padding: '0.75rem 1.25rem', position: 'sticky', left: 0, zIndex: 1, background: rowIdx % 2 === 0 ? C.white : C.offWhite, borderBottom: `1.5px solid ${C.grayLight}`, whiteSpace: 'nowrap' }}>
+                            <tr key={athlete.id} style={{ background: rowBg }}>
+                              <td style={{ padding: '0.75rem 1.25rem', position: 'sticky', left: 0, zIndex: 1, background: rowBg, borderBottom: `1.5px solid ${C.grayLight}`, whiteSpace: 'nowrap' }}>
                                 <button onClick={() => router.push(`/coach/athletes/${athlete.id}`)} style={{ background: 'none', border: 'none', color: C.navy, fontWeight: 700, fontSize: '0.88rem', cursor: 'pointer', padding: 0 }}>{athlete.full_name}</button>
                               </td>
-                              <td style={{ padding: '0.75rem', textAlign: 'center', borderBottom: `1.5px solid ${C.grayLight}` }}>
+                              <td style={{ padding: '0.75rem', textAlign: 'center', borderBottom: `1.5px solid ${C.grayLight}`, background: rowBg }}>
                                 {progress ? (
                                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
                                     <div style={{ fontFamily: mono, fontSize: '0.72rem', fontWeight: 800, color: pct === 100 ? C.green : C.navy }}>{pct}%</div>
-                                    <div style={{ width: 48, height: 4, background: C.grayLight, borderRadius: 2, overflow: 'hidden' }}>
+                                    <div style={{ width: 44, height: 4, background: C.grayLight, borderRadius: 2, overflow: 'hidden' }}>
                                       <div style={{ height: '100%', width: `${pct}%`, background: pct === 100 ? C.green : C.gold, borderRadius: 2 }} />
                                     </div>
                                     <div style={{ fontFamily: mono, fontSize: '0.55rem', color: C.gray }}>{progress.done}/{progress.total}</div>
                                   </div>
                                 ) : <span style={{ color: C.gray, fontSize: '0.75rem' }}>—</span>}
                               </td>
-                              {days.map((day: any) => (
-                                <td key={day.id} style={{ padding: '0.5rem', textAlign: 'center', borderBottom: `1.5px solid ${C.grayLight}` }}>
+                              {/* Wellness: filled today */}
+                              <td style={tdWs(wsBg)} title={ws.hasToday ? 'Uzupełniony dziś' : ws.entryCount > 0 ? `Ostatni wpis w ciągu 7 dni` : 'Brak wpisów w tym tygodniu'}>
+                                <div style={{ fontSize: '0.8rem' }}>{ws.hasToday ? '✅' : ws.entryCount > 0 ? <span style={{ color: C.gold }}>⚠️</span> : <span style={{ color: C.red }}>✗</span>}</div>
+                              </td>
+                              {/* Sleep avg */}
+                              <td style={tdWs(wsBg)}>
+                                {ws.sleepAvg !== null
+                                  ? <WellnessBadge value={ws.sleepAvg.toFixed(1)} label="h" color={sleepColor} />
+                                  : <span style={{ color: C.grayLight, fontSize: '0.7rem' }}>—</span>}
+                              </td>
+                              {/* Stress avg */}
+                              <td style={tdWs(wsBg)}>
+                                {ws.stressAvg !== null
+                                  ? <WellnessBadge value={ws.stressAvg.toFixed(1)} color={stressColor} />
+                                  : <span style={{ color: C.grayLight, fontSize: '0.7rem' }}>—</span>}
+                              </td>
+                              {/* Max pain */}
+                              <td style={tdWs(wsBg)}>
+                                {ws.maxPain !== null
+                                  ? <WellnessBadge value={String(ws.maxPain)} color={painColor} />
+                                  : <span style={{ color: C.grayLight, fontSize: '0.7rem' }}>—</span>}
+                              </td>
+                              {/* Activity hours */}
+                              <td style={tdWs(wsBg)}>
+                                {ws.activityHours !== null
+                                  ? <WellnessBadge value={`${ws.activityHours}h`} color={C.navy} />
+                                  : <span style={{ color: C.grayLight, fontSize: '0.7rem' }}>—</span>}
+                              </td>
+                              {/* Cycle */}
+                              <td style={tdWs(wsBg)}>
+                                {ws.latestCycle === 'menstruacja'
+                                  ? <span title="Menstruacja" style={{ fontSize: '0.8rem' }}>🔴</span>
+                                  : ws.latestCycle
+                                    ? <span title={ws.latestCycle} style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray }}>{ws.latestCycle.slice(0, 3)}</span>
+                                    : <span style={{ color: C.grayLight, fontSize: '0.7rem' }}>—</span>}
+                              </td>
+                              {/* Training sessions */}
+                              {activePlanDays.map((day: any) => (
+                                <td key={day.id} style={{ padding: '0.5rem', textAlign: 'center', borderBottom: `1.5px solid ${C.grayLight}`, background: rowBg }}>
                                   <div style={{ display: 'flex', justifyContent: 'center' }}>
                                     <CellStatus session={sessionIndex[`${athlete.id}_${day.id}`] || null} />
                                   </div>

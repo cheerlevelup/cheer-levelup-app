@@ -89,8 +89,18 @@ export default async function CoachGroupDetailPage({ params }: Props) {
   // Wszystkie plany (do przypisywania)
   const { data: plans } = await supabase
     .from('workout_plans')
-    .select('id, name')
+    .select('id, name, is_archived')
     .order('created_at', { ascending: false })
+
+  // Wellness z ostatnich 7 dni dla wszystkich zawodniczek
+  const sevenDaysAgo = new Date()
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+  const { data: wellnessLogs } = await supabase
+    .from('wellness_logs')
+    .select('athlete_id, date, created_at, sleep_hours, energy, stress, readiness, muscle_sorness, pain_data, activity_data, cycle_phase')
+    .in('athlete_id', athleteIds)
+    .gte('date', sevenDaysAgo.toISOString().split('T')[0])
+    .order('date', { ascending: false })
 
   return (
     <CoachGroupDetailClient
@@ -100,6 +110,7 @@ export default async function CoachGroupDetailPage({ params }: Props) {
       days={days}
       sessions={sessions || []}
       plans={plans || []}
+      wellnessLogs={wellnessLogs || []}
     />
   )
 }
