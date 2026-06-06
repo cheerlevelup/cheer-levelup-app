@@ -135,6 +135,12 @@ export default async function CoachGroupDetailPage({ params }: Props) {
     .gte('date', thirtyDaysAgo.toISOString().split('T')[0])
     .order('date', { ascending: false })
 
+  const { data: moduleConfigs } = await supabase
+    .from('group_module_config')
+    .select('id, group_id, athlete_id, module, enabled, pre_params, post_params, updated_at')
+    .eq('module', 'diet')
+    .or(`group_id.eq.${groupId},athlete_id.in.(${athleteIds.join(',')})`)
+
   const wellnessWeek = (wellnessLogs || []).filter((l: any) => l.date >= sevenDaysAgo.toISOString().split('T')[0])
 
   return (
@@ -149,6 +155,7 @@ export default async function CoachGroupDetailPage({ params }: Props) {
       wellnessWeek={wellnessWeek}
       feedbacks={feedbacks || []}
       dietLogs={dietLogs || []}
+      moduleConfigs={moduleConfigs || []}
       assignmentsHistory={allGroupAssignmentsHistory || []}
       archivedPlans={archivedPlans || []}
     />

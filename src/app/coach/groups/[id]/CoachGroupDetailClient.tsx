@@ -1623,13 +1623,15 @@ function PlanExerciseTable({ rows, athletes, overrides, actual, uniqueDays }: {
   )
 }
 
-export default function CoachGroupDetailClient({ group, athletes, assignments, days, sessions, plans, wellnessLogs = [], wellnessWeek = [], feedbacks = [], dietLogs = [], assignmentsHistory = [], archivedPlans = [] }: any) {
+export default function CoachGroupDetailClient({ group, athletes, assignments, days, sessions, plans, wellnessLogs = [], wellnessWeek = [], feedbacks = [], dietLogs = [], moduleConfigs = [], assignmentsHistory = [], archivedPlans = [] }: any) {
   const router = useRouter()
   const supabase = createClient()
   const [showAssignModal, setShowAssignModal] = useState(false)
   const [assignedMsg, setAssignedMsg] = useState('')
   const [activeTab, setActiveTab] = useState<Tab>('trening')
   const [moduleConfig, setModuleConfig] = useState<'wellness' | 'diet' | null>(null)
+  const [athleteDietConfig, setAthleteDietConfig] = useState<any | null>(null)
+  const [localModuleConfigs, setLocalModuleConfigs] = useState<any[]>(moduleConfigs)
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null)
   const [wellnessPeriod, setWellnessPeriod] = useState(14)
   const [dietPeriod, setDietPeriod] = useState(14)
@@ -1639,6 +1641,54 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
   const [sessionReport, setSessionReport] = useState<{ session: any; athleteId: number; athleteName: string; dayName: string } | null>(null)
   const [planExData, setPlanExData] = useState<{ blocks: any[]; overrides: Record<number, Record<number, any>>; actual: Record<number, Record<number, ActualEntry>> } | null>(null)
   const [planExLoading, setPlanExLoading] = useState(false)
+
+  const defaultDietParams = ['had_breakfast', 'meal_count', 'water_ml']
+  const groupDietConfig = localModuleConfigs.find((config: any) => config.module === 'diet' && config.group_id === group.id)
+  const groupDietEnabled = groupDietConfig?.enabled !== false
+  const getAthleteDietConfig = (athleteId: number) => localModuleConfigs.find((config: any) => config.module === 'diet' && config.athlete_id === athleteId)
+  const getDietEnabled = (athleteId: number) => {
+    const config = getAthleteDietConfig(athleteId)
+    return config ? config.enabled !== false : groupDietEnabled
+  }
+  const groupDietForPanel = {
+    enabled: groupDietEnabled,
+    pre: groupDietConfig?.pre_params || defaultDietParams,
+    post: groupDietConfig?.post_params || [],
+  }
+
+  async function saveDietAccess(target: { athleteId?: number; enabled: boolean }) {
+    const current = target.athleteId ? getAthleteDietConfig(target.athleteId) || groupDietConfig : groupDietConfig
+    const payload: any = {
+      module: 'diet',
+      enabled: target.enabled,
+      pre_params: current?.pre_params || defaultDietParams,
+      post_params: current?.post_params || [],
+      updated_at: new Date().toISOString(),
+    }
+    if (target.athleteId) payload.athlete_id = target.athleteId
+    else payload.group_id = group.id
+
+    const { data, error } = await supabase
+      .from('group_module_config')
+      .upsert(payload, { onConflict: target.athleteId ? 'athlete_id,module' : 'group_id,module' })
+      .select('id, group_id, athlete_id, module, enabled, pre_params, post_params, updated_at')
+      .single()
+
+    if (error) {
+      setAssignedMsg(`Błąd zapisu diety: ${error.message}`)
+      return
+    }
+
+    setLocalModuleConfigs(prev => [
+      ...prev.filter((config: any) => target.athleteId
+        ? !(config.module === 'diet' && config.athlete_id === target.athleteId)
+        : !(config.module === 'diet' && config.group_id === group.id)
+      ),
+      data,
+    ])
+    setAssignedMsg(target.enabled ? 'Dieta włączona' : 'Dieta wyłączona')
+    setTimeout(() => setAssignedMsg(''), 1800)
+  }
 
   function openQuickReport(athleteId: number) {
     const found = athletes.find((a: any) => a.id === athleteId)
@@ -1771,7 +1821,15 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
         <ModuleConfigPanel
           groupId={group.id}
           module={moduleConfig}
-          onClose={() => setModuleConfig(null)}
+          onClose={() => { setModuleConfig(null); router.refresh() }}
+        />
+      )}
+      {athleteDietConfig && (
+        <ModuleConfigPanel
+          athleteId={athleteDietConfig.id}
+          module="diet"
+          groupConfig={groupDietForPanel}
+          onClose={() => { setAthleteDietConfig(null); router.refresh() }}
         />
       )}
       {sessionReport && (
@@ -1917,17 +1975,30 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                     <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 3 }}>Konfiguracja parametrów</div>
                     <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.navy, fontWeight: 700 }}>Indywidualne ustawienia zawodniczek</div>
                   </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  <button onClick={() => saveDietAccess({ enabled: !groupDietEnabled })} style={{ border: `1.5px solid ${groupDietEnabled ? '#86EFAC' : '#FCA5A5'}`, background: groupDietEnabled ? '#F0FDF4' : '#FEF2F2', color: groupDietEnabled ? C.green : C.red, borderRadius: 999, padding: '0.45rem 0.85rem', fontWeight: 900, fontSize: '0.74rem', cursor: 'pointer' }}>
+                    {groupDietEnabled ? 'Dieta włączona' : 'Dieta wyłączona'}
+                  </button>
                   <button onClick={() => setModuleConfig('diet')} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 8, padding: '0.45rem 0.85rem', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer' }}>
                     🥗 Edytuj dla grupy
                   </button>
+                  </div>
                 </div>
                 {athletes.map((athlete: any, i: number) => {
                   const myDiet = filterByDays(dietLogs.filter((d: any) => d.athlete_id === athlete.id), 30)
+                  const individualConfig = getAthleteDietConfig(athlete.id)
+                  const dietEnabled = getDietEnabled(athlete.id)
                   return (
                     <div key={athlete.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0.65rem 1.25rem', borderBottom: i < athletes.length - 1 ? `1.5px solid ${C.grayLight}` : 'none' }}>
                       <div style={{ flex: 1, fontWeight: 700, color: C.navy, fontSize: '0.9rem' }}>{athlete.full_name}</div>
                       <div style={{ fontFamily: mono, fontSize: '0.68rem', color: myDiet.length === 0 ? C.gray : C.green }}>{myDiet.length} wpisów / 30 dni</div>
-                      <button onClick={() => router.push(`/coach/athletes/${athlete.id}`)} style={{ border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.navy, borderRadius: 7, padding: '0.35rem 0.65rem', fontFamily: mono, fontSize: '0.62rem', fontWeight: 700, cursor: 'pointer' }}>
+                      <div style={{ fontFamily: mono, fontSize: '0.58rem', color: individualConfig ? C.gold : C.gray, minWidth: 82, textAlign: 'center' }}>
+                        {individualConfig ? 'indywidualnie' : 'wg grupy'}
+                      </div>
+                      <button onClick={() => saveDietAccess({ athleteId: athlete.id, enabled: !dietEnabled })} style={{ border: `1.5px solid ${dietEnabled ? '#86EFAC' : '#FCA5A5'}`, background: dietEnabled ? '#F0FDF4' : '#FEF2F2', color: dietEnabled ? C.green : C.red, borderRadius: 999, padding: '0.35rem 0.7rem', fontFamily: mono, fontSize: '0.6rem', fontWeight: 900, cursor: 'pointer', minWidth: 84 }}>
+                        {dietEnabled ? 'włączona' : 'wyłączona'}
+                      </button>
+                      <button onClick={() => setAthleteDietConfig(athlete)} style={{ border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.navy, borderRadius: 7, padding: '0.35rem 0.65rem', fontFamily: mono, fontSize: '0.62rem', fontWeight: 700, cursor: 'pointer' }}>
                         Konfiguruj →
                       </button>
                     </div>
