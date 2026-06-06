@@ -414,14 +414,12 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
   const [sendResult, setSendResult] = useState<'ok' | 'err' | null>(null)
   const [showPrintDialog, setShowPrintDialog] = useState(false)
 
-  // Wellness — lokalny stan (po edycji bez przeładowania)
-  const [currentWellness, setCurrentWellness] = useState<any>(wellness)
-  const [wellnessEditMode, setWellnessEditMode] = useState(false)
-
-  // Data sesji do zapisu wellness
+  // Data sesji do wellness
   const sessionDate = session.date_completed
     ? new Date(session.date_completed).toISOString().split('T')[0]
     : new Date().toISOString().split('T')[0]
+
+  const wellnessUrl = `/athlete/wellness?date=${sessionDate}&backTo=/athlete/history/${session.id}`
 
   // Edycja serii
   const [editingLogId, setEditingLogId] = useState<number | null>(null)
@@ -570,84 +568,77 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
           <Card>
             <SectionHeader>
               🩺 Wellness przed treningiem
-              <button onClick={() => setWellnessEditMode(m => !m)}
-                style={{ marginLeft: 'auto', padding: '2px 10px', background: wellnessEditMode ? C.gold : C.navyLight, color: wellnessEditMode ? C.navy : C.gray, border: 'none', borderRadius: 6, fontFamily: mono, fontSize: '0.58rem', fontWeight: 700, cursor: 'pointer' }}>
-                {wellnessEditMode ? '✕ zamknij' : '✏️ edytuj'}
+              <button onClick={() => router.push(wellnessUrl)}
+                style={{ marginLeft: 'auto', padding: '2px 10px', background: C.navyLight, color: C.gold, border: 'none', borderRadius: 6, fontFamily: mono, fontSize: '0.58rem', fontWeight: 700, cursor: 'pointer' }}>
+                {wellness ? '✏️ edytuj' : '+ uzupełnij'}
               </button>
             </SectionHeader>
 
-            {wellnessEditMode ? (
-              <WellnessEditPanel
-                wellness={currentWellness}
-                athleteId={athlete.id}
-                sessionDate={sessionDate}
-                onSaved={(w) => { setCurrentWellness(w); setWellnessEditMode(false) }}
-              />
-            ) : currentWellness ? (
+            {wellness ? (
               <div style={{ padding: '1rem 1.25rem' }}>
-                {currentWellness.sleep_hours != null && (
+                {wellness.sleep_hours != null && (
                   <div style={{ marginBottom: '0.75rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                       <span style={{ fontSize: '0.82rem', color: C.gray }}>🌙 Sen</span>
-                      <span style={{ fontFamily: mono, fontWeight: 800, color: wScaleColor(currentWellness.sleep_hours, 12, false) }}>{currentWellness.sleep_hours}h</span>
+                      <span style={{ fontFamily: mono, fontWeight: 800, color: wScaleColor(wellness.sleep_hours, 12, false) }}>{wellness.sleep_hours}h</span>
                     </div>
                     <div style={{ height: 6, background: C.grayLight, borderRadius: 3, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${Math.min(100,(currentWellness.sleep_hours/12)*100)}%`, background: wScaleColor(currentWellness.sleep_hours, 12, false), borderRadius: 3 }} />
+                      <div style={{ height: '100%', width: `${Math.min(100,(wellness.sleep_hours/12)*100)}%`, background: wScaleColor(wellness.sleep_hours, 12, false), borderRadius: 3 }} />
                     </div>
                   </div>
                 )}
-                <WBar label="Jakość snu" value={currentWellness.sleep_quality} max={10} comments={WC.sleepQ} />
-                <WBar label={`${readinessEmoji(currentWellness.readiness ?? 5)} Wypoczęcie`} value={currentWellness.readiness} max={10} comments={WC.readiness} />
-                <WBar label="Energia" value={currentWellness.energy} max={10} comments={WC.energy} />
-                <WBar label="Stres" value={currentWellness.stress} max={10} comments={WC.stress} inverse />
-                <WBar label="Zakwasy" value={currentWellness.muscle_sorness} max={10} comments={WC.soreness} inverse />
-                {currentWellness.body_weight_kg && (
+                <WBar label="Jakość snu" value={wellness.sleep_quality} max={10} comments={WC.sleepQ} />
+                <WBar label={`${readinessEmoji(wellness.readiness ?? 5)} Wypoczęcie`} value={wellness.readiness} max={10} comments={WC.readiness} />
+                <WBar label="Energia" value={wellness.energy} max={10} comments={WC.energy} />
+                <WBar label="Stres" value={wellness.stress} max={10} comments={WC.stress} inverse />
+                <WBar label="Zakwasy" value={wellness.muscle_sorness} max={10} comments={WC.soreness} inverse />
+                {wellness.body_weight_kg && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderTop: `1px solid ${C.grayLight}`, marginTop: 4 }}>
                     <span style={{ fontSize: '0.82rem', color: C.gray }}>Masa ciała</span>
-                    <span style={{ fontFamily: mono, fontWeight: 800, color: C.navy }}>{currentWellness.body_weight_kg} kg</span>
+                    <span style={{ fontFamily: mono, fontWeight: 800, color: C.navy }}>{wellness.body_weight_kg} kg</span>
                   </div>
                 )}
-                {currentWellness.resting_hr && (
+                {wellness.resting_hr && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderTop: `1px solid ${C.grayLight}` }}>
                     <span style={{ fontSize: '0.82rem', color: C.gray }}>HR spoczynkowe</span>
-                    <span style={{ fontFamily: mono, fontWeight: 800, color: C.navy }}>{currentWellness.resting_hr} bpm</span>
+                    <span style={{ fontFamily: mono, fontWeight: 800, color: C.navy }}>{wellness.resting_hr} bpm</span>
                   </div>
                 )}
-                {currentWellness.cycle_phase && (
-                  <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: (cycleColors[currentWellness.cycle_phase] || C.gray) + '18', borderRadius: 8 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: cycleColors[currentWellness.cycle_phase] || C.gray }} />
-                    <span style={{ fontFamily: mono, fontSize: '0.72rem', fontWeight: 700, color: cycleColors[currentWellness.cycle_phase] || C.gray }}>
-                      {currentWellness.cycle_phase}{currentWellness.cycle_day ? ` · dzień ${currentWellness.cycle_day}` : ''}
+                {wellness.cycle_phase && (
+                  <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: (cycleColors[wellness.cycle_phase] || C.gray) + '18', borderRadius: 8 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: cycleColors[wellness.cycle_phase] || C.gray }} />
+                    <span style={{ fontFamily: mono, fontSize: '0.72rem', fontWeight: 700, color: cycleColors[wellness.cycle_phase] || C.gray }}>
+                      {wellness.cycle_phase}{wellness.cycle_day ? ` · dzień ${wellness.cycle_day}` : ''}
                     </span>
                   </div>
                 )}
-                {currentWellness.activity_data?.type && (
+                {wellness.activity_data?.type && (
                   <div style={{ marginTop: 10, padding: '0.75rem', background: C.offWhite, borderRadius: 10 }}>
                     <div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Aktywność dodatkowa</div>
-                    <div style={{ fontWeight: 700, color: C.navy }}>{currentWellness.activity_data.type}</div>
+                    <div style={{ fontWeight: 700, color: C.navy }}>{wellness.activity_data.type}</div>
                     <div style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray, marginTop: 2 }}>
-                      {[currentWellness.activity_data.time, currentWellness.activity_data.duration && `${currentWellness.activity_data.duration} min`, currentWellness.activity_data.rpe && `RPE ${currentWellness.activity_data.rpe}`].filter(Boolean).join(' · ')}
+                      {[wellness.activity_data.time, wellness.activity_data.duration && `${wellness.activity_data.duration} min`, wellness.activity_data.rpe && `RPE ${wellness.activity_data.rpe}`].filter(Boolean).join(' · ')}
                     </div>
                   </div>
                 )}
-                {currentWellness.pain_data?.painDuring > 0 && (
+                {wellness.pain_data?.painDuring > 0 && (
                   <div style={{ marginTop: 10, padding: '0.75rem', background: '#FEF2F2', border: `1.5px solid #FCA5A5`, borderRadius: 10 }}>
                     <div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.red, textTransform: 'uppercase', marginBottom: 3 }}>Ból podczas treningu</div>
-                    <div style={{ fontFamily: mono, fontWeight: 800, color: C.red }}>{currentWellness.pain_data.painDuring}/10</div>
-                    {currentWellness.pain_data.location && <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: 2 }}>📍 {currentWellness.pain_data.location}</div>}
+                    <div style={{ fontFamily: mono, fontWeight: 800, color: C.red }}>{wellness.pain_data.painDuring}/10</div>
+                    {wellness.pain_data.location && <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: 2 }}>📍 {wellness.pain_data.location}</div>}
                   </div>
                 )}
-                {currentWellness.concerns && (
+                {wellness.concerns && (
                   <div style={{ marginTop: 10, padding: '0.65rem 0.875rem', background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 10 }}>
                     <div style={{ fontFamily: mono, fontSize: '0.56rem', color: '#92400E', textTransform: 'uppercase', marginBottom: 3 }}>Uwagi dla trenera</div>
-                    <div style={{ fontSize: '0.84rem', color: C.navy, fontStyle: 'italic' }}>&ldquo;{currentWellness.concerns}&rdquo;</div>
+                    <div style={{ fontSize: '0.84rem', color: C.navy, fontStyle: 'italic' }}>&ldquo;{wellness.concerns}&rdquo;</div>
                   </div>
                 )}
-                {currentWellness.supplements_data?.counts && Object.values(currentWellness.supplements_data.counts).some((v: any) => v > 0) && (
+                {wellness.supplements_data?.counts && Object.values(wellness.supplements_data.counts).some((v: any) => v > 0) && (
                   <div style={{ marginTop: 10, padding: '0.65rem 0.875rem', background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 10 }}>
                     <div style={{ fontFamily: mono, fontSize: '0.56rem', color: '#92400E', textTransform: 'uppercase', marginBottom: 5 }}>Suplementy</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                      {Object.entries(currentWellness.supplements_data.counts).filter(([,v]: any) => v > 0).map(([id, count]: any) => (
+                      {Object.entries(wellness.supplements_data.counts).filter(([,v]: any) => v > 0).map(([id, count]: any) => (
                         <span key={id} style={{ padding: '2px 8px', background: '#FEF9C3', border: '1px solid #FDE68A', borderRadius: 6, fontFamily: mono, fontSize: '0.65rem', color: '#92400E' }}>
                           {id.replace(/_/g,' ')} ×{count}
                         </span>

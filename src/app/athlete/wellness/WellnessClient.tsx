@@ -65,6 +65,7 @@ type Props = {
   athlete: Athlete
   existingWellness: WellnessLog | null
   dateIso: string
+  backTo?: string | null
 }
 
 const C = {
@@ -565,8 +566,9 @@ function ModuleDrawer({
   )
 }
 
-export default function WellnessClient({ athlete, existingWellness, dateIso }: Props) {
+export default function WellnessClient({ athlete, existingWellness, dateIso, backTo }: Props) {
   const router = useRouter()
+  const back = backTo || '/athlete'
   const supabase = createClient()
   const [activeTab, setActiveTab] = useState<Tab>('Basic')
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -815,7 +817,7 @@ export default function WellnessClient({ athlete, existingWellness, dateIso }: P
       return
     }
     setSaved(true)
-    router.push('/athlete')
+    router.push(back)
   }
 
   return (
@@ -865,7 +867,7 @@ export default function WellnessClient({ athlete, existingWellness, dateIso }: P
         <header style={{ background: C.offWhite, padding: '1rem 1.25rem 0.95rem', position: 'sticky', top: 0, zIndex: 10, borderBottom: `1.5px solid ${C.grayLight}` }}>
           <div style={{ width: 42, height: 4, borderRadius: 2, background: '#DDE3EA', margin: '0 auto 1rem' }} />
           <div style={{ maxWidth: 620, margin: '0 auto', display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 12, alignItems: 'center', marginBottom: '0.85rem' }}>
-            <button onClick={() => router.push('/athlete')} style={{ border: `1.5px solid ${C.grayLight}`, background: C.white, color: C.navy, borderRadius: 10, padding: '0.65rem 0.8rem', fontWeight: 800 }}>Powrot</button>
+            <button onClick={() => router.push(back)} style={{ border: `1.5px solid ${C.grayLight}`, background: C.white, color: C.navy, borderRadius: 10, padding: '0.65rem 0.8rem', fontWeight: 800 }}>{backTo ? '← Historia' : 'Powrót'}</button>
             <div style={{ textAlign: 'center' }}>
               <div style={{ color: C.navy, fontWeight: 900, fontSize: '1.12rem' }}>Dzienny wellness</div>
               <div style={{ color: C.gray, fontSize: '0.74rem', fontWeight: 700, marginTop: 2 }}>{formatLongDate(dateIso)}</div>
@@ -1225,7 +1227,7 @@ export default function WellnessClient({ athlete, existingWellness, dateIso }: P
 
         <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: 'rgba(255,255,255,0.96)', backdropFilter: 'blur(14px)', borderTop: `1.5px solid ${C.grayLight}`, padding: '0.875rem 1rem' }}>
           <div style={{ maxWidth: 620, margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10 }}>
-            <button onClick={() => router.push('/athlete')} style={{ border: `1.5px solid ${C.grayLight}`, background: C.white, color: C.navy, borderRadius: 12, padding: '0.9rem', fontWeight: 800 }}>Anuluj</button>
+            <button onClick={() => router.push(back)} style={{ border: `1.5px solid ${C.grayLight}`, background: C.white, color: C.navy, borderRadius: 12, padding: '0.9rem', fontWeight: 800 }}>{backTo ? '← Historia' : 'Anuluj'}</button>
             <button onClick={saveWellness} disabled={saving} style={{ border: 'none', background: saving ? C.grayLight : C.navy, color: saving ? C.gray : C.gold, borderRadius: 12, padding: '0.9rem', fontWeight: 900 }}>{saving ? 'Zapisuje...' : saved ? 'Zapisz zmiany' : 'Zapisz wellness'}</button>
           </div>
         </div>
