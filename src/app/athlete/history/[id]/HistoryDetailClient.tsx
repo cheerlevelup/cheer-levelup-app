@@ -70,6 +70,12 @@ function rpeLabel(rpe: number) {
   if (rpe <= 9) return 'Bardzo ciężki'
   return 'Maksymalny'
 }
+function vasLabel(v: number) {
+  return v === 0 ? 'Brak bólu' : v <= 3 ? 'Łagodny' : v <= 6 ? 'Umiarkowany' : v <= 8 ? 'Silny' : 'Bardzo silny'
+}
+function vasColor(v: number) {
+  return v >= 7 ? C.red : v >= 4 ? C.orange : C.green
+}
 
 function dedupeLogs<T extends { id?: number; created_at?: string | null; block_exercise_id?: number | null; set_number: number; is_warmup?: boolean | null }>(logs: T[]) {
   const byKey = new Map<string, T>()
@@ -94,8 +100,169 @@ function Card({ children, style }: { children: React.ReactNode; style?: React.CS
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ padding: '0.65rem 1.25rem', background: C.offWhite, borderBottom: `1.5px solid ${C.grayLight}`, fontFamily: mono, fontSize: '0.6rem', color: C.gray, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700 }}>
+    <div style={{ padding: '0.65rem 1.25rem', background: C.offWhite, borderBottom: `1.5px solid ${C.grayLight}`, fontFamily: mono, fontSize: '0.6rem', color: C.gray, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
       {children}
+    </div>
+  )
+}
+
+// Kafelek edycji serii
+function SetEditTile({ label, isWarmup, weight, reps, onWeight, onReps, onSave, onCancel, saving }: {
+  label: string; isWarmup?: boolean; weight: string; reps: string
+  onWeight: (v: string) => void; onReps: (v: string) => void
+  onSave: () => void; onCancel: () => void; saving: boolean
+}) {
+  return (
+    <div style={{ padding: '0.625rem', background: '#FFFBEB', border: `2px solid ${C.gold}`, borderRadius: 12, minWidth: 140, display: 'flex', flexDirection: 'column', gap: 6, flex: '0 0 auto' }}>
+      <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gold, fontWeight: 700 }}>{label} — edytuj</div>
+      <div style={{ display: 'flex', gap: 5 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: mono, fontSize: '0.52rem', color: C.gray, marginBottom: 2 }}>kg</div>
+          <input type="number" step="0.5" value={weight} onChange={e => onWeight(e.target.value)} placeholder="0"
+            style={{ width: '100%', padding: '0.35rem', border: `1.5px solid ${C.gold}`, borderRadius: 6, fontFamily: mono, fontSize: '0.9rem', fontWeight: 800, color: C.navy, textAlign: 'center', background: C.white, outline: 'none', boxSizing: 'border-box' }} />
+        </div>
+        {!isWarmup && (
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: mono, fontSize: '0.52rem', color: C.gray, marginBottom: 2 }}>pow.</div>
+            <input type="number" min="0" value={reps} onChange={e => onReps(e.target.value)} placeholder="0"
+              style={{ width: '100%', padding: '0.35rem', border: `1.5px solid ${C.gold}`, borderRadius: 6, fontFamily: mono, fontSize: '0.9rem', fontWeight: 800, color: C.navy, textAlign: 'center', background: C.white, outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 5 }}>
+        <button onClick={onSave} disabled={saving}
+          style={{ flex: 2, padding: '0.35rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 7, fontFamily: mono, fontWeight: 800, fontSize: '0.72rem' }}>
+          {saving ? '...' : '✓ Zapisz'}
+        </button>
+        <button onClick={onCancel}
+          style={{ flex: 1, padding: '0.35rem', background: C.offWhite, color: C.gray, border: `1px solid ${C.grayLight}`, borderRadius: 7, fontFamily: mono, fontWeight: 700, fontSize: '0.68rem' }}>
+          ✕
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Panel bólu i notatki per ćwiczenie
+function ExercisePainPanel({ exerciseName, sessionId, athleteId, existingPains, isArchived }: {
+  exerciseName: string; sessionId: number; athleteId: number
+  existingPains: any[]; isArchived: boolean
+}) {
+  const supabase = createClient()
+  const [open, setOpen] = useState(false)
+  const [vas, setVas] = useState(0)
+  const [painNote, setPainNote] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [pains, setPains] = useState(existingPains)
+
+  async function savePain() {
+    if (vas === 0 && !painNote.trim()) return
+    setSaving(true)
+    const { data } = await supabase.from('pain_logs').insert({
+      workout_session_id: sessionId, athlete_id: athleteId,
+      vas_score: vas, description: painNote.trim() || null,
+      location: exerciseName,
+    }).select().single()
+    if (data) setPains(prev => [...prev, data])
+    setVas(0); setPainNote(''); setSaved(true); setSaving(false)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  const hasPain = pains.length > 0
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <button onClick={() => setOpen(o => !o)}
+        style={{ width: '100%', padding: '0.6rem 0.875rem', background: open ? '#FFF7ED' : (hasPain ? '#FEF2F2' : C.grayLight), border: open ? `1.5px solid #FED7AA` : (hasPain ? `1.5px solid #FCA5A5` : `1.5px solid ${C.grayLight}`), borderRadius: 10, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontFamily: sans, transition: 'all 0.15s' }}>
+        <span style={{ fontSize: '1rem' }}>🩹</span>
+        <span style={{ fontWeight: 600, fontSize: '0.84rem', color: C.navy }}>
+          Ból / dyskomfort
+          {hasPain && <span style={{ marginLeft: 6, fontFamily: mono, fontSize: '0.62rem', color: C.red, fontWeight: 800 }}>VAS {Math.max(...pains.map((p: any) => p.vas_score || 0))}</span>}
+        </span>
+        <span style={{ marginLeft: 'auto', fontSize: '0.7rem', color: C.gray }}>{open ? '▲' : '▼'}</span>
+      </button>
+
+      {open && (
+        <div style={{ marginTop: 6, padding: '0.875rem', background: '#FAFBFC', borderRadius: 10, border: `1.5px solid ${C.grayLight}` }}>
+          {/* Istniejące bóle */}
+          {pains.map((p: any) => (
+            <div key={p.id} style={{ marginBottom: 8, padding: '0.625rem 0.75rem', background: '#FEF2F2', border: `1px solid #FCA5A5`, borderRadius: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: p.description ? 4 : 0 }}>
+                <span style={{ fontFamily: mono, fontSize: '0.7rem', fontWeight: 700, color: vasColor(p.vas_score || 0) }}>VAS {p.vas_score}/10 · {vasLabel(p.vas_score || 0)}</span>
+                <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray }}>{new Date(p.created_at).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}</span>
+              </div>
+              {p.description && <div style={{ fontSize: '0.78rem', color: C.gray }}>{p.description}</div>}
+            </div>
+          ))}
+
+          {/* Dodaj nowy (tylko jeśli nie w archiwum) */}
+          {!isArchived && (
+            <>
+              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.5rem', fontFamily: mono }}>
+                {pains.length > 0 ? 'Dodaj nowe' : 'Skala bólu VAS'} — {vas}/10
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <span style={{ fontSize: '0.72rem', color: C.green, fontWeight: 600 }}>0</span>
+                <input type="range" min={0} max={10} step={1} value={vas} onChange={e => setVas(parseInt(e.target.value))}
+                  style={{ flex: 1, accentColor: vasColor(vas) }} />
+                <span style={{ fontSize: '0.72rem', color: C.red, fontWeight: 600 }}>10</span>
+              </div>
+              <div style={{ textAlign: 'center', fontSize: '0.74rem', fontWeight: 700, color: vasColor(vas), marginBottom: '0.625rem' }}>
+                {vasLabel(vas)}
+              </div>
+              <textarea placeholder="Gdzie boli? Opis odczuć..." value={painNote} onChange={e => setPainNote(e.target.value)} rows={2}
+                style={{ width: '100%', padding: '0.55rem', border: `1.5px solid ${C.grayLight}`, borderRadius: 8, fontFamily: sans, fontSize: '0.84rem', color: C.navy, resize: 'none', outline: 'none', background: C.white, boxSizing: 'border-box' }} />
+              {(vas > 0 || painNote.trim()) && (
+                <button onClick={savePain} disabled={saving}
+                  style={{ marginTop: 8, width: '100%', padding: '0.6rem', background: saved ? C.green : C.navy, color: saved ? C.white : C.gold, border: 'none', borderRadius: 8, fontFamily: sans, fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}>
+                  {saved ? '✓ Zapisano' : saving ? '...' : 'Zapisz odczucia'}
+                </button>
+              )}
+            </>
+          )}
+          {isArchived && pains.length === 0 && (
+            <div style={{ fontFamily: mono, fontSize: '0.66rem', color: C.gray, textAlign: 'center', padding: '0.5rem 0' }}>Brak zapisanego bólu</div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Edytowalna notatka do ćwiczenia
+function ExerciseNoteField({ initialNote, firstLogId, isArchived }: { initialNote: string; firstLogId: number | null; isArchived: boolean }) {
+  const supabase = createClient()
+  const [note, setNote] = useState(initialNote)
+  const [status, setStatus] = useState<'idle'|'saving'|'saved'>('idle')
+
+  async function save() {
+    if (!firstLogId) return
+    setStatus('saving')
+    await supabase.from('set_logs').update({ athlete_note: note.trim() || null }).eq('id', firstLogId)
+    setStatus('saved')
+    setTimeout(() => setStatus('idle'), 2000)
+  }
+
+  if (isArchived) {
+    return note ? (
+      <div style={{ marginTop: 8, padding: '0.5rem 0.75rem', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, fontSize: '0.78rem', color: C.navy, fontStyle: 'italic' }}>
+        💬 {note}
+      </div>
+    ) : null
+  }
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ fontSize: '0.65rem', fontWeight: 700, color: C.gray, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 5, fontFamily: mono }}>Notatka do ćwiczenia</div>
+      <textarea
+        placeholder="Jak poszło? Uwagi do następnego razu..."
+        value={note}
+        onChange={e => setNote(e.target.value)}
+        onBlur={save}
+        rows={2}
+        style={{ width: '100%', padding: '0.55rem 0.75rem', border: `1.5px solid ${status === 'saved' ? C.green : C.grayLight}`, borderRadius: 8, fontFamily: sans, fontSize: '0.84rem', color: C.navy, resize: 'none', outline: 'none', background: '#FAFBFC', boxSizing: 'border-box', transition: 'border-color 0.2s' }} />
+      {status === 'saved' && <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.green, marginTop: 2 }}>✓ zapisano</div>}
     </div>
   )
 }
@@ -105,8 +272,9 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
   const supabase = createClient()
   const day = session.workout_day
   const plan = day?.week?.plan
+  const isArchived = !!plan?.is_archived
 
-  // Edycja feedbacku
+  // Feedback
   const [rpe, setRpe] = useState<number>(initialFeedback?.session_rpe ?? 6)
   const [feeling, setFeeling] = useState<string>(initialFeedback?.feeling_after ?? '')
   const [whatWell, setWhatWell] = useState(initialFeedback?.what_went_well ?? '')
@@ -116,6 +284,15 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
   const [saved, setSaved] = useState(false)
   const [sending, setSending] = useState(false)
   const [sendResult, setSendResult] = useState<'ok' | 'err' | null>(null)
+  const [showPrintDialog, setShowPrintDialog] = useState(false)
+
+  // Edycja serii
+  const [editingLogId, setEditingLogId] = useState<number | null>(null)
+  const [editWeight, setEditWeight] = useState('')
+  const [editReps, setEditReps] = useState('')
+  const [savingLog, setSavingLog] = useState(false)
+  const [savedLogId, setSavedLogId] = useState<number | null>(null)
+  const [logOverrides, setLogOverrides] = useState<Record<number, { weight?: number; reps_completed?: number }>>({})
 
   // Mapa ćwiczeń
   const exerciseMap: Record<number, any> = {}
@@ -137,6 +314,33 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
     logsByExercise[log.block_exercise_id].push(log)
   }
 
+  // Ból per ćwiczenie (po location = nazwa ćwiczenia)
+  const painByExercise: Record<string, any[]> = {}
+  for (const p of (painLogs || [])) {
+    const loc = p.location || ''
+    if (!painByExercise[loc]) painByExercise[loc] = []
+    painByExercise[loc].push(p)
+  }
+
+  const cycleColors: Record<string, string> = { menstruacja: C.red, folikularna: '#F59E0B', owulacja: C.green, lutealna: '#A78BFA' }
+
+  function startEditLog(log: any) {
+    setEditingLogId(log.id)
+    setEditWeight(log.weight != null ? String(log.weight) : '')
+    setEditReps(log.reps_completed != null ? String(log.reps_completed) : '')
+  }
+
+  async function saveLog(logId: number) {
+    setSavingLog(true)
+    const patch: any = {}
+    if (editWeight !== '') patch.weight = parseFloat(editWeight) || 0
+    if (editReps !== '') patch.reps_completed = parseInt(editReps) || 0
+    await supabase.from('set_logs').update(patch).eq('id', logId)
+    setLogOverrides(prev => ({ ...prev, [logId]: { ...prev[logId], ...patch } }))
+    setSavingLog(false); setSavedLogId(logId); setEditingLogId(null)
+    setTimeout(() => setSavedLogId(null), 2000)
+  }
+
   async function saveFeedback() {
     setSaving(true)
     const payload = {
@@ -149,26 +353,22 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
     } else {
       await supabase.from('post_session_feedback').insert(payload)
     }
-    setSaving(false)
-    setSaved(true)
+    setSaving(false); setSaved(true)
     setTimeout(() => setSaved(false), 2500)
   }
 
   async function sendReport() {
-    setSending(true)
-    setSendResult(null)
-    // Najpierw zapisz feedback
+    setSending(true); setSendResult(null)
     await saveFeedback()
     const res = await fetch('/api/send-report', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionId: session.id, athleteId: athlete.id }),
     })
-    setSendResult(res.ok ? 'ok' : 'err')
-    setSending(false)
+    const ok = res.ok
+    setSendResult(ok ? 'ok' : 'err'); setSending(false)
+    if (ok) setShowPrintDialog(true)
   }
-
-  const cycleColors: Record<string, string> = { menstruacja: C.red, folikularna: '#F59E0B', owulacja: C.green, lutealna: '#A78BFA' }
 
   return (
     <>
@@ -177,6 +377,8 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: ${C.offWhite}; }
         button { cursor: pointer; font-family: inherit; }
+        input[type=range] { -webkit-appearance: none; appearance: none; height: 6px; border-radius: 3px; background: ${C.grayLight}; outline: none; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: ${C.gold}; cursor: pointer; border: 2px solid ${C.white}; box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
       `}</style>
 
       <div style={{ minHeight: '100vh', background: C.offWhite, fontFamily: sans, color: C.navy }}>
@@ -189,13 +391,14 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
               ← Historia
             </button>
             <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 2 }}>
+              <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 2 }}>
                 {plan?.name} · Tydzień {day?.week?.week_number}
+                {isArchived && <span style={{ marginLeft: 8, color: C.gray }}> · archiwum</span>}
               </div>
               <div style={{ color: C.white, fontWeight: 800, fontSize: '1.1rem' }}>{day?.day_name}</div>
             </div>
             {session.report_sent && (
-              <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.green, background: C.green + '22', border: `1px solid ${C.green}`, borderRadius: 8, padding: '4px 10px', fontWeight: 700 }}>
+              <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.green, background: C.green + '22', border: `1px solid ${C.green}`, borderRadius: 8, padding: '4px 8px', fontWeight: 700 }}>
                 📋 wysłany
               </div>
             )}
@@ -205,18 +408,17 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
         <main style={{ maxWidth: 560, margin: '0 auto', padding: '1rem 1rem 6rem', display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
 
           {/* ── DATA ── */}
-          <div style={{ fontFamily: mono, fontSize: '0.7rem', color: C.gray, textAlign: 'center', padding: '0.5rem 0' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray, textAlign: 'center', padding: '0.25rem 0' }}>
             {session.date_completed
               ? new Date(session.date_completed).toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
               : '—'}
           </div>
 
-          {/* ── WELLNESS ── */}
-          {wellness && (
+          {/* ── WELLNESS PRZED TRENINGIEM ── */}
+          {wellness ? (
             <Card>
               <SectionHeader>🩺 Wellness przed treningiem</SectionHeader>
               <div style={{ padding: '1rem 1.25rem' }}>
-                {/* Sen */}
                 {wellness.sleep_hours != null && (
                   <div style={{ marginBottom: '0.75rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -239,6 +441,12 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
                     <span style={{ fontFamily: mono, fontWeight: 800, color: C.navy }}>{wellness.body_weight_kg} kg</span>
                   </div>
                 )}
+                {wellness.resting_hr && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderTop: `1px solid ${C.grayLight}` }}>
+                    <span style={{ fontSize: '0.82rem', color: C.gray }}>HR spoczynkowe</span>
+                    <span style={{ fontFamily: mono, fontWeight: 800, color: C.navy }}>{wellness.resting_hr} bpm</span>
+                  </div>
+                )}
                 {wellness.cycle_phase && (
                   <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: (cycleColors[wellness.cycle_phase] || C.gray) + '18', borderRadius: 8 }}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: cycleColors[wellness.cycle_phase] || C.gray }} />
@@ -247,28 +455,31 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
                     </span>
                   </div>
                 )}
-                {/* Aktywność */}
                 {wellness.activity_data?.type && (
                   <div style={{ marginTop: 10, padding: '0.75rem', background: C.offWhite, borderRadius: 10 }}>
-                    <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Aktywność</div>
+                    <div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Aktywność dodatkowa</div>
                     <div style={{ fontWeight: 700, color: C.navy }}>{wellness.activity_data.type}</div>
-                    <div style={{ fontFamily: mono, fontSize: '0.7rem', color: C.gray, marginTop: 2 }}>
+                    <div style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray, marginTop: 2 }}>
                       {[wellness.activity_data.time, wellness.activity_data.duration && `${wellness.activity_data.duration} min`, wellness.activity_data.rpe && `RPE ${wellness.activity_data.rpe}`].filter(Boolean).join(' · ')}
                     </div>
                   </div>
                 )}
-                {/* Ból wellness */}
                 {wellness.pain_data?.painDuring > 0 && (
                   <div style={{ marginTop: 10, padding: '0.75rem', background: '#FEF2F2', border: `1.5px solid #FCA5A5`, borderRadius: 10 }}>
-                    <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.red, textTransform: 'uppercase', marginBottom: 3 }}>Ból podczas treningu</div>
+                    <div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.red, textTransform: 'uppercase', marginBottom: 3 }}>Ból podczas treningu</div>
                     <div style={{ fontFamily: mono, fontWeight: 800, color: C.red }}>{wellness.pain_data.painDuring}/10</div>
                     {wellness.pain_data.location && <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: 2 }}>📍 {wellness.pain_data.location}</div>}
                   </div>
                 )}
-                {/* Suplementy */}
+                {wellness.concerns && (
+                  <div style={{ marginTop: 10, padding: '0.65rem 0.875rem', background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 10 }}>
+                    <div style={{ fontFamily: mono, fontSize: '0.56rem', color: '#92400E', textTransform: 'uppercase', marginBottom: 3 }}>Uwagi dla trenera</div>
+                    <div style={{ fontSize: '0.84rem', color: C.navy, fontStyle: 'italic' }}>&ldquo;{wellness.concerns}&rdquo;</div>
+                  </div>
+                )}
                 {wellness.supplements_data?.counts && Object.values(wellness.supplements_data.counts).some((v: any) => v > 0) && (
                   <div style={{ marginTop: 10, padding: '0.65rem 0.875rem', background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 10 }}>
-                    <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#92400E', textTransform: 'uppercase', marginBottom: 5 }}>Suplementy</div>
+                    <div style={{ fontFamily: mono, fontSize: '0.56rem', color: '#92400E', textTransform: 'uppercase', marginBottom: 5 }}>Suplementy</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                       {Object.entries(wellness.supplements_data.counts).filter(([,v]: any) => v > 0).map(([id, count]: any) => (
                         <span key={id} style={{ padding: '2px 8px', background: '#FEF9C3', border: '1px solid #FDE68A', borderRadius: 6, fontFamily: mono, fontSize: '0.65rem', color: '#92400E' }}>
@@ -278,62 +489,123 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
                     </div>
                   </div>
                 )}
-                {wellness.concerns && (
-                  <div style={{ marginTop: 10, padding: '0.65rem 0.875rem', background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 10 }}>
-                    <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#92400E', textTransform: 'uppercase', marginBottom: 3 }}>Uwagi dla trenera</div>
-                    <div style={{ fontSize: '0.84rem', color: C.navy, fontStyle: 'italic' }}>&ldquo;{wellness.concerns}&rdquo;</div>
-                  </div>
-                )}
               </div>
             </Card>
+          ) : (
+            <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: '1.25rem' }}>🩺</span>
+              <div>
+                <div style={{ fontWeight: 700, color: C.navy, fontSize: '0.88rem', marginBottom: 2 }}>Wellness przed treningiem</div>
+                <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray }}>Brak wpisu wellness na dzień tego treningu</div>
+              </div>
+            </div>
           )}
 
-          {/* ── SERIE ── */}
+          {/* ── SERIE Z ĆWICZENIAMI ── */}
           {Object.keys(logsByExercise).length > 0 && (
             <Card>
-              <SectionHeader>🏋️ Wykonane serie</SectionHeader>
+              <SectionHeader>
+                🏋️ Wykonane serie
+                {!isArchived && <span style={{ color: C.gold, fontSize: '0.5rem', marginLeft: 4, fontWeight: 600 }}>dotknij serię aby edytować</span>}
+              </SectionHeader>
+
               {blockOrder.map(block => {
                 const blockExIds = block.exIds.filter(id => logsByExercise[id]?.length > 0)
                 if (!blockExIds.length) return null
                 return (
                   <div key={block.id}>
-                    <div style={{ padding: '0.45rem 1.25rem', background: C.navyLight, display: 'flex', alignItems: 'center' }}>
+                    {/* Nagłówek bloku */}
+                    <div style={{ padding: '0.4rem 1.25rem', background: C.navyLight }}>
                       <span style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gold, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{block.name}</span>
                     </div>
+
                     {blockExIds.map((exId, ei) => {
                       const ex = exerciseMap[exId]
                       const name = ex?.exercise?.name ? ex.exercise.name.replace(/-/g,' ') : (ex?.exercise_code || `Ćw.#${exId}`)
                       const logs = logsByExercise[exId].sort((a: any, b: any) => a.set_number - b.set_number)
                       const main = logs.filter((l: any) => !l.is_warmup)
                       const wu = logs.filter((l: any) => l.is_warmup)
-                      const exNote = logs.find((l: any) => !l.is_warmup && l.athlete_note)?.athlete_note
                       const planStr = ex ? `${ex.sets}×${ex.reps || '—'}${ex.weight_kg ? ` · ${ex.weight_kg}kg` : ''}` : ''
+                      // Pierwsza seria robocza dla notatki ćwiczenia
+                      const firstMainLog = main[0]
+                      const initialNote = firstMainLog?.athlete_note || ''
+
+                      // Istniejące bóle per ćwiczenie (po nazwie)
+                      const exPains = painByExercise[name] || []
+
                       return (
                         <div key={exId} style={{ padding: '0.875rem 1.25rem', borderBottom: ei < blockExIds.length - 1 ? `1px solid ${C.grayLight}` : 'none' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                          {/* Nagłówek ćwiczenia */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
                             <span style={{ fontWeight: 700, color: C.navy, fontSize: '0.92rem' }}>{name}</span>
                             {planStr && <span style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray }}>plan: {planStr}</span>}
                           </div>
-                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                            {wu.map((l: any) => (
-                              <div key={l.id} style={{ padding: '0.5rem 0.75rem', background: C.offWhite, border: `1px solid ${C.grayLight}`, borderRadius: 9, minWidth: 52, textAlign: 'center' }}>
-                                <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, marginBottom: 3 }}>Rozg</div>
-                                {l.weight && <div style={{ fontFamily: mono, fontSize: '0.82rem', fontWeight: 800, color: C.gray }}>{l.weight}kg</div>}
-                              </div>
-                            ))}
-                            {main.map((l: any) => (
-                              <div key={l.id} style={{ padding: '0.5rem 0.75rem', background: l.completed ? '#F0FDF4' : C.offWhite, border: `1px solid ${l.completed ? '#86EFAC' : C.grayLight}`, borderRadius: 9, minWidth: 52, textAlign: 'center' }}>
-                                <div style={{ fontFamily: mono, fontSize: '0.62rem', color: l.completed ? C.green : C.gray, fontWeight: 700, marginBottom: 3 }}>S{l.set_number}</div>
-                                {l.weight != null && <div style={{ fontFamily: mono, fontSize: '0.9rem', fontWeight: 900, color: C.navy }}>{l.weight}kg</div>}
-                                {l.reps_completed && <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray }}>{l.reps_completed}p</div>}
-                              </div>
-                            ))}
+
+                          {/* Kafelki serii */}
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 2 }}>
+                            {/* Rozgrzewki */}
+                            {wu.map((l: any) => {
+                              const ov = logOverrides[l.id] || {}
+                              const w = ov.weight ?? l.weight
+                              const isEditing = editingLogId === l.id
+                              if (isEditing) return (
+                                <SetEditTile key={l.id} label="Rozg" isWarmup
+                                  weight={editWeight} reps={editReps}
+                                  onWeight={setEditWeight} onReps={setEditReps}
+                                  onSave={() => saveLog(l.id)} onCancel={() => setEditingLogId(null)}
+                                  saving={savingLog} />
+                              )
+                              return (
+                                <button key={l.id}
+                                  onClick={() => !isArchived && startEditLog({ ...l, weight: w })}
+                                  style={{ padding: '0.5rem 0.75rem', background: C.offWhite, border: savedLogId === l.id ? `2px solid ${C.green}` : `1px solid ${C.grayLight}`, borderRadius: 9, minWidth: 54, textAlign: 'center', cursor: isArchived ? 'default' : 'pointer', position: 'relative' }}>
+                                  <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, marginBottom: 3 }}>Rozg</div>
+                                  {w != null && <div style={{ fontFamily: mono, fontSize: '0.82rem', fontWeight: 800, color: C.gray }}>{w}kg</div>}
+                                  {!isArchived && <span style={{ position: 'absolute', top: 2, right: 3, fontSize: '0.5rem' }}>✏️</span>}
+                                </button>
+                              )
+                            })}
+                            {/* Serie właściwe */}
+                            {main.map((l: any) => {
+                              const ov = logOverrides[l.id] || {}
+                              const w = ov.weight ?? l.weight
+                              const r = ov.reps_completed ?? l.reps_completed
+                              const isEditing = editingLogId === l.id
+                              if (isEditing) return (
+                                <SetEditTile key={l.id} label={`S${l.set_number}`}
+                                  weight={editWeight} reps={editReps}
+                                  onWeight={setEditWeight} onReps={setEditReps}
+                                  onSave={() => saveLog(l.id)} onCancel={() => setEditingLogId(null)}
+                                  saving={savingLog} />
+                              )
+                              return (
+                                <button key={l.id}
+                                  onClick={() => !isArchived && startEditLog({ ...l, weight: w, reps_completed: r })}
+                                  style={{ padding: '0.5rem 0.75rem', background: savedLogId === l.id ? '#F0FDF4' : (l.completed ? '#F0FDF4' : C.offWhite), border: savedLogId === l.id ? `2px solid ${C.green}` : `1px solid ${l.completed ? '#86EFAC' : C.grayLight}`, borderRadius: 9, minWidth: 54, textAlign: 'center', cursor: isArchived ? 'default' : 'pointer', position: 'relative' }}>
+                                  <div style={{ fontFamily: mono, fontSize: '0.6rem', color: l.completed ? C.green : C.gray, fontWeight: 700, marginBottom: 3 }}>S{l.set_number}</div>
+                                  {w != null && <div style={{ fontFamily: mono, fontSize: '0.9rem', fontWeight: 900, color: C.navy }}>{w}kg</div>}
+                                  {r != null && <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray }}>{r}p</div>}
+                                  {!isArchived && <span style={{ position: 'absolute', top: 2, right: 3, fontSize: '0.5rem' }}>✏️</span>}
+                                </button>
+                              )
+                            })}
                           </div>
-                          {exNote && (
-                            <div style={{ marginTop: 8, padding: '0.5rem 0.75rem', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, fontSize: '0.78rem', color: C.navy, fontStyle: 'italic' }}>
-                              💬 {exNote}
-                            </div>
-                          )}
+
+                          {/* Notatka do ćwiczenia — edytowalna */}
+                          <ExerciseNoteField
+                            initialNote={initialNote}
+                            firstLogId={firstMainLog?.id || null}
+                            isArchived={isArchived}
+                          />
+
+                          {/* Panel bólu per ćwiczenie */}
+                          <ExercisePainPanel
+                            exerciseName={name}
+                            sessionId={session.id}
+                            athleteId={athlete.id}
+                            existingPains={exPains}
+                            isArchived={isArchived}
+                          />
                         </div>
                       )
                     })}
@@ -343,49 +615,75 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
             </Card>
           )}
 
-          {/* ── BÓL ── */}
-          {painLogs?.length > 0 && (
-            <Card>
-              <SectionHeader>🩹 Zgłoszony ból</SectionHeader>
-              <div style={{ padding: '0.875rem 1.25rem', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {painLogs.map((p: any) => (
-                  <div key={p.id} style={{ padding: '0.75rem', background: '#FEF2F2', border: `1.5px solid #FCA5A5`, borderRadius: 10 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 700, color: C.navy }}>{p.location || 'Nieznana lokalizacja'}</span>
-                      <span style={{ fontFamily: mono, fontWeight: 800, color: p.vas_score >= 7 ? C.red : p.vas_score >= 4 ? C.orange : C.green }}>VAS {p.vas_score}/10</span>
+          {/* ── BÓL OGÓLNY (bez przypisania do ćwiczenia) ── */}
+          {(() => {
+            const generalPains = (painLogs || []).filter((p: any) => {
+              // Bóle nie przypisane do ćwiczenia (location null lub 'Ogólny')
+              const allExNames = blockOrder.flatMap(b => b.exIds.map(id => {
+                const ex = exerciseMap[id]
+                return ex?.exercise?.name?.replace(/-/g,' ') || ex?.exercise_code || ''
+              }))
+              return !p.location || (!allExNames.includes(p.location) && p.location !== '')
+            })
+            if (!generalPains.length) return null
+            return (
+              <Card>
+                <SectionHeader>🩹 Ból ogólny / po treningu</SectionHeader>
+                <div style={{ padding: '0.875rem 1.25rem', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {generalPains.map((p: any) => (
+                    <div key={p.id} style={{ padding: '0.75rem', background: '#FEF2F2', border: `1.5px solid #FCA5A5`, borderRadius: 10 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: 700, color: C.navy, fontSize: '0.88rem' }}>{p.location || 'Nieznana lokalizacja'}</span>
+                        <span style={{ fontFamily: mono, fontWeight: 800, color: vasColor(p.vas_score || 0) }}>VAS {p.vas_score}/10</span>
+                      </div>
+                      {p.description && <div style={{ fontSize: '0.82rem', color: C.gray, marginTop: 4 }}>{p.description}</div>}
                     </div>
-                    {p.description && <div style={{ fontSize: '0.82rem', color: C.gray, marginTop: 4 }}>{p.description}</div>}
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
+                  ))}
+                </div>
+              </Card>
+            )
+          })()}
 
-          {/* ── FEEDBACK — EDYTOWALNY ── */}
+          {/* ── FEEDBACK PO TRENINGU ── */}
           <Card>
-            <SectionHeader>💬 Feedback po treningu <span style={{ color: C.gold, fontSize: '0.55rem', marginLeft: 6 }}>EDYTUJ</span></SectionHeader>
-            <div style={{ padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <SectionHeader>
+              💬 Feedback po treningu
+              {!isArchived && <span style={{ color: C.gold, fontSize: '0.5rem', marginLeft: 4, fontWeight: 600 }}>edytowalny</span>}
+            </SectionHeader>
+            <div style={{ padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
 
               {/* RPE */}
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <span style={{ fontSize: '0.82rem', fontWeight: 600, color: C.navy }}>Jak ciężki był trening? (RPE)</span>
-                  <span style={{ fontFamily: mono, fontSize: '1rem', fontWeight: 800, color: rpeColor(rpe) }}>{rpe}/10 <span style={{ fontSize: '0.65rem', fontWeight: 400, color: C.gray }}>{rpeLabel(rpe)}</span></span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <span style={{ fontSize: '0.86rem', fontWeight: 700, color: C.navy }}>Jak ciężki był trening? (RPE)</span>
+                  <span style={{ fontFamily: mono, fontSize: '1.05rem', fontWeight: 800, color: rpeColor(rpe) }}>
+                    {rpe}/10
+                    <span style={{ fontSize: '0.62rem', fontWeight: 400, color: C.gray, marginLeft: 5 }}>{rpeLabel(rpe)}</span>
+                  </span>
                 </div>
-                <input type="range" min={0} max={10} step={1} value={rpe} onChange={e => setRpe(parseInt(e.target.value))}
-                  style={{ width: '100%', accentColor: rpeColor(rpe) }} />
-                <div style={{ height: 4, background: C.grayLight, borderRadius: 2, overflow: 'hidden', marginTop: 4 }}>
-                  <div style={{ height: '100%', width: `${rpe * 10}%`, background: rpeColor(rpe), borderRadius: 2, transition: 'width 0.2s' }} />
-                </div>
+                {!isArchived ? (
+                  <>
+                    <input type="range" min={0} max={10} step={1} value={rpe} onChange={e => setRpe(parseInt(e.target.value))}
+                      style={{ width: '100%', accentColor: rpeColor(rpe) }} />
+                    <div style={{ height: 4, background: C.grayLight, borderRadius: 2, overflow: 'hidden', marginTop: 4 }}>
+                      <div style={{ height: '100%', width: `${rpe * 10}%`, background: rpeColor(rpe), borderRadius: 2, transition: 'width 0.2s' }} />
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ height: 8, background: C.grayLight, borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${rpe * 10}%`, background: rpeColor(rpe), borderRadius: 4 }} />
+                  </div>
+                )}
               </div>
 
               {/* Samopoczucie */}
               <div>
-                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: C.navy, display: 'block', marginBottom: 8 }}>Jak się czułaś po treningu?</span>
+                <span style={{ fontSize: '0.86rem', fontWeight: 700, color: C.navy, display: 'block', marginBottom: 8 }}>Jak się czułaś po treningu?</span>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {FEELING_OPTIONS.map(opt => (
-                    <button key={opt.value} onClick={() => setFeeling(opt.value)}
-                      style={{ padding: '0.5rem 0.875rem', background: feeling === opt.value ? C.navy : C.offWhite, border: feeling === opt.value ? 'none' : `1.5px solid ${C.grayLight}`, borderRadius: 10, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 5, fontWeight: feeling === opt.value ? 700 : 400, color: feeling === opt.value ? C.gold : C.navy }}>
+                    <button key={opt.value}
+                      onClick={() => !isArchived && setFeeling(opt.value)}
+                      style={{ padding: '0.5rem 0.875rem', background: feeling === opt.value ? C.navy : C.offWhite, border: feeling === opt.value ? 'none' : `1.5px solid ${C.grayLight}`, borderRadius: 10, fontSize: '0.84rem', display: 'flex', alignItems: 'center', gap: 5, fontWeight: feeling === opt.value ? 700 : 400, color: feeling === opt.value ? C.gold : C.navy, cursor: isArchived ? 'default' : 'pointer', opacity: isArchived && feeling !== opt.value ? 0.4 : 1 }}>
                       <span>{opt.emoji}</span><span>{opt.label}</span>
                     </button>
                   ))}
@@ -399,28 +697,61 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
                 { label: 'Notatki / uwagi dla trenera', val: notes, set: setNotes, placeholder: 'Pytania, obserwacje...', color: C.gray },
               ].map(f => (
                 <div key={f.label}>
-                  <div style={{ fontFamily: mono, fontSize: '0.6rem', color: f.color, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 5 }}>{f.label}</div>
-                  <textarea value={f.val} onChange={e => f.set(e.target.value)} placeholder={f.placeholder} rows={2}
-                    style={{ width: '100%', padding: '0.625rem 0.875rem', border: `1.5px solid ${C.grayLight}`, borderRadius: 10, fontFamily: sans, fontSize: '0.85rem', color: C.navy, resize: 'none', outline: 'none', background: C.offWhite, boxSizing: 'border-box' }} />
+                  <div style={{ fontFamily: mono, fontSize: '0.58rem', color: f.color, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 5 }}>{f.label}</div>
+                  {isArchived ? (
+                    <div style={{ padding: '0.625rem 0.875rem', background: C.offWhite, borderRadius: 10, fontSize: '0.84rem', color: f.val ? C.navy : C.gray, fontStyle: f.val ? 'normal' : 'italic', minHeight: 38 }}>
+                      {f.val || 'Brak wpisu'}
+                    </div>
+                  ) : (
+                    <textarea value={f.val} onChange={e => f.set(e.target.value)} placeholder={f.placeholder} rows={2}
+                      style={{ width: '100%', padding: '0.625rem 0.875rem', border: `1.5px solid ${C.grayLight}`, borderRadius: 10, fontFamily: sans, fontSize: '0.84rem', color: C.navy, resize: 'none', outline: 'none', background: C.offWhite, boxSizing: 'border-box' }} />
+                  )}
                 </div>
               ))}
 
-              {/* Przyciski */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 4 }}>
-                <button onClick={sendReport} disabled={sending || !feeling}
-                  style={{ width: '100%', padding: '0.9rem', background: !feeling ? C.grayLight : C.navy, color: !feeling ? C.gray : C.gold, border: 'none', borderRadius: 12, fontWeight: 800, fontSize: '0.9rem', transition: 'all 0.15s' }}>
-                  {sending ? 'Wysyłam...' : sendResult === 'ok' ? '✓ Raport wysłany do trenera!' : sendResult === 'err' ? '✗ Błąd — spróbuj ponownie' : '📋 Wyślij raport do trenera'}
-                </button>
-                <button onClick={saveFeedback} disabled={saving}
-                  style={{ width: '100%', padding: '0.75rem', background: saved ? C.green : C.offWhite, color: saved ? C.white : C.gray, border: `1.5px solid ${saved ? C.green : C.grayLight}`, borderRadius: 12, fontWeight: 700, fontSize: '0.82rem' }}>
-                  {saving ? 'Zapisuję...' : saved ? '✓ Zapisano' : 'Zapisz bez wysyłania'}
-                </button>
-              </div>
+              {/* Przyciski (tylko jeśli nie archiwum) */}
+              {!isArchived && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 2 }}>
+                  <button onClick={sendReport} disabled={sending || !feeling}
+                    style={{ width: '100%', padding: '0.9rem', background: !feeling ? C.grayLight : C.navy, color: !feeling ? C.gray : C.gold, border: 'none', borderRadius: 12, fontWeight: 800, fontSize: '0.9rem', transition: 'all 0.15s' }}>
+                    {sending ? 'Wysyłam...' : sendResult === 'ok' ? '✓ Raport wysłany do trenera!' : sendResult === 'err' ? '✗ Błąd — spróbuj ponownie' : '📋 Wyślij raport do trenera'}
+                  </button>
+                  <button onClick={saveFeedback} disabled={saving}
+                    style={{ width: '100%', padding: '0.75rem', background: saved ? C.green : C.offWhite, color: saved ? C.white : C.gray, border: `1.5px solid ${saved ? C.green : C.grayLight}`, borderRadius: 12, fontWeight: 700, fontSize: '0.82rem' }}>
+                    {saving ? 'Zapisuję...' : saved ? '✓ Zapisano' : 'Zapisz bez wysyłania'}
+                  </button>
+                </div>
+              )}
             </div>
           </Card>
 
         </main>
       </div>
+
+      {/* ── DIALOG DRUKOWANIA ── */}
+      {showPrintDialog && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(13,27,42,0.75)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div style={{ background: C.white, borderRadius: 20, padding: '1.75rem', maxWidth: 360, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', fontFamily: sans }}>
+            <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+              <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🖨️</div>
+              <div style={{ fontWeight: 800, fontSize: '1.1rem', color: C.navy, marginBottom: 6 }}>Raport wysłany!</div>
+              <div style={{ fontSize: '0.84rem', color: C.gray, lineHeight: 1.5 }}>
+                Raport z treningu trafił do trenera.<br />Czy chcesz również wydrukować raport?
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <button onClick={() => { setShowPrintDialog(false); window.print() }}
+                style={{ padding: '0.875rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 12, fontWeight: 800, fontSize: '0.9rem' }}>
+                🖨️ Tak, drukuj raport
+              </button>
+              <button onClick={() => setShowPrintDialog(false)}
+                style={{ padding: '0.75rem', background: C.offWhite, color: C.gray, border: `1.5px solid ${C.grayLight}`, borderRadius: 12, fontWeight: 700, fontSize: '0.84rem' }}>
+                Nie, dziękuję
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

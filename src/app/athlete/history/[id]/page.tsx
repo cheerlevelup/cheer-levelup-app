@@ -38,12 +38,15 @@ export default async function HistoryDetailPage({ params }: Props) {
 
   if (!session) redirect('/athlete/history')
 
-  // Wszystkie zapytania równolegle
-  const sessionDate = session.date_completed
-    ? new Date(session.date_completed).toISOString().split('T')[0]
-    : new Date().toISOString().split('T')[0]
+  // Daty do szukania wellness: bierzemy ±1 dzień od daty sesji żeby pokryć różnice stref czasowych
+  const sessionTs = session.date_completed
+    ? new Date(session.date_completed).getTime()
+    : Date.now()
+  const dateMinus1 = new Date(sessionTs - 86400000).toISOString().split('T')[0]
+  const datePlus1  = new Date(sessionTs + 86400000).toISOString().split('T')[0]
+  const sessionDate = new Date(sessionTs).toISOString().split('T')[0]
 
-  const [{ data: setLogs }, { data: feedback }, { data: painLogs }, wellnessResult] = await Promise.all([
+  const [{ data: setLogs }, { data: feedback }, { data: painLogs }, { data: wellnessCandidates }] = await Promise.all([
     supabase.from('set_logs').select('*')
       .eq('workout_session_id', sessionId).eq('athlete_id', athlete.id)
       .order('created_at', { ascending: true }),
@@ -51,18 +54,24 @@ export default async function HistoryDetailPage({ params }: Props) {
       .eq('workout_session_id', sessionId).maybeSingle(),
     supabase.from('pain_logs').select('*')
       .eq('workout_session_id', sessionId),
-    // Wellness po dacie sesji (nie po session_id — bardziej niezawodne)
+    // Szukamy wellness w zakresie ±1 dzień (pokrycie strefy czasowej)
     supabase.from('wellness_logs').select('*')
-      .eq('athlete_id', athlete.id).eq('date', sessionDate).maybeSingle(),
+      .eq('athlete_id', athlete.id)
+      .gte('date', dateMinus1)
+      .lte('date', datePlus1)
+      .order('date', { ascending: false }),
   ])
 
-  // Fallback: jeśli nie ma po dacie, spróbuj po session_id
-  let wellness = wellnessResult.data
-  if (!wellness) {
-    const { data: wFallback } = await supabase.from('wellness_logs').select('*')
-      .eq('workout_session_id', sessionId).maybeSingle()
-    wellness = wFallback
-  }
+  // Wybieramy wellness najbliższy dacie sesji
+  const wellness = (() => {
+    const candidates = wellnessCandidates || []
+    if (!candidates.length) return null
+    // Priorytet: dokładne trafienie, potem +1, potem -1
+    return candidates.find(w => w.date === sessionDate)
+      || candidates.find(w => w.date === datePlus1)
+      || candidates.find(w => w.date === dateMinus1)
+      || candidates[0]
+  })()
 
   return (
     <HistoryDetailClient
