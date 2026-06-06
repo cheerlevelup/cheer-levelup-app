@@ -18,6 +18,7 @@ interface Props {
   history: WorkoutSession[]
   todayWellness: WellnessStatus
   todayDiet: boolean
+  dietEnabled: boolean
 }
 
 type WellnessStatus = {
@@ -53,7 +54,7 @@ function formatLongDate(iso: string): string {
   return new Date(iso).toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' })
 }
 
-export default function AthleteClient({ athlete, nextTraining, history, todayWellness, todayDiet }: Props) {
+export default function AthleteClient({ athlete, nextTraining, history, todayWellness, todayDiet, dietEnabled }: Props) {
   const router = useRouter()
   const [wellnessOpen, setWellnessOpen] = useState(false)
   const [dietOpen, setDietOpen] = useState(false)
@@ -178,7 +179,7 @@ export default function AthleteClient({ athlete, nextTraining, history, todayWel
           </button>
 
           {/* ── DIETA ── */}
-          <button
+          {dietEnabled && <button
             className="action-card"
             onClick={() => setDietOpen(true)}
             style={{ width: '100%', border: 'none', background: 'none', padding: 0, marginBottom: '0.75rem', textAlign: 'left' }}
@@ -216,7 +217,7 @@ export default function AthleteClient({ athlete, nextTraining, history, todayWel
                 {dietDone ? '' : '›'}
               </div>
             </div>
-          </button>
+          </button>}
 
           {/* ── TRENING ── */}
           {nextTraining ? (
@@ -356,7 +357,7 @@ export default function AthleteClient({ athlete, nextTraining, history, todayWel
         />
       )}
 
-      {dietOpen && (
+      {dietEnabled && dietOpen && (
         <DietModal
           athleteId={athlete.id}
           onClose={() => setDietOpen(false)}

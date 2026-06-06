@@ -264,6 +264,7 @@ interface Props {
   wellnessList: any[]
   dietLogs: any[]
   painLogs: any[]
+  groupModuleConfigs: any[]
 }
 
 // Session feedback detail modal for athlete profile — ładuje dane dynamicznie
@@ -410,13 +411,16 @@ function SessionFeedbackModal({ session, onClose }: { session: any; onClose: () 
 
 type MainTab = 'overview' | 'wellness' | 'diet'
 
-export default function CoachAthleteClient({ athlete, assignment, pastAssignments, sessions, feedbacks, wellnessLogs, wellnessList, dietLogs, painLogs }: Props) {
+export default function CoachAthleteClient({ athlete, assignment, pastAssignments, sessions, feedbacks, wellnessLogs, wellnessList, dietLogs, painLogs, groupModuleConfigs }: Props) {
   const router = useRouter()
   const [planTab, setPlanTab] = useState<'active' | 'history'>('active')
   const [selectedWellness, setSelectedWellness] = useState<{ wellness: any; dateLabel: string } | null>(null)
   const [mainTab, setMainTab] = useState<MainTab>('overview')
   const [moduleConfig, setModuleConfig] = useState<'wellness' | 'diet' | null>(null)
   const [selectedSessionFeedback, setSelectedSessionFeedback] = useState<{ session: any } | null>(null)
+  const inheritedModuleConfig = moduleConfig
+    ? groupModuleConfigs.find((config: any) => config.module === moduleConfig)
+    : null
 
   const completedSessions = sessions.filter(s => s.completed)
   const feedbackMap: Record<number, any> = {}
@@ -498,6 +502,11 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
         <ModuleConfigPanel
           athleteId={athlete.id}
           module={moduleConfig}
+          groupConfig={inheritedModuleConfig ? {
+            enabled: inheritedModuleConfig.enabled ?? true,
+            pre: inheritedModuleConfig.pre_params || [],
+            post: inheritedModuleConfig.post_params || [],
+          } : null}
           onClose={() => setModuleConfig(null)}
         />
       )}

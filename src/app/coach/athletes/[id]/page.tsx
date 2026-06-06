@@ -82,6 +82,13 @@ export default async function CoachAthletePage({ params }: Props) {
     .order('created_at', { ascending: false })
     .limit(10)
 
+  const { data: groupModuleConfigs } = athlete.group_id
+    ? await supabase
+        .from('group_module_config')
+        .select('module, enabled, pre_params, post_params')
+        .eq('group_id', athlete.group_id)
+    : { data: [] }
+
   return (
     <CoachAthleteClient
       athlete={athlete}
@@ -93,6 +100,7 @@ export default async function CoachAthletePage({ params }: Props) {
       wellnessList={wellnessList}
       dietLogs={dietLogs || []}
       painLogs={painLogs || []}
+      groupModuleConfigs={groupModuleConfigs || []}
     />
   )
 }

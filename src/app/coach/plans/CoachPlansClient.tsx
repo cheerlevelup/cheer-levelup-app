@@ -39,10 +39,37 @@ export default function CoachPlansClient({ plans: initialPlans }: { plans: Plan[
     if (!confirm(`Usunąć plan "${plan.name}"? Ta operacja jest nieodwracalna.`)) return
     setDeletingId(plan.id)
     setError('')
-    const { error: err } = await supabase.from('workout_plans').delete().eq('id', plan.id)
-    if (err) { setError(`Błąd: ${err.message}`); setDeletingId(null); return }
-    setPlans(prev => prev.filter(p => p.id !== plan.id))
-    setDeletingId(null)
+    try {
+      const { data: assignments, error: assignmentsError } = await supabase
+        .from('athlete_workout_assignments')
+        .select('id')
+        .eq('plan_id', plan.id)
+      if (assignmentsError) throw assignmentsError
+
+      const assignmentIds = (assignments || []).map(a => a.id)
+      if (assignmentIds.length > 0) {
+        const { error: sessionsError } = await supabase
+          .from('workout_sessions')
+          .update({ assignment_id: null })
+          .in('assignment_id', assignmentIds)
+        if (sessionsError) console.warn('Nie udało się odpiąć sesji przed usunięciem przypisania:', sessionsError.message)
+
+        const { error: deleteAssignmentsError } = await supabase
+          .from('athlete_workout_assignments')
+          .delete()
+          .in('id', assignmentIds)
+        if (deleteAssignmentsError) throw deleteAssignmentsError
+      }
+
+      const { error: err } = await supabase.from('workout_plans').delete().eq('id', plan.id)
+      if (err) throw err
+
+      setPlans(prev => prev.filter(p => p.id !== plan.id))
+    } catch (e: any) {
+      setError(`Błąd: ${e?.message || e}`)
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   async function duplicatePlan(plan: Plan) {

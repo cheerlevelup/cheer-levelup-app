@@ -103,6 +103,7 @@ export default function ModuleConfigPanel({ groupId, athleteId, module, groupCon
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
 
   const isDiet = module === 'diet'
   const preCatalog  = isDiet ? DIET_PARAMS : WELLNESS_PRE
@@ -141,6 +142,7 @@ export default function ModuleConfigPanel({ groupId, athleteId, module, groupCon
 
   async function handleSave() {
     setSaving(true)
+    setError('')
     const payload: any = {
       module, enabled, pre_params: pre, post_params: post,
       updated_at: new Date().toISOString(),
@@ -149,8 +151,13 @@ export default function ModuleConfigPanel({ groupId, athleteId, module, groupCon
     if (athleteId) payload.athlete_id = athleteId
 
     const conflictCol = groupId ? 'group_id,module' : 'athlete_id,module'
-    await supabase.from('group_module_config').upsert(payload, { onConflict: conflictCol })
-    setSaving(false); setSaved(true)
+    const { error: saveError } = await supabase.from('group_module_config').upsert(payload, { onConflict: conflictCol })
+    setSaving(false)
+    if (saveError) {
+      setError(saveError.message)
+      return
+    }
+    setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
 
@@ -201,6 +208,11 @@ export default function ModuleConfigPanel({ groupId, athleteId, module, groupCon
             {enabled ? 'Wyłącz' : 'Włącz'}
           </button>
         </div>
+        {error && (
+          <div style={{ padding: '0.65rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}`, background: '#FEF2F2', color: C.red, fontSize: '0.78rem', fontWeight: 700 }}>
+            Błąd zapisu: {error}
+          </div>
+        )}
 
         {enabled && (
           <>

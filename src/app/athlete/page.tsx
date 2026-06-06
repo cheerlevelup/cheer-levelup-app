@@ -10,6 +10,8 @@ import {
 } from '@/lib/training'
 import AthleteClient from './AthleteClient'
 
+export const dynamic = 'force-dynamic'
+
 export default async function AthletePage() {
   const supabase = await createClient()
   const { data: { user }, error } = await supabase.auth.getUser()
@@ -48,7 +50,7 @@ export default async function AthletePage() {
   const todayDateStr = todayStart.toISOString().split('T')[0]
 
   // Wszystkie zapytania równolegle — zamiast sekwencyjnie
-  const [nextTraining, history, { data: todayWellnessLog }, { data: todayDietLog }] = await Promise.all([
+  const [nextTraining, history, { data: todayWellnessLog }, { data: todayDietLog }, { data: athleteDietConfig }, { data: groupDietConfig }] = await Promise.all([
     getNextTrainingForAthlete(athlete.id, athlete.group_id || undefined),
     getAthleteTrainingHistory(athlete.id, 5),
     supabase
@@ -67,7 +69,24 @@ export default async function AthletePage() {
       .eq('date', todayDateStr)
       .limit(1)
       .maybeSingle(),
+    supabase
+      .from('group_module_config')
+      .select('group_id, athlete_id, module, enabled, pre_params, post_params')
+      .eq('module', 'diet')
+      .eq('athlete_id', athlete.id)
+      .maybeSingle(),
+    athlete.group_id
+      ? supabase
+          .from('group_module_config')
+          .select('group_id, athlete_id, module, enabled, pre_params, post_params')
+          .eq('module', 'diet')
+          .eq('group_id', athlete.group_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
   ])
+
+  const dietConfig = athleteDietConfig || groupDietConfig || null
+  const dietEnabled = dietConfig?.enabled !== false
 
   const wellnessFields = ['sleep_hours', 'sleep_quality', 'energy', 'stress', 'muscle_sorness', 'readiness'] as const
   const completedWellnessFields = wellnessFields.filter(field => {
@@ -87,6 +106,7 @@ export default async function AthletePage() {
         isComplete: completedWellnessFields === wellnessFields.length,
       }}
       todayDiet={!!todayDietLog}
+      dietEnabled={dietEnabled}
     />
   )
 }
