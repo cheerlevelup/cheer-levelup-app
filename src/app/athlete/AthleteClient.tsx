@@ -19,6 +19,7 @@ interface Props {
   todayWellness: WellnessStatus
   todayDiet: boolean
   dietEnabled: boolean
+  wellnessEnabled: boolean
 }
 
 type WellnessStatus = {
@@ -54,7 +55,7 @@ function formatLongDate(iso: string): string {
   return new Date(iso).toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' })
 }
 
-export default function AthleteClient({ athlete, nextTraining, history, todayWellness, todayDiet, dietEnabled }: Props) {
+export default function AthleteClient({ athlete, nextTraining, history, todayWellness, todayDiet, dietEnabled, wellnessEnabled }: Props) {
   const router = useRouter()
   const [wellnessOpen, setWellnessOpen] = useState(false)
   const [dietOpen, setDietOpen] = useState(false)
@@ -136,7 +137,7 @@ export default function AthleteClient({ athlete, nextTraining, history, todayWel
         <main style={{ maxWidth: contentMaxWidth, margin: '0 auto', padding: '1rem 1rem 7rem' }}>
 
           {/* ── WELLNESS ── */}
-          <button
+          {wellnessEnabled && <button
             className="action-card"
             onClick={() => setWellnessOpen(true)}
             style={{ width: '100%', border: 'none', background: 'none', padding: 0, marginBottom: '0.75rem', textAlign: 'left' }}
@@ -176,7 +177,7 @@ export default function AthleteClient({ athlete, nextTraining, history, todayWel
                 {wellnessDone ? '' : '›'}
               </div>
             </div>
-          </button>
+          </button>}
 
           {/* ── DIETA ── */}
           {dietEnabled && <button
@@ -349,7 +350,7 @@ export default function AthleteClient({ athlete, nextTraining, history, todayWel
         </main>
       </div>
 
-      {wellnessOpen && (
+      {wellnessEnabled && wellnessOpen && (
         <WellnessModal
           athlete={athlete}
           onClose={() => setWellnessOpen(false)}

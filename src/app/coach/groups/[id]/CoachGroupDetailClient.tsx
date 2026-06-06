@@ -1631,6 +1631,7 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
   const [activeTab, setActiveTab] = useState<Tab>('trening')
   const [moduleConfig, setModuleConfig] = useState<'wellness' | 'diet' | null>(null)
   const [athleteDietConfig, setAthleteDietConfig] = useState<any | null>(null)
+  const [athleteWellnessConfig, setAthleteWellnessConfig] = useState<any | null>(null)
   const [localModuleConfigs, setLocalModuleConfigs] = useState<any[]>(moduleConfigs)
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null)
   const [wellnessPeriod, setWellnessPeriod] = useState(14)
@@ -1643,17 +1644,31 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
   const [planExLoading, setPlanExLoading] = useState(false)
 
   const defaultDietParams = ['had_breakfast', 'meal_count', 'water_ml']
+  const defaultWellnessPreParams = ['sleep_hours', 'sleep_quality', 'energy', 'stress', 'readiness', 'muscle_soreness']
+  const defaultWellnessPostParams = ['rpe', 'feeling_after', 'goal', 'recovery_score', 'notes']
   const groupDietConfig = localModuleConfigs.find((config: any) => config.module === 'diet' && config.group_id === group.id)
   const groupDietEnabled = groupDietConfig?.enabled !== false
+  const groupWellnessConfig = localModuleConfigs.find((config: any) => config.module === 'wellness' && config.group_id === group.id)
+  const groupWellnessEnabled = groupWellnessConfig?.enabled !== false
   const getAthleteDietConfig = (athleteId: number) => localModuleConfigs.find((config: any) => config.module === 'diet' && config.athlete_id === athleteId)
+  const getAthleteWellnessConfig = (athleteId: number) => localModuleConfigs.find((config: any) => config.module === 'wellness' && config.athlete_id === athleteId)
   const getDietEnabled = (athleteId: number) => {
     const config = getAthleteDietConfig(athleteId)
     return config ? config.enabled !== false : groupDietEnabled
+  }
+  const getWellnessEnabled = (athleteId: number) => {
+    const config = getAthleteWellnessConfig(athleteId)
+    return config ? config.enabled !== false : groupWellnessEnabled
   }
   const groupDietForPanel = {
     enabled: groupDietEnabled,
     pre: groupDietConfig?.pre_params || defaultDietParams,
     post: groupDietConfig?.post_params || [],
+  }
+  const groupWellnessForPanel = {
+    enabled: groupWellnessEnabled,
+    pre: groupWellnessConfig?.pre_params || defaultWellnessPreParams,
+    post: groupWellnessConfig?.post_params || defaultWellnessPostParams,
   }
 
   function sameList(a: string[] = [], b: string[] = []) {
@@ -1721,6 +1736,66 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
       data,
     ])
     setAssignedMsg(target.enabled ? 'Dieta włączona' : 'Dieta wyłączona')
+    setTimeout(() => setAssignedMsg(''), 1800)
+  }
+
+  async function saveWellnessAccess(target: { athleteId?: number; enabled: boolean }) {
+    const current = target.athleteId ? getAthleteWellnessConfig(target.athleteId) || groupWellnessConfig : groupWellnessConfig
+    const groupPre = groupWellnessConfig?.pre_params || defaultWellnessPreParams
+    const groupPost = groupWellnessConfig?.post_params || defaultWellnessPostParams
+
+    if (target.athleteId && target.enabled === groupWellnessEnabled) {
+      const athleteConfig = getAthleteWellnessConfig(target.athleteId)
+      const hasCustomParams = athleteConfig && (
+        !sameList(athleteConfig.pre_params || [], groupPre)
+        || !sameList(athleteConfig.post_params || [], groupPost)
+      )
+
+      if (!hasCustomParams) {
+        if (athleteConfig?.id) {
+          const { error } = await supabase.from('group_module_config').delete().eq('id', athleteConfig.id)
+          if (error) {
+            setAssignedMsg(`Błąd zapisu wellness: ${error.message}`)
+            return
+          }
+        }
+
+        setLocalModuleConfigs(prev => prev.filter((config: any) => !(config.module === 'wellness' && config.athlete_id === target.athleteId)))
+        setAssignedMsg('Wellness ustawiony jak grupa')
+        setTimeout(() => setAssignedMsg(''), 1800)
+        return
+      }
+    }
+
+    const payload: any = {
+      module: 'wellness',
+      enabled: target.enabled,
+      pre_params: current?.pre_params || defaultWellnessPreParams,
+      post_params: current?.post_params || defaultWellnessPostParams,
+      updated_at: new Date().toISOString(),
+    }
+    if (target.athleteId) payload.athlete_id = target.athleteId
+    else payload.group_id = group.id
+
+    const { data, error } = await supabase
+      .from('group_module_config')
+      .upsert(payload, { onConflict: target.athleteId ? 'athlete_id,module' : 'group_id,module' })
+      .select('id, group_id, athlete_id, module, enabled, pre_params, post_params, updated_at')
+      .single()
+
+    if (error) {
+      setAssignedMsg(`Błąd zapisu wellness: ${error.message}`)
+      return
+    }
+
+    setLocalModuleConfigs(prev => [
+      ...prev.filter((config: any) => target.athleteId
+        ? !(config.module === 'wellness' && config.athlete_id === target.athleteId)
+        : !(config.module === 'wellness' && config.group_id === group.id)
+      ),
+      data,
+    ])
+    setAssignedMsg(target.enabled ? 'Wellness włączony' : 'Wellness wyłączony')
     setTimeout(() => setAssignedMsg(''), 1800)
   }
 
@@ -1866,6 +1941,14 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
           onClose={() => { setAthleteDietConfig(null); router.refresh() }}
         />
       )}
+      {athleteWellnessConfig && (
+        <ModuleConfigPanel
+          athleteId={athleteWellnessConfig.id}
+          module="wellness"
+          groupConfig={groupWellnessForPanel}
+          onClose={() => { setAthleteWellnessConfig(null); router.refresh() }}
+        />
+      )}
       {sessionReport && (
         <SessionReportModal
           session={sessionReport.session}
@@ -1929,17 +2012,30 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
               <Card>
                 <div style={{ padding: '1rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Konfiguracja parametrów</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  <button onClick={() => saveWellnessAccess({ enabled: !groupWellnessEnabled })} style={{ border: `1.5px solid ${groupWellnessEnabled ? '#86EFAC' : '#FCA5A5'}`, background: groupWellnessEnabled ? '#F0FDF4' : '#FEF2F2', color: groupWellnessEnabled ? C.green : C.red, borderRadius: 999, padding: '0.45rem 0.85rem', fontWeight: 900, fontSize: '0.74rem', cursor: 'pointer' }}>
+                    {groupWellnessEnabled ? 'Wellness włączony' : 'Wellness wyłączony'}
+                  </button>
                   <button onClick={() => setModuleConfig('wellness')} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 8, padding: '0.45rem 0.85rem', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer' }}>
                     🩺 Edytuj dla grupy
                   </button>
+                  </div>
                 </div>
                 {athletes.map((athlete: any, i: number) => {
                   const ws = getAthleteWellnessSummary(athlete.id, wellnessWeek)
+                  const individualConfig = getAthleteWellnessConfig(athlete.id)
+                  const wellnessEnabled = getWellnessEnabled(athlete.id)
                   return (
                     <div key={athlete.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0.65rem 1.25rem', borderBottom: i < athletes.length - 1 ? `1.5px solid ${C.grayLight}` : 'none' }}>
                       <div style={{ flex: 1, fontWeight: 700, color: C.navy, fontSize: '0.9rem' }}>{athlete.full_name}</div>
                       <div style={{ fontFamily: mono, fontSize: '0.68rem', color: ws.hasToday ? C.green : ws.entryCount > 0 ? C.gold : C.red }}>{ws.hasToday ? '✅ dziś' : ws.entryCount > 0 ? `⚠️ ${ws.entryCount} wpisów` : '✗ brak'}</div>
-                      <button onClick={() => router.push(`/coach/athletes/${athlete.id}?tab=wellness`)} style={{ border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.navy, borderRadius: 7, padding: '0.35rem 0.65rem', fontFamily: mono, fontSize: '0.62rem', fontWeight: 700, cursor: 'pointer' }}>
+                      <div style={{ fontFamily: mono, fontSize: '0.58rem', color: individualConfig ? C.gold : C.gray, minWidth: 82, textAlign: 'center' }}>
+                        {individualConfig ? 'indywidualnie' : 'wg grupy'}
+                      </div>
+                      <button onClick={() => saveWellnessAccess({ athleteId: athlete.id, enabled: !wellnessEnabled })} style={{ border: `1.5px solid ${wellnessEnabled ? '#86EFAC' : '#FCA5A5'}`, background: wellnessEnabled ? '#F0FDF4' : '#FEF2F2', color: wellnessEnabled ? C.green : C.red, borderRadius: 999, padding: '0.35rem 0.7rem', fontFamily: mono, fontSize: '0.6rem', fontWeight: 900, cursor: 'pointer', minWidth: 84 }}>
+                        {wellnessEnabled ? 'włączony' : 'wyłączony'}
+                      </button>
+                      <button onClick={() => setAthleteWellnessConfig(athlete)} style={{ border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.navy, borderRadius: 7, padding: '0.35rem 0.65rem', fontFamily: mono, fontSize: '0.62rem', fontWeight: 700, cursor: 'pointer' }}>
                         Konfiguruj →
                       </button>
                     </div>
