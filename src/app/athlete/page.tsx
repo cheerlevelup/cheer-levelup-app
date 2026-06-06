@@ -41,37 +41,39 @@ export default async function AthletePage() {
     )
   }
 
-  const nextTraining = await getNextTrainingForAthlete(athlete.id, athlete.group_id || undefined)
-  const history = await getAthleteTrainingHistory(athlete.id, 5)
   const todayStart = new Date()
   todayStart.setHours(0, 0, 0, 0)
   const tomorrowStart = new Date(todayStart)
   tomorrowStart.setDate(tomorrowStart.getDate() + 1)
+  const todayDateStr = todayStart.toISOString().split('T')[0]
 
-  const { data: todayWellnessLog } = await supabase
-    .from('wellness_logs')
-    .select('sleep_hours, sleep_quality, energy, stress, muscle_sorness, readiness')
-    .eq('athlete_id', athlete.id)
-    .gte('created_at', todayStart.toISOString())
-    .lt('created_at', tomorrowStart.toISOString())
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  // Wszystkie zapytania równolegle — zamiast sekwencyjnie
+  const [nextTraining, history, { data: todayWellnessLog }, { data: todayDietLog }] = await Promise.all([
+    getNextTrainingForAthlete(athlete.id, athlete.group_id || undefined),
+    getAthleteTrainingHistory(athlete.id, 5),
+    supabase
+      .from('wellness_logs')
+      .select('sleep_hours, sleep_quality, energy, stress, muscle_sorness, readiness')
+      .eq('athlete_id', athlete.id)
+      .gte('created_at', todayStart.toISOString())
+      .lt('created_at', tomorrowStart.toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('diet_logs')
+      .select('id')
+      .eq('athlete_id', athlete.id)
+      .eq('date', todayDateStr)
+      .limit(1)
+      .maybeSingle(),
+  ])
 
   const wellnessFields = ['sleep_hours', 'sleep_quality', 'energy', 'stress', 'muscle_sorness', 'readiness'] as const
   const completedWellnessFields = wellnessFields.filter(field => {
     const value = todayWellnessLog?.[field]
     return value !== null && value !== undefined
   }).length
-
-  // Sprawdź czy dziś uzupełniła dietę
-  const { data: todayDietLog } = await supabase
-    .from('diet_logs')
-    .select('id')
-    .eq('athlete_id', athlete.id)
-    .eq('date', todayStart.toISOString().split('T')[0])
-    .limit(1)
-    .maybeSingle()
 
   return (
     <AthleteClient

@@ -60,6 +60,15 @@ export default function AthleteClient({ athlete, nextTraining, history, todayWel
   const [wellnessDone, setWellnessDone] = useState(todayWellness.isComplete)
   const [dietDone, setDietDone] = useState(todayDiet)
 
+  // Prefetch kluczowych tras przy ładowaniu panelu
+  useState(() => {
+    if (nextTraining) {
+      router.prefetch(`/athlete/training?day=${nextTraining.day.id}&assignment=${nextTraining.assignment.id}`)
+    }
+    router.prefetch('/athlete/history')
+    router.prefetch('/athlete/stats')
+  })
+
   const planName = nextTraining?.assignment.plan?.name || history[0]?.workout_day?.week?.plan?.name || 'Plan treningowy'
   const nextTrainingLabel = nextTraining ? `Trening ${nextTraining.completedCount + 1}` : ''
   const lastSession = history[0] as any
