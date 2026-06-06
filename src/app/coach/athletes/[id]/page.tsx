@@ -85,9 +85,14 @@ export default async function CoachAthletePage({ params }: Props) {
   const { data: groupModuleConfigs } = athlete.group_id
     ? await supabase
         .from('group_module_config')
-        .select('module, enabled, pre_params, post_params')
+        .select('id, group_id, athlete_id, module, enabled, pre_params, post_params, updated_at')
         .eq('group_id', athlete.group_id)
     : { data: [] }
+
+  const { data: athleteModuleConfigs } = await supabase
+    .from('group_module_config')
+    .select('id, group_id, athlete_id, module, enabled, pre_params, post_params, updated_at')
+    .eq('athlete_id', athleteId)
 
   return (
     <CoachAthleteClient
@@ -101,6 +106,7 @@ export default async function CoachAthletePage({ params }: Props) {
       dietLogs={dietLogs || []}
       painLogs={painLogs || []}
       groupModuleConfigs={groupModuleConfigs || []}
+      athleteModuleConfigs={athleteModuleConfigs || []}
     />
   )
 }

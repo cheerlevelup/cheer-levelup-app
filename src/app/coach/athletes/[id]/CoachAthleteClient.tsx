@@ -265,6 +265,7 @@ interface Props {
   dietLogs: any[]
   painLogs: any[]
   groupModuleConfigs: any[]
+  athleteModuleConfigs: any[]
 }
 
 // Session feedback detail modal for athlete profile — ładuje dane dynamicznie
@@ -411,16 +412,73 @@ function SessionFeedbackModal({ session, onClose }: { session: any; onClose: () 
 
 type MainTab = 'overview' | 'wellness' | 'diet'
 
-export default function CoachAthleteClient({ athlete, assignment, pastAssignments, sessions, feedbacks, wellnessLogs, wellnessList, dietLogs, painLogs, groupModuleConfigs }: Props) {
+export default function CoachAthleteClient({ athlete, assignment, pastAssignments, sessions, feedbacks, wellnessLogs, wellnessList, dietLogs, painLogs, groupModuleConfigs, athleteModuleConfigs }: Props) {
   const router = useRouter()
+  const supabase = createClient()
   const [planTab, setPlanTab] = useState<'active' | 'history'>('active')
   const [selectedWellness, setSelectedWellness] = useState<{ wellness: any; dateLabel: string } | null>(null)
   const [mainTab, setMainTab] = useState<MainTab>('overview')
   const [moduleConfig, setModuleConfig] = useState<'wellness' | 'diet' | null>(null)
+  const [localAthleteModuleConfigs, setLocalAthleteModuleConfigs] = useState<any[]>(athleteModuleConfigs)
   const [selectedSessionFeedback, setSelectedSessionFeedback] = useState<{ session: any } | null>(null)
   const inheritedModuleConfig = moduleConfig
     ? groupModuleConfigs.find((config: any) => config.module === moduleConfig)
     : null
+
+  const moduleDefaults = {
+    diet: { pre: ['had_breakfast', 'meal_count', 'water_ml'], post: [] },
+    wellness: {
+      pre: ['sleep_hours', 'sleep_quality', 'energy', 'stress', 'readiness', 'muscle_soreness'],
+      post: ['rpe', 'feeling_after', 'goal', 'recovery_score', 'notes'],
+    },
+  }
+  const groupConfigFor = (module: 'wellness' | 'diet') => groupModuleConfigs.find((config: any) => config.module === module)
+  const athleteConfigFor = (module: 'wellness' | 'diet') => localAthleteModuleConfigs.find((config: any) => config.module === module)
+  const effectiveConfigFor = (module: 'wellness' | 'diet') => athleteConfigFor(module) || groupConfigFor(module)
+  const isModuleEnabled = (module: 'wellness' | 'diet') => effectiveConfigFor(module)?.enabled !== false
+  const configSource = (module: 'wellness' | 'diet') => athleteConfigFor(module) ? 'indywidualnie' : 'wg grupy'
+  const sameList = (a: string[] = [], b: string[] = []) => a.length === b.length && a.every(item => b.includes(item))
+
+  async function saveModuleAccess(module: 'wellness' | 'diet', enabled: boolean) {
+    const athleteConfig = athleteConfigFor(module)
+    const groupConfig = groupConfigFor(module)
+    const groupEnabled = groupConfig?.enabled !== false
+    const defaults = moduleDefaults[module]
+    const groupPre = groupConfig?.pre_params || defaults.pre
+    const groupPost = groupConfig?.post_params || defaults.post
+
+    if (enabled === groupEnabled) {
+      const hasCustomParams = athleteConfig && (
+        !sameList(athleteConfig.pre_params || [], groupPre)
+        || !sameList(athleteConfig.post_params || [], groupPost)
+      )
+      if (!hasCustomParams) {
+        if (athleteConfig?.id) {
+          const { error } = await supabase.from('group_module_config').delete().eq('id', athleteConfig.id)
+          if (error) return
+        }
+        setLocalAthleteModuleConfigs(prev => prev.filter(config => config.module !== module))
+        return
+      }
+    }
+
+    const current = athleteConfig || groupConfig
+    const { data, error } = await supabase
+      .from('group_module_config')
+      .upsert({
+        athlete_id: athlete.id,
+        module,
+        enabled,
+        pre_params: current?.pre_params || defaults.pre,
+        post_params: current?.post_params || defaults.post,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'athlete_id,module' })
+      .select('id, group_id, athlete_id, module, enabled, pre_params, post_params, updated_at')
+      .single()
+
+    if (error) return
+    setLocalAthleteModuleConfigs(prev => [...prev.filter(config => config.module !== module), data])
+  }
 
   const completedSessions = sessions.filter(s => s.completed)
   const feedbackMap: Record<number, any> = {}
@@ -552,10 +610,19 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
               <Card>
                 <div style={{ padding: '1.25rem' }}>
                   <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Konfiguracja wellness</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: '0.85rem' }}>
+                    <span style={{ border: `1.5px solid ${isModuleEnabled('wellness') ? '#86EFAC' : '#FCA5A5'}`, background: isModuleEnabled('wellness') ? '#F0FDF4' : '#FEF2F2', color: isModuleEnabled('wellness') ? C.green : C.red, borderRadius: 999, padding: '0.35rem 0.7rem', fontFamily: mono, fontSize: '0.62rem', fontWeight: 900 }}>
+                      {isModuleEnabled('wellness') ? 'Wellness włączony' : 'Wellness wyłączony'}
+                    </span>
+                    <span style={{ fontFamily: mono, fontSize: '0.62rem', color: athleteConfigFor('wellness') ? C.gold : C.gray }}>{configSource('wellness')}</span>
+                  </div>
                   <p style={{ color: C.gray, fontSize: '0.84rem', marginBottom: '1rem' }}>
                     Wybierz które parametry wellness widzi ta zawodniczka. Nadpisuje ustawienia grupy.
                   </p>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button onClick={() => saveModuleAccess('wellness', !isModuleEnabled('wellness'))} style={{ border: `1.5px solid ${isModuleEnabled('wellness') ? '#FCA5A5' : '#86EFAC'}`, background: isModuleEnabled('wellness') ? '#FEF2F2' : '#F0FDF4', color: isModuleEnabled('wellness') ? C.red : C.green, borderRadius: 10, padding: '0.7rem 1rem', fontWeight: 800, cursor: 'pointer' }}>
+                      {isModuleEnabled('wellness') ? 'Wyłącz wellness' : 'Włącz wellness'}
+                    </button>
                     <button onClick={() => setModuleConfig('wellness')} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 10, padding: '0.7rem 1rem', fontWeight: 800, cursor: 'pointer' }}>
                       🩺 Edytuj parametry wellness
                     </button>
@@ -593,12 +660,23 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
               <Card>
                 <div style={{ padding: '1.25rem' }}>
                   <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Konfiguracja diety</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: '0.85rem' }}>
+                    <span style={{ border: `1.5px solid ${isModuleEnabled('diet') ? '#86EFAC' : '#FCA5A5'}`, background: isModuleEnabled('diet') ? '#F0FDF4' : '#FEF2F2', color: isModuleEnabled('diet') ? C.green : C.red, borderRadius: 999, padding: '0.35rem 0.7rem', fontFamily: mono, fontSize: '0.62rem', fontWeight: 900 }}>
+                      {isModuleEnabled('diet') ? 'Dieta włączona' : 'Dieta wyłączona'}
+                    </span>
+                    <span style={{ fontFamily: mono, fontSize: '0.62rem', color: athleteConfigFor('diet') ? C.gold : C.gray }}>{configSource('diet')}</span>
+                  </div>
                   <p style={{ color: C.gray, fontSize: '0.84rem', marginBottom: '1rem' }}>
                     Wybierz które pola dziennika diety wypełnia ta zawodniczka. Nadpisuje ustawienia grupy.
                   </p>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button onClick={() => saveModuleAccess('diet', !isModuleEnabled('diet'))} style={{ border: `1.5px solid ${isModuleEnabled('diet') ? '#FCA5A5' : '#86EFAC'}`, background: isModuleEnabled('diet') ? '#FEF2F2' : '#F0FDF4', color: isModuleEnabled('diet') ? C.red : C.green, borderRadius: 10, padding: '0.7rem 1rem', fontWeight: 800, cursor: 'pointer' }}>
+                    {isModuleEnabled('diet') ? 'Wyłącz dietę' : 'Włącz dietę'}
+                  </button>
                   <button onClick={() => setModuleConfig('diet')} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 10, padding: '0.7rem 1rem', fontWeight: 800, cursor: 'pointer' }}>
                     🥗 Edytuj parametry diety
                   </button>
+                  </div>
                 </div>
               </Card>
               {dietLogs.length > 0 && (
