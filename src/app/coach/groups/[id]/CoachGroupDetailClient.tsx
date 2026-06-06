@@ -1656,8 +1656,42 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
     post: groupDietConfig?.post_params || [],
   }
 
+  function sameList(a: string[] = [], b: string[] = []) {
+    return a.length === b.length && a.every(item => b.includes(item))
+  }
+
   async function saveDietAccess(target: { athleteId?: number; enabled: boolean }) {
     const current = target.athleteId ? getAthleteDietConfig(target.athleteId) || groupDietConfig : groupDietConfig
+    const groupPre = groupDietConfig?.pre_params || defaultDietParams
+    const groupPost = groupDietConfig?.post_params || []
+
+    if (target.athleteId && target.enabled === groupDietEnabled) {
+      const athleteConfig = getAthleteDietConfig(target.athleteId)
+      const hasCustomParams = athleteConfig && (
+        !sameList(athleteConfig.pre_params || [], groupPre)
+        || !sameList(athleteConfig.post_params || [], groupPost)
+      )
+
+      if (!hasCustomParams) {
+        if (athleteConfig?.id) {
+          const { error } = await supabase
+            .from('group_module_config')
+            .delete()
+            .eq('id', athleteConfig.id)
+
+          if (error) {
+            setAssignedMsg(`Błąd zapisu diety: ${error.message}`)
+            return
+          }
+        }
+
+        setLocalModuleConfigs(prev => prev.filter((config: any) => !(config.module === 'diet' && config.athlete_id === target.athleteId)))
+        setAssignedMsg('Dieta ustawiona jak grupa')
+        setTimeout(() => setAssignedMsg(''), 1800)
+        return
+      }
+    }
+
     const payload: any = {
       module: 'diet',
       enabled: target.enabled,
