@@ -64,6 +64,15 @@ export default async function AthletePage() {
     return value !== null && value !== undefined
   }).length
 
+  // Sprawdź czy dziś uzupełniła dietę
+  const { data: todayDietLog } = await supabase
+    .from('diet_logs')
+    .select('id')
+    .eq('athlete_id', athlete.id)
+    .eq('date', todayStart.toISOString().split('T')[0])
+    .limit(1)
+    .maybeSingle()
+
   return (
     <AthleteClient
       athlete={athlete}
@@ -75,6 +84,7 @@ export default async function AthletePage() {
         totalFields: wellnessFields.length,
         isComplete: completedWellnessFields === wellnessFields.length,
       }}
+      todayDiet={!!todayDietLog}
     />
   )
 }
