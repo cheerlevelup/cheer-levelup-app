@@ -55,8 +55,8 @@ export default async function AthletePage() {
       .from('wellness_logs')
       .select('sleep_hours, sleep_quality, energy, stress, muscle_sorness, readiness')
       .eq('athlete_id', athlete.id)
-      .gte('created_at', todayStart.toISOString())
-      .lt('created_at', tomorrowStart.toISOString())
+      .eq('date', todayDateStr)          // tylko dzienne wellness (zapisane przez stronę wellness)
+      .not('date', 'is', null)           // wyklucza wpisy z treningu (brak pola date)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
