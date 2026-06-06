@@ -1,17 +1,68 @@
 'use client'
 // src/app/athlete/history/[id]/HistoryDetailClient.tsx
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { createClient } from '@/utils/supabase/client'
 
+const C = {
+  navy: '#0D1B2A', navyLight: '#1A2E45', navyBorder: '#243652',
+  gold: '#F5C842', white: '#FFFFFF', offWhite: '#F4F6F9',
+  gray: '#8A9BB0', grayLight: '#E8ECF2', green: '#22C55E',
+  red: '#EF4444', orange: '#F97316',
+}
 const sans = "'Space Grotesk', sans-serif"
 const mono = "'Space Mono', monospace"
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('pl-PL', {
-    day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
-  })
+const FEELING_OPTIONS = [
+  { value: 'swietnie', emoji: '💪', label: 'Świetnie' },
+  { value: 'dobrze',   emoji: '😊', label: 'Dobrze' },
+  { value: 'srednie',  emoji: '😐', label: 'Średnio' },
+  { value: 'zmeczona', emoji: '😓', label: 'Zmęczona' },
+  { value: 'slabo',    emoji: '😞', label: 'Słabo' },
+]
+
+const WC = {
+  sleepQ:   ['Brak regenerującego snu','Bardzo słaby sen','Słaby sen','Sen raczej płytki','Poniżej optymalnie','Średnia jakość snu','Całkiem dobry sen','Dobry sen','Bardzo dobry sen','Świetna regeneracja','Maksymalnie regenerujący sen'],
+  readiness:['Bardzo duże zmęczenie','Ciało prosi o spokojniejszy start','Niska gotowość','Raczej zmęczona','Lekko poniżej normy','Normalnie','Całkiem wypoczęta','Dobra gotowość','Bardzo wypoczęta','Świetna gotowość','Pełna gotowość'],
+  energy:   ['Brak energii','Bardzo niska energia','Trzeba oszczędzać baterie','Energia poniżej normy','Trochę ciężki start','Stabilnie','Energia w porządku','Dobra energia','Bardzo dobra energia','Wysoka energia','Pełna moc'],
+  stress:   ['Pełny spokój','Bardzo niski stres','Spokojna głowa','Lekki stres','Do ogarnięcia','Umiarkowanie','Podwyższone napięcie','Warto obserwować','Dużo stresu','Bardzo duże obciążenie','Alarmowo wysoki stres'],
+  soreness: ['Brak zakwasów','Ledwo wyczuwalne','Lekkie zakwasy','Czuć mięśnie, ale bez problemu','Umiarkowane zakwasy','Wyraźne zakwasy','Mogą wpływać na ruch','Mocne zakwasy','Ciężko wejść w trening','Bardzo mocne obciążenie mięśni','Regeneracja priorytetem'],
 }
 
+function wScaleColor(v: number, max: number, inverse: boolean) {
+  const pct = (v / max) * 100
+  const risk = inverse ? pct : 100 - pct
+  if (risk <= 30) return C.green
+  if (risk <= 55) return C.gold
+  if (risk <= 75) return C.orange
+  return C.red
+}
+function wComment(v: number, arr: string[]) { return arr[Math.max(0, Math.min(arr.length - 1, Math.round(v)))] }
+function readinessEmoji(v: number) { return v <= 1 ? '😴' : v <= 3 ? '😪' : v <= 5 ? '😐' : v <= 8 ? '😊' : '⚡' }
+
+function WBar({ label, value, max, comments, inverse }: { label: string; value: number | null | undefined; max: number; comments?: string[]; inverse?: boolean }) {
+  if (value == null) return null
+  const pct = Math.min(100, Math.max(0, (value / max) * 100))
+  const color = wScaleColor(value, max, !!inverse)
+  const comment = comments ? wComment(value, comments) : null
+  return (
+    <div style={{ marginBottom: '0.75rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <span style={{ fontSize: '0.82rem', color: C.gray }}>{label}</span>
+        <span style={{ fontFamily: mono, fontSize: '0.82rem', fontWeight: 800, color }}>{value}/10</span>
+      </div>
+      <div style={{ height: 6, background: C.grayLight, borderRadius: 3, overflow: 'hidden', marginBottom: comment ? 3 : 0 }}>
+        <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 3 }} />
+      </div>
+      {comment && <div style={{ fontSize: '0.68rem', fontWeight: 700, color, textAlign: 'right' }}>{comment}</div>}
+    </div>
+  )
+}
+
+function rpeColor(rpe: number) {
+  return rpe >= 9 ? C.red : rpe >= 7 ? C.orange : rpe >= 5 ? C.gold : C.green
+}
 function rpeLabel(rpe: number) {
   if (rpe <= 3) return 'Lekki'
   if (rpe <= 5) return 'Umiarkowany'
@@ -20,23 +71,7 @@ function rpeLabel(rpe: number) {
   return 'Maksymalny'
 }
 
-function feelingLabel(f: string) {
-  const map: Record<string, string> = {
-    swietnie: '💪 Świetnie', dobrze: '😊 Dobrze',
-    srednie: '😐 Średnio', zmeczona: '😓 Zmęczona', slabo: '😞 Słabo',
-  }
-  return map[f] || f
-}
-
-type MinimalSetLog = {
-  id?: number
-  created_at?: string | null
-  block_exercise_id?: number | null
-  set_number: number
-  is_warmup?: boolean | null
-}
-
-function dedupeLogs<T extends MinimalSetLog>(logs: T[]) {
+function dedupeLogs<T extends { id?: number; created_at?: string | null; block_exercise_id?: number | null; set_number: number; is_warmup?: boolean | null }>(logs: T[]) {
   const byKey = new Map<string, T>()
   for (const log of logs || []) {
     if (!log.block_exercise_id) continue
@@ -49,20 +84,52 @@ function dedupeLogs<T extends MinimalSetLog>(logs: T[]) {
   return Array.from(byKey.values())
 }
 
-export default function HistoryDetailClient({ athlete, session, setLogs, wellness, feedback, painLogs }: any) {
+function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  return (
+    <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 12px rgba(13,27,42,0.06)', ...style }}>
+      {children}
+    </div>
+  )
+}
+
+function SectionHeader({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ padding: '0.65rem 1.25rem', background: C.offWhite, borderBottom: `1.5px solid ${C.grayLight}`, fontFamily: mono, fontSize: '0.6rem', color: C.gray, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700 }}>
+      {children}
+    </div>
+  )
+}
+
+export default function HistoryDetailClient({ athlete, session, setLogs, wellness, feedback: initialFeedback, painLogs }: any) {
   const router = useRouter()
+  const supabase = createClient()
   const day = session.workout_day
   const plan = day?.week?.plan
 
-  // Mapa: block_exercise_id → dane ćwiczenia
+  // Edycja feedbacku
+  const [rpe, setRpe] = useState<number>(initialFeedback?.session_rpe ?? 6)
+  const [feeling, setFeeling] = useState<string>(initialFeedback?.feeling_after ?? '')
+  const [whatWell, setWhatWell] = useState(initialFeedback?.what_went_well ?? '')
+  const [painComment, setPainComment] = useState(initialFeedback?.pain_after_comment ?? '')
+  const [notes, setNotes] = useState(initialFeedback?.general_notes ?? '')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [sendResult, setSendResult] = useState<'ok' | 'err' | null>(null)
+
+  // Mapa ćwiczeń
   const exerciseMap: Record<number, any> = {}
+  const blockOrder: { id: number; name: string; exIds: number[] }[] = []
   for (const block of (day?.workout_day_blocks || [])) {
+    const exIds: number[] = []
     for (const ex of (block.workout_block_exercises || [])) {
       exerciseMap[ex.id] = { ...ex, blockName: block.block_name }
+      exIds.push(ex.id)
     }
+    blockOrder.push({ id: block.id, name: block.block_name, exIds })
   }
 
-  // Pogrupuj logi po ćwiczeniu
+  // Logi po ćwiczeniu
   const logsByExercise: Record<number, any[]> = {}
   for (const log of dedupeLogs(setLogs)) {
     if (!log.block_exercise_id) continue
@@ -70,170 +137,287 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
     logsByExercise[log.block_exercise_id].push(log)
   }
 
+  async function saveFeedback() {
+    setSaving(true)
+    const payload = {
+      session_id: session.id, workout_session_id: session.id, athlete_id: athlete.id,
+      session_rpe: rpe, feeling_after: feeling,
+      what_went_well: whatWell || null, pain_after_comment: painComment || null, general_notes: notes || null,
+    }
+    if (initialFeedback?.id) {
+      await supabase.from('post_session_feedback').update(payload).eq('id', initialFeedback.id)
+    } else {
+      await supabase.from('post_session_feedback').insert(payload)
+    }
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2500)
+  }
+
+  async function sendReport() {
+    setSending(true)
+    setSendResult(null)
+    // Najpierw zapisz feedback
+    await saveFeedback()
+    const res = await fetch('/api/send-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: session.id, athleteId: athlete.id }),
+    })
+    setSendResult(res.ok ? 'ok' : 'err')
+    setSending(false)
+  }
+
+  const cycleColors: Record<string, string> = { menstruacja: C.red, folikularna: '#F59E0B', owulacja: C.green, lutealna: '#A78BFA' }
+
   return (
     <>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap'); * { box-sizing: border-box; margin: 0; padding: 0; } body { background: #F0EEE9; }`}</style>
-      <div style={{ minHeight: '100vh', background: '#F0EEE9', fontFamily: sans, color: '#111' }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: ${C.offWhite}; }
+        button { cursor: pointer; font-family: inherit; }
+      `}</style>
 
-        {/* Header */}
-        <header style={{
-          borderBottom: '1px solid #D5D2CB', padding: '1rem 1.5rem',
-          display: 'flex', alignItems: 'center', gap: '1rem',
-          background: '#F0EEE9', position: 'sticky', top: 0, zIndex: 10,
-        }}>
-          <button
-            onClick={() => router.push('/athlete/history')}
-            style={{ fontFamily: mono, fontSize: '0.75rem', color: '#888', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: '0.06em' }}
-          >
-            ← Historia
-          </button>
-          <h1 style={{ fontSize: '1rem', fontWeight: 700 }}>Szczegóły treningu</h1>
-        </header>
+      <div style={{ minHeight: '100vh', background: C.offWhite, fontFamily: sans, color: C.navy }}>
 
-        <main style={{ maxWidth: 520, margin: '0 auto', padding: '1.5rem 1.5rem 4rem' }}>
-
-          {/* Info o treningu */}
-          <div style={{ background: '#111', color: '#F0EEE9', padding: '1.5rem', marginBottom: '1.5rem' }}>
-            <div style={{ fontFamily: mono, fontSize: '0.65rem', color: '#F5C842', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
-              {plan?.name} · Tydzień {day?.week?.week_number}
-            </div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700, letterSpacing: '-0.02em', marginBottom: 8 }}>
-              {day?.day_name}
-            </div>
-            <div style={{ fontFamily: mono, fontSize: '0.7rem', color: '#888' }}>
-              {session.date_completed ? formatDate(session.date_completed) : '—'}
+        {/* ── HEADER ── */}
+        <header style={{ background: C.navy, padding: '1rem 1.25rem', position: 'sticky', top: 0, zIndex: 10 }}>
+          <div style={{ maxWidth: 560, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button onClick={() => router.push('/athlete/history')}
+              style={{ border: 'none', background: C.navyLight, color: C.gray, borderRadius: 10, padding: '0.55rem 0.75rem', fontFamily: mono, fontSize: '0.68rem', fontWeight: 700 }}>
+              ← Historia
+            </button>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 2 }}>
+                {plan?.name} · Tydzień {day?.week?.week_number}
+              </div>
+              <div style={{ color: C.white, fontWeight: 800, fontSize: '1.1rem' }}>{day?.day_name}</div>
             </div>
             {session.report_sent && (
-              <div style={{ marginTop: 8, fontFamily: mono, fontSize: '0.65rem', color: '#888', letterSpacing: '0.06em' }}>
-                RAPORT WYSŁANY ✓
+              <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.green, background: C.green + '22', border: `1px solid ${C.green}`, borderRadius: 8, padding: '4px 10px', fontWeight: 700 }}>
+                📋 wysłany
               </div>
             )}
           </div>
+        </header>
 
-          {/* RPE + Samopoczucie */}
-          {feedback && (
-            <div style={{ display: 'flex', gap: 1, marginBottom: '1.5rem' }}>
-              <div style={{ flex: 1, background: '#E8E6E0', padding: '1rem' }}>
-                <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#888', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>RPE</div>
-                <div style={{ fontFamily: mono, fontSize: '1.8rem', fontWeight: 700, color: '#111', lineHeight: 1, marginBottom: 4 }}>{feedback.session_rpe}</div>
-                <div style={{ fontSize: '0.8rem', color: '#666' }}>{rpeLabel(feedback.session_rpe)}</div>
-              </div>
-              {feedback.feeling_after && (
-                <div style={{ flex: 1, background: '#E8E6E0', padding: '1rem' }}>
-                  <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#888', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>Samopoczucie</div>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#111' }}>{feelingLabel(feedback.feeling_after)}</div>
-                </div>
-              )}
-            </div>
-          )}
+        <main style={{ maxWidth: 560, margin: '0 auto', padding: '1rem 1rem 6rem', display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
 
-          {/* Wellness */}
+          {/* ── DATA ── */}
+          <div style={{ fontFamily: mono, fontSize: '0.7rem', color: C.gray, textAlign: 'center', padding: '0.5rem 0' }}>
+            {session.date_completed
+              ? new Date(session.date_completed).toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+              : '—'}
+          </div>
+
+          {/* ── WELLNESS ── */}
           {wellness && (
-            <section style={{ marginBottom: '1.5rem' }}>
-              <p style={{ fontFamily: mono, fontSize: '0.65rem', color: '#888', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.625rem' }}>
-                Wellness przed treningiem
-              </p>
-              <div style={{ background: '#E8E6E0', padding: '1rem' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                  {[
-                    ['Sen', wellness.sleep_hours ? `${wellness.sleep_hours}h` : null],
-                    ['Jakość snu', wellness.sleep_quality ? `${wellness.sleep_quality}/5` : null],
-                    ['Energia', wellness.energy ? `${wellness.energy}/5` : null],
-                    ['Stres', wellness.stress ? `${wellness.stress}/5` : null],
-                    ['Nastrój', wellness.mood ? `${wellness.mood}/5` : null],
-                    ['Zakwasy', wellness.muscle_sorness ? `${wellness.muscle_sorness}/5` : null],
-                    ['Gotowość', wellness.readiness ? `${wellness.readiness}/5` : null],
-                  ].filter(([, v]) => v).map(([label, value]) => (
-                    <div key={label as string}>
-                      <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#888', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{label}</div>
-                      <div style={{ fontFamily: mono, fontSize: '1rem', fontWeight: 700, color: '#111' }}>{value}</div>
+            <Card>
+              <SectionHeader>🩺 Wellness przed treningiem</SectionHeader>
+              <div style={{ padding: '1rem 1.25rem' }}>
+                {/* Sen */}
+                {wellness.sleep_hours != null && (
+                  <div style={{ marginBottom: '0.75rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span style={{ fontSize: '0.82rem', color: C.gray }}>🌙 Sen</span>
+                      <span style={{ fontFamily: mono, fontWeight: 800, color: wScaleColor(wellness.sleep_hours, 12, false) }}>{wellness.sleep_hours}h</span>
                     </div>
-                  ))}
-                </div>
-                {wellness.concerns && (
-                  <p style={{ marginTop: '0.75rem', fontSize: '0.85rem', color: '#555', fontStyle: 'italic', borderTop: '1px solid #D5D2CB', paddingTop: '0.75rem' }}>
-                    "{wellness.concerns}"
-                  </p>
+                    <div style={{ height: 6, background: C.grayLight, borderRadius: 3, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${Math.min(100,(wellness.sleep_hours/12)*100)}%`, background: wScaleColor(wellness.sleep_hours, 12, false), borderRadius: 3 }} />
+                    </div>
+                  </div>
                 )}
-              </div>
-            </section>
-          )}
-
-          {/* Serie */}
-          {Object.keys(logsByExercise).length > 0 && (
-            <section style={{ marginBottom: '1.5rem' }}>
-              <p style={{ fontFamily: mono, fontSize: '0.65rem', color: '#888', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.625rem' }}>
-                Wykonane serie
-              </p>
-              {Object.entries(logsByExercise).map(([exId, logs]) => {
-                const ex = exerciseMap[parseInt(exId)]
-                const name = ex?.exercise?.name || ex?.exercise_code || `Ćwiczenie #${exId}`
-                return (
-                  <div key={exId} style={{ marginBottom: '1rem', borderBottom: '1px solid #D5D2CB', paddingBottom: '1rem' }}>
-                    <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: 6 }}>{name}</div>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {logs.sort((a, b) => a.set_number - b.set_number).map(log => (
-                        <div key={log.id} style={{
-                          background: '#E8E6E0', padding: '0.5rem 0.75rem',
-                          fontFamily: mono, fontSize: '0.72rem', letterSpacing: '0.04em',
-                          color: '#111', lineHeight: 1.5,
-                        }}>
-                          {log.is_warmup ? 'WU' : `S${log.set_number}`}
-                          {log.weight && <><br /><strong>{log.weight}kg</strong></>}
-                          {log.reps_completed && <><br />{log.reps_completed} powt.</>}
-                          {log.athlete_note && <><br /><span style={{ color: '#6B7280', fontStyle: 'italic' }}>&ldquo;{log.athlete_note}&rdquo;</span></>}
-                        </div>
+                <WBar label="Jakość snu" value={wellness.sleep_quality} max={10} comments={WC.sleepQ} />
+                <WBar label={`${readinessEmoji(wellness.readiness ?? 5)} Wypoczęcie`} value={wellness.readiness} max={10} comments={WC.readiness} />
+                <WBar label="Energia" value={wellness.energy} max={10} comments={WC.energy} />
+                <WBar label="Stres" value={wellness.stress} max={10} comments={WC.stress} inverse />
+                <WBar label="Zakwasy" value={wellness.muscle_sorness} max={10} comments={WC.soreness} inverse />
+                {wellness.body_weight_kg && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderTop: `1px solid ${C.grayLight}`, marginTop: 4 }}>
+                    <span style={{ fontSize: '0.82rem', color: C.gray }}>Masa ciała</span>
+                    <span style={{ fontFamily: mono, fontWeight: 800, color: C.navy }}>{wellness.body_weight_kg} kg</span>
+                  </div>
+                )}
+                {wellness.cycle_phase && (
+                  <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: (cycleColors[wellness.cycle_phase] || C.gray) + '18', borderRadius: 8 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: cycleColors[wellness.cycle_phase] || C.gray }} />
+                    <span style={{ fontFamily: mono, fontSize: '0.72rem', fontWeight: 700, color: cycleColors[wellness.cycle_phase] || C.gray }}>
+                      {wellness.cycle_phase}{wellness.cycle_day ? ` · dzień ${wellness.cycle_day}` : ''}
+                    </span>
+                  </div>
+                )}
+                {/* Aktywność */}
+                {wellness.activity_data?.type && (
+                  <div style={{ marginTop: 10, padding: '0.75rem', background: C.offWhite, borderRadius: 10 }}>
+                    <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Aktywność</div>
+                    <div style={{ fontWeight: 700, color: C.navy }}>{wellness.activity_data.type}</div>
+                    <div style={{ fontFamily: mono, fontSize: '0.7rem', color: C.gray, marginTop: 2 }}>
+                      {[wellness.activity_data.time, wellness.activity_data.duration && `${wellness.activity_data.duration} min`, wellness.activity_data.rpe && `RPE ${wellness.activity_data.rpe}`].filter(Boolean).join(' · ')}
+                    </div>
+                  </div>
+                )}
+                {/* Ból wellness */}
+                {wellness.pain_data?.painDuring > 0 && (
+                  <div style={{ marginTop: 10, padding: '0.75rem', background: '#FEF2F2', border: `1.5px solid #FCA5A5`, borderRadius: 10 }}>
+                    <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.red, textTransform: 'uppercase', marginBottom: 3 }}>Ból podczas treningu</div>
+                    <div style={{ fontFamily: mono, fontWeight: 800, color: C.red }}>{wellness.pain_data.painDuring}/10</div>
+                    {wellness.pain_data.location && <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: 2 }}>📍 {wellness.pain_data.location}</div>}
+                  </div>
+                )}
+                {/* Suplementy */}
+                {wellness.supplements_data?.counts && Object.values(wellness.supplements_data.counts).some((v: any) => v > 0) && (
+                  <div style={{ marginTop: 10, padding: '0.65rem 0.875rem', background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 10 }}>
+                    <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#92400E', textTransform: 'uppercase', marginBottom: 5 }}>Suplementy</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                      {Object.entries(wellness.supplements_data.counts).filter(([,v]: any) => v > 0).map(([id, count]: any) => (
+                        <span key={id} style={{ padding: '2px 8px', background: '#FEF9C3', border: '1px solid #FDE68A', borderRadius: 6, fontFamily: mono, fontSize: '0.65rem', color: '#92400E' }}>
+                          {id.replace(/_/g,' ')} ×{count}
+                        </span>
                       ))}
                     </div>
                   </div>
-                )
-              })}
-            </section>
-          )}
-
-          {/* Ból */}
-          {painLogs && painLogs.length > 0 && (
-            <section style={{ marginBottom: '1.5rem' }}>
-              <p style={{ fontFamily: mono, fontSize: '0.65rem', color: '#888', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.625rem' }}>
-                Zgłoszony ból
-              </p>
-              {painLogs.map((p: any) => (
-                <div key={p.id} style={{ background: '#fff8f0', borderLeft: '3px solid #F5C842', padding: '0.75rem 1rem', marginBottom: 8 }}>
-                  <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{p.location || '—'} · VAS {p.vas_score}/10</div>
-                  {p.description && <div style={{ fontSize: '0.82rem', color: '#555', marginTop: 2 }}>{p.description}</div>}
-                </div>
-              ))}
-            </section>
-          )}
-
-          {/* Feedback tekstowy */}
-          {feedback && (feedback.what_went_well || feedback.pain_after_comment || feedback.general_notes) && (
-            <section style={{ marginBottom: '1.5rem' }}>
-              <p style={{ fontFamily: mono, fontSize: '0.65rem', color: '#888', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.625rem' }}>
-                Feedback
-              </p>
-              <div style={{ background: '#E8E6E0', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {feedback.what_went_well && (
-                  <div>
-                    <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#888', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 3 }}>Co poszło dobrze</div>
-                    <div style={{ fontSize: '0.9rem', color: '#111' }}>{feedback.what_went_well}</div>
-                  </div>
                 )}
-                {feedback.pain_after_comment && (
-                  <div>
-                    <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#888', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 3 }}>Ból / dyskomfort</div>
-                    <div style={{ fontSize: '0.9rem', color: '#111' }}>{feedback.pain_after_comment}</div>
-                  </div>
-                )}
-                {feedback.general_notes && (
-                  <div>
-                    <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#888', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 3 }}>Notatki</div>
-                    <div style={{ fontSize: '0.9rem', color: '#111' }}>{feedback.general_notes}</div>
+                {wellness.concerns && (
+                  <div style={{ marginTop: 10, padding: '0.65rem 0.875rem', background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 10 }}>
+                    <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#92400E', textTransform: 'uppercase', marginBottom: 3 }}>Uwagi dla trenera</div>
+                    <div style={{ fontSize: '0.84rem', color: C.navy, fontStyle: 'italic' }}>&ldquo;{wellness.concerns}&rdquo;</div>
                   </div>
                 )}
               </div>
-            </section>
+            </Card>
           )}
+
+          {/* ── SERIE ── */}
+          {Object.keys(logsByExercise).length > 0 && (
+            <Card>
+              <SectionHeader>🏋️ Wykonane serie</SectionHeader>
+              {blockOrder.map(block => {
+                const blockExIds = block.exIds.filter(id => logsByExercise[id]?.length > 0)
+                if (!blockExIds.length) return null
+                return (
+                  <div key={block.id}>
+                    <div style={{ padding: '0.45rem 1.25rem', background: C.navyLight, display: 'flex', alignItems: 'center' }}>
+                      <span style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gold, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{block.name}</span>
+                    </div>
+                    {blockExIds.map((exId, ei) => {
+                      const ex = exerciseMap[exId]
+                      const name = ex?.exercise?.name ? ex.exercise.name.replace(/-/g,' ') : (ex?.exercise_code || `Ćw.#${exId}`)
+                      const logs = logsByExercise[exId].sort((a: any, b: any) => a.set_number - b.set_number)
+                      const main = logs.filter((l: any) => !l.is_warmup)
+                      const wu = logs.filter((l: any) => l.is_warmup)
+                      const exNote = logs.find((l: any) => !l.is_warmup && l.athlete_note)?.athlete_note
+                      const planStr = ex ? `${ex.sets}×${ex.reps || '—'}${ex.weight_kg ? ` · ${ex.weight_kg}kg` : ''}` : ''
+                      return (
+                        <div key={exId} style={{ padding: '0.875rem 1.25rem', borderBottom: ei < blockExIds.length - 1 ? `1px solid ${C.grayLight}` : 'none' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                            <span style={{ fontWeight: 700, color: C.navy, fontSize: '0.92rem' }}>{name}</span>
+                            {planStr && <span style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray }}>plan: {planStr}</span>}
+                          </div>
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            {wu.map((l: any) => (
+                              <div key={l.id} style={{ padding: '0.5rem 0.75rem', background: C.offWhite, border: `1px solid ${C.grayLight}`, borderRadius: 9, minWidth: 52, textAlign: 'center' }}>
+                                <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, marginBottom: 3 }}>Rozg</div>
+                                {l.weight && <div style={{ fontFamily: mono, fontSize: '0.82rem', fontWeight: 800, color: C.gray }}>{l.weight}kg</div>}
+                              </div>
+                            ))}
+                            {main.map((l: any) => (
+                              <div key={l.id} style={{ padding: '0.5rem 0.75rem', background: l.completed ? '#F0FDF4' : C.offWhite, border: `1px solid ${l.completed ? '#86EFAC' : C.grayLight}`, borderRadius: 9, minWidth: 52, textAlign: 'center' }}>
+                                <div style={{ fontFamily: mono, fontSize: '0.62rem', color: l.completed ? C.green : C.gray, fontWeight: 700, marginBottom: 3 }}>S{l.set_number}</div>
+                                {l.weight != null && <div style={{ fontFamily: mono, fontSize: '0.9rem', fontWeight: 900, color: C.navy }}>{l.weight}kg</div>}
+                                {l.reps_completed && <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray }}>{l.reps_completed}p</div>}
+                              </div>
+                            ))}
+                          </div>
+                          {exNote && (
+                            <div style={{ marginTop: 8, padding: '0.5rem 0.75rem', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, fontSize: '0.78rem', color: C.navy, fontStyle: 'italic' }}>
+                              💬 {exNote}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })}
+            </Card>
+          )}
+
+          {/* ── BÓL ── */}
+          {painLogs?.length > 0 && (
+            <Card>
+              <SectionHeader>🩹 Zgłoszony ból</SectionHeader>
+              <div style={{ padding: '0.875rem 1.25rem', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {painLogs.map((p: any) => (
+                  <div key={p.id} style={{ padding: '0.75rem', background: '#FEF2F2', border: `1.5px solid #FCA5A5`, borderRadius: 10 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontWeight: 700, color: C.navy }}>{p.location || 'Nieznana lokalizacja'}</span>
+                      <span style={{ fontFamily: mono, fontWeight: 800, color: p.vas_score >= 7 ? C.red : p.vas_score >= 4 ? C.orange : C.green }}>VAS {p.vas_score}/10</span>
+                    </div>
+                    {p.description && <div style={{ fontSize: '0.82rem', color: C.gray, marginTop: 4 }}>{p.description}</div>}
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {/* ── FEEDBACK — EDYTOWALNY ── */}
+          <Card>
+            <SectionHeader>💬 Feedback po treningu <span style={{ color: C.gold, fontSize: '0.55rem', marginLeft: 6 }}>EDYTUJ</span></SectionHeader>
+            <div style={{ padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+
+              {/* RPE */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ fontSize: '0.82rem', fontWeight: 600, color: C.navy }}>Jak ciężki był trening? (RPE)</span>
+                  <span style={{ fontFamily: mono, fontSize: '1rem', fontWeight: 800, color: rpeColor(rpe) }}>{rpe}/10 <span style={{ fontSize: '0.65rem', fontWeight: 400, color: C.gray }}>{rpeLabel(rpe)}</span></span>
+                </div>
+                <input type="range" min={0} max={10} step={1} value={rpe} onChange={e => setRpe(parseInt(e.target.value))}
+                  style={{ width: '100%', accentColor: rpeColor(rpe) }} />
+                <div style={{ height: 4, background: C.grayLight, borderRadius: 2, overflow: 'hidden', marginTop: 4 }}>
+                  <div style={{ height: '100%', width: `${rpe * 10}%`, background: rpeColor(rpe), borderRadius: 2, transition: 'width 0.2s' }} />
+                </div>
+              </div>
+
+              {/* Samopoczucie */}
+              <div>
+                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: C.navy, display: 'block', marginBottom: 8 }}>Jak się czułaś po treningu?</span>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {FEELING_OPTIONS.map(opt => (
+                    <button key={opt.value} onClick={() => setFeeling(opt.value)}
+                      style={{ padding: '0.5rem 0.875rem', background: feeling === opt.value ? C.navy : C.offWhite, border: feeling === opt.value ? 'none' : `1.5px solid ${C.grayLight}`, borderRadius: 10, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 5, fontWeight: feeling === opt.value ? 700 : 400, color: feeling === opt.value ? C.gold : C.navy }}>
+                      <span>{opt.emoji}</span><span>{opt.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Pola tekstowe */}
+              {[
+                { label: 'Co poszło dobrze?', val: whatWell, set: setWhatWell, placeholder: 'Np. lepsza technika, więcej energii...', color: C.green },
+                { label: 'Ból lub dyskomfort po treningu?', val: painComment, set: setPainComment, placeholder: 'Opisz jeśli coś boli...', color: C.red },
+                { label: 'Notatki / uwagi dla trenera', val: notes, set: setNotes, placeholder: 'Pytania, obserwacje...', color: C.gray },
+              ].map(f => (
+                <div key={f.label}>
+                  <div style={{ fontFamily: mono, fontSize: '0.6rem', color: f.color, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 5 }}>{f.label}</div>
+                  <textarea value={f.val} onChange={e => f.set(e.target.value)} placeholder={f.placeholder} rows={2}
+                    style={{ width: '100%', padding: '0.625rem 0.875rem', border: `1.5px solid ${C.grayLight}`, borderRadius: 10, fontFamily: sans, fontSize: '0.85rem', color: C.navy, resize: 'none', outline: 'none', background: C.offWhite, boxSizing: 'border-box' }} />
+                </div>
+              ))}
+
+              {/* Przyciski */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 4 }}>
+                <button onClick={sendReport} disabled={sending || !feeling}
+                  style={{ width: '100%', padding: '0.9rem', background: !feeling ? C.grayLight : C.navy, color: !feeling ? C.gray : C.gold, border: 'none', borderRadius: 12, fontWeight: 800, fontSize: '0.9rem', transition: 'all 0.15s' }}>
+                  {sending ? 'Wysyłam...' : sendResult === 'ok' ? '✓ Raport wysłany do trenera!' : sendResult === 'err' ? '✗ Błąd — spróbuj ponownie' : '📋 Wyślij raport do trenera'}
+                </button>
+                <button onClick={saveFeedback} disabled={saving}
+                  style={{ width: '100%', padding: '0.75rem', background: saved ? C.green : C.offWhite, color: saved ? C.white : C.gray, border: `1.5px solid ${saved ? C.green : C.grayLight}`, borderRadius: 12, fontWeight: 700, fontSize: '0.82rem' }}>
+                  {saving ? 'Zapisuję...' : saved ? '✓ Zapisano' : 'Zapisz bez wysyłania'}
+                </button>
+              </div>
+            </div>
+          </Card>
 
         </main>
       </div>

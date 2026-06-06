@@ -38,29 +38,31 @@ export default async function HistoryDetailPage({ params }: Props) {
 
   if (!session) redirect('/athlete/history')
 
-  const { data: setLogs } = await supabase
-    .from('set_logs')
-    .select('*')
-    .eq('workout_session_id', sessionId)
-    .eq('athlete_id', athlete.id)
-    .order('created_at', { ascending: true })
+  // Wszystkie zapytania równolegle
+  const sessionDate = session.date_completed
+    ? new Date(session.date_completed).toISOString().split('T')[0]
+    : new Date().toISOString().split('T')[0]
 
-  const { data: wellness } = await supabase
-    .from('wellness_logs')
-    .select('*')
-    .eq('workout_session_id', sessionId)
-    .maybeSingle()
+  const [{ data: setLogs }, { data: feedback }, { data: painLogs }, wellnessResult] = await Promise.all([
+    supabase.from('set_logs').select('*')
+      .eq('workout_session_id', sessionId).eq('athlete_id', athlete.id)
+      .order('created_at', { ascending: true }),
+    supabase.from('post_session_feedback').select('*')
+      .eq('workout_session_id', sessionId).maybeSingle(),
+    supabase.from('pain_logs').select('*')
+      .eq('workout_session_id', sessionId),
+    // Wellness po dacie sesji (nie po session_id — bardziej niezawodne)
+    supabase.from('wellness_logs').select('*')
+      .eq('athlete_id', athlete.id).eq('date', sessionDate).maybeSingle(),
+  ])
 
-  const { data: feedback } = await supabase
-    .from('post_session_feedback')
-    .select('*')
-    .eq('workout_session_id', sessionId)
-    .maybeSingle()
-
-  const { data: painLogs } = await supabase
-    .from('pain_logs')
-    .select('*')
-    .eq('workout_session_id', sessionId)
+  // Fallback: jeśli nie ma po dacie, spróbuj po session_id
+  let wellness = wellnessResult.data
+  if (!wellness) {
+    const { data: wFallback } = await supabase.from('wellness_logs').select('*')
+      .eq('workout_session_id', sessionId).maybeSingle()
+    wellness = wFallback
+  }
 
   return (
     <HistoryDetailClient
