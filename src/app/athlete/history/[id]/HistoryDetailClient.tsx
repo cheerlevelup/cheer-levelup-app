@@ -143,6 +143,43 @@ function SetEditTile({ label, weight, onWeight, onSave, onCancel, saving }: {
   )
 }
 
+// Kafelek serii — wykonana / niezaznaczona / brakująca
+function MissingOrDoneSetTile({ label, weight, reps, missing, done, isSaved, isArchived, onEdit, onMarkDone }: {
+  label: string; weight?: number | null; reps?: number | null
+  missing: boolean; done: boolean; isSaved: boolean; isArchived: boolean
+  onEdit?: () => void; onMarkDone?: () => void
+}) {
+  // missing = brak logu w ogóle (czerwony)
+  // !done = log jest ale niekompletny (szary)
+  // done = wykonane (zielony)
+  const bg = isSaved ? '#F0FDF4' : missing ? '#FEF2F2' : done ? '#F0FDF4' : C.offWhite
+  const border = isSaved ? `2px solid ${C.green}` : missing ? `1.5px solid #FCA5A5` : done ? `1px solid #86EFAC` : `1px solid ${C.grayLight}`
+  const labelColor = missing ? C.red : done ? C.green : C.gray
+
+  function handleClick() {
+    if (isArchived) return
+    if (missing && onMarkDone) { onMarkDone(); return }
+    if (onEdit) onEdit()
+  }
+
+  return (
+    <button onClick={handleClick}
+      style={{ padding: '0.5rem 0.75rem', background: bg, border, borderRadius: 9, minWidth: 54, textAlign: 'center', cursor: isArchived ? 'default' : 'pointer', position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+      <div style={{ fontFamily: mono, fontSize: '0.6rem', color: labelColor, fontWeight: 700 }}>{label}</div>
+      {missing ? (
+        <div style={{ fontFamily: mono, fontSize: '0.7rem', color: C.red, fontWeight: 800 }}>—</div>
+      ) : (
+        <>
+          {weight != null && <div style={{ fontFamily: mono, fontSize: '0.88rem', fontWeight: 900, color: C.navy }}>{weight}kg</div>}
+          {reps != null && <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray }}>{reps}p</div>}
+        </>
+      )}
+      {missing && !isArchived && <div style={{ fontSize: '0.55rem', color: C.red, marginTop: 1 }}>+ zaznacz</div>}
+      {!missing && !isArchived && <span style={{ position: 'absolute', top: 2, right: 3, fontSize: '0.45rem' }}>✏️</span>}
+    </button>
+  )
+}
+
 // Panel bólu i notatki per ćwiczenie
 function ExercisePainPanel({ exerciseName, sessionId, athleteId, existingPains, isArchived }: {
   exerciseName: string; sessionId: number; athleteId: number
@@ -323,9 +360,26 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
 
   const cycleColors: Record<string, string> = { menstruacja: C.red, folikularna: '#F59E0B', owulacja: C.green, lutealna: '#A78BFA' }
 
+  // Nowo stworzone logi (kliknięcie "zaznacz" przy brakującej serii)
+  const [extraLogs, setExtraLogs] = useState<any[]>([])
+
   function startEditLog(log: any) {
     setEditingLogId(log.id)
     setEditWeight(log.weight != null ? String(log.weight) : '')
+  }
+
+  async function createMissingLog(blockExerciseId: number, setNum: number, isWarmup: boolean, sessionId: number, athleteId: number) {
+    const { data } = await supabase.from('set_logs').insert({
+      workout_session_id: sessionId, block_exercise_id: blockExerciseId,
+      athlete_id: athleteId, set_number: setNum,
+      weight: null, reps_completed: null,
+      is_warmup: isWarmup, completed: true,
+    }).select().single()
+    if (data) {
+      setExtraLogs(prev => [...prev, data])
+      setSavedLogId(data.id)
+      setTimeout(() => setSavedLogId(null), 2500)
+    }
   }
 
   async function saveLog(logId: number) {
@@ -500,101 +554,157 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
           )}
 
           {/* ── SERIE Z ĆWICZENIAMI ── */}
-          {Object.keys(logsByExercise).length > 0 && (
+          {blockOrder.some(b => b.exIds.length > 0) && (
             <Card>
               <SectionHeader>
-                🏋️ Wykonane serie
-                {!isArchived && <span style={{ color: C.gold, fontSize: '0.5rem', marginLeft: 4, fontWeight: 600 }}>dotknij serię aby edytować</span>}
+                🏋️ Serie
+                {!isArchived && <span style={{ color: C.gold, fontSize: '0.5rem', marginLeft: 4, fontWeight: 600 }}>dotknij serię aby edytować · czerwona = niezaznaczona</span>}
               </SectionHeader>
 
               {blockOrder.map(block => {
-                const blockExIds = block.exIds.filter(id => logsByExercise[id]?.length > 0)
-                if (!blockExIds.length) return null
+                if (!block.exIds.length) return null
                 return (
                   <div key={block.id}>
-                    {/* Nagłówek bloku */}
                     <div style={{ padding: '0.4rem 1.25rem', background: C.navyLight }}>
                       <span style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gold, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{block.name}</span>
                     </div>
 
-                    {blockExIds.map((exId, ei) => {
+                    {block.exIds.map((exId, ei) => {
                       const ex = exerciseMap[exId]
                       const name = ex?.exercise?.name ? ex.exercise.name.replace(/-/g,' ') : (ex?.exercise_code || `Ćw.#${exId}`)
-                      const logs = logsByExercise[exId].sort((a: any, b: any) => a.set_number - b.set_number)
-                      const main = logs.filter((l: any) => !l.is_warmup)
-                      const wu = logs.filter((l: any) => l.is_warmup)
-                      const planStr = ex ? `${ex.sets}×${ex.reps || '—'}${ex.weight_kg ? ` · ${ex.weight_kg}kg` : ''}` : ''
-                      // Pierwsza seria robocza dla notatki ćwiczenia
+                      const allLogs = [...(logsByExercise[exId] || []), ...extraLogs.filter((l: any) => l.block_exercise_id === exId)]
+                        .sort((a: any, b: any) => a.set_number - b.set_number)
+                      const main = allLogs.filter((l: any) => !l.is_warmup)
+                      const wu = allLogs.filter((l: any) => l.is_warmup)
+
+                      // Zaplanowana liczba serii i rozgrzewek z planu
+                      const plannedSets: number = ex?.sets || 0
+                      const warmupSets: any[] = Array.isArray(ex?.warmup_sets) ? ex.warmup_sets : (ex?.warmup_reps ? [{ reps: ex.warmup_reps, weight_kg: ex.warmup_weight }] : [])
+
+                      const planStr = ex ? `${plannedSets}×${ex.reps || '—'}${ex.weight_kg ? ` · ${ex.weight_kg}kg` : ''}` : ''
                       const firstMainLog = main[0]
                       const initialNote = firstMainLog?.athlete_note || ''
-
-                      // Istniejące bóle per ćwiczenie (po nazwie)
                       const exPains = painByExercise[name] || []
 
                       return (
-                        <div key={exId} style={{ padding: '0.875rem 1.25rem', borderBottom: ei < blockExIds.length - 1 ? `1px solid ${C.grayLight}` : 'none' }}>
-                          {/* Nagłówek ćwiczenia */}
+                        <div key={exId} style={{ padding: '0.875rem 1.25rem', borderBottom: ei < block.exIds.length - 1 ? `1px solid ${C.grayLight}` : 'none' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
                             <span style={{ fontWeight: 700, color: C.navy, fontSize: '0.92rem' }}>{name}</span>
                             {planStr && <span style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray }}>plan: {planStr}</span>}
                           </div>
 
-                          {/* Kafelki serii */}
                           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 2 }}>
-                            {/* Rozgrzewki */}
-                            {wu.map((l: any) => {
-                              const ov = logOverrides[l.id] || {}
-                              const w = ov.weight ?? l.weight
-                              const isEditing = editingLogId === l.id
-                              if (isEditing) return (
-                                <SetEditTile key={l.id} label="Rozg"
-                                  weight={editWeight} onWeight={setEditWeight}
-                                  onSave={() => saveLog(l.id)} onCancel={() => setEditingLogId(null)}
-                                  saving={savingLog} />
-                              )
-                              return (
-                                <button key={l.id}
-                                  onClick={() => !isArchived && startEditLog(ov.weight != null ? { ...l, weight: ov.weight } : l)}
-                                  style={{ padding: '0.5rem 0.75rem', background: C.offWhite, border: savedLogId === l.id ? `2px solid ${C.green}` : `1px solid ${C.grayLight}`, borderRadius: 9, minWidth: 54, textAlign: 'center', cursor: isArchived ? 'default' : 'pointer', position: 'relative' }}>
-                                  <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, marginBottom: 3 }}>Rozg</div>
-                                  {w != null && <div style={{ fontFamily: mono, fontSize: '0.82rem', fontWeight: 800, color: C.gray }}>{w}kg</div>}
-                                  {!isArchived && <span style={{ position: 'absolute', top: 2, right: 3, fontSize: '0.5rem' }}>✏️</span>}
-                                </button>
-                              )
-                            })}
-                            {/* Serie właściwe */}
-                            {main.map((l: any) => {
-                              const ov = logOverrides[l.id] || {}
-                              const w = ov.weight ?? l.weight
-                              const r = l.reps_completed
-                              const isEditing = editingLogId === l.id
-                              if (isEditing) return (
-                                <SetEditTile key={l.id} label={`S${l.set_number}`}
-                                  weight={editWeight} onWeight={setEditWeight}
-                                  onSave={() => saveLog(l.id)} onCancel={() => setEditingLogId(null)}
-                                  saving={savingLog} />
-                              )
-                              return (
-                                <button key={l.id}
-                                  onClick={() => !isArchived && startEditLog({ ...l, weight: w, reps_completed: r })}
-                                  style={{ padding: '0.5rem 0.75rem', background: savedLogId === l.id ? '#F0FDF4' : (l.completed ? '#F0FDF4' : C.offWhite), border: savedLogId === l.id ? `2px solid ${C.green}` : `1px solid ${l.completed ? '#86EFAC' : C.grayLight}`, borderRadius: 9, minWidth: 54, textAlign: 'center', cursor: isArchived ? 'default' : 'pointer', position: 'relative' }}>
-                                  <div style={{ fontFamily: mono, fontSize: '0.6rem', color: l.completed ? C.green : C.gray, fontWeight: 700, marginBottom: 3 }}>S{l.set_number}</div>
-                                  {w != null && <div style={{ fontFamily: mono, fontSize: '0.9rem', fontWeight: 900, color: C.navy }}>{w}kg</div>}
-                                  {r != null && <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray }}>{r}p</div>}
-                                  {!isArchived && <span style={{ position: 'absolute', top: 2, right: 3, fontSize: '0.5rem' }}>✏️</span>}
-                                </button>
-                              )
-                            })}
+
+                            {/* ── Rozgrzewki: z logów lub zaplanowane ── */}
+                            {warmupSets.length > 0
+                              ? warmupSets.map((_: any, wIdx: number) => {
+                                  const setNum = wIdx + 1
+                                  const l = wu.find((x: any) => x.set_number === setNum)
+                                  const ov = l ? (logOverrides[l.id] || {}) : {}
+                                  const w = ov.weight ?? l?.weight
+                                  const isEditing = l && editingLogId === l.id
+                                  const isSaved = l && savedLogId === l.id
+                                  const missing = !l
+
+                                  if (isEditing) return (
+                                    <SetEditTile key={`wu-${setNum}`} label={`Rozg${warmupSets.length > 1 ? ` ${setNum}` : ''}`}
+                                      weight={editWeight} onWeight={setEditWeight}
+                                      onSave={() => saveLog(l!.id)} onCancel={() => setEditingLogId(null)}
+                                      saving={savingLog} />
+                                  )
+                                  return (
+                                    <MissingOrDoneSetTile
+                                      key={`wu-${setNum}`}
+                                      label={`Rozg${warmupSets.length > 1 ? ` ${setNum}` : ''}`}
+                                      weight={w} reps={null}
+                                      missing={missing}
+                                      done={!!l?.completed}
+                                      isSaved={!!isSaved}
+                                      isArchived={isArchived}
+                                      onEdit={l ? () => startEditLog(ov.weight != null ? { ...l, weight: ov.weight } : l) : undefined}
+                                      onMarkDone={missing ? () => createMissingLog(exId, setNum, true, session.id, athlete.id) : undefined}
+                                    />
+                                  )
+                                })
+                              : wu.map((l: any) => {
+                                  const ov = logOverrides[l.id] || {}
+                                  const w = ov.weight ?? l.weight
+                                  const isEditing = editingLogId === l.id
+                                  if (isEditing) return (
+                                    <SetEditTile key={l.id} label="Rozg"
+                                      weight={editWeight} onWeight={setEditWeight}
+                                      onSave={() => saveLog(l.id)} onCancel={() => setEditingLogId(null)}
+                                      saving={savingLog} />
+                                  )
+                                  return (
+                                    <MissingOrDoneSetTile key={l.id} label="Rozg"
+                                      weight={w} reps={null} missing={false} done={!!l.completed}
+                                      isSaved={savedLogId === l.id} isArchived={isArchived}
+                                      onEdit={() => startEditLog(ov.weight != null ? { ...l, weight: ov.weight } : l)} />
+                                  )
+                                })
+                            }
+
+                            {/* ── Serie robocze: wszystkie zaplanowane ── */}
+                            {plannedSets > 0
+                              ? Array.from({ length: plannedSets }, (_, i) => {
+                                  const setNum = i + 1
+                                  const l = main.find((x: any) => x.set_number === setNum)
+                                  const ov = l ? (logOverrides[l.id] || {}) : {}
+                                  const w = ov.weight ?? l?.weight
+                                  const r = l?.reps_completed
+                                  const isEditing = l && editingLogId === l.id
+                                  const isSaved = l && savedLogId === l.id
+                                  const missing = !l
+
+                                  if (isEditing) return (
+                                    <SetEditTile key={`s-${setNum}`} label={`S${setNum}`}
+                                      weight={editWeight} onWeight={setEditWeight}
+                                      onSave={() => saveLog(l!.id)} onCancel={() => setEditingLogId(null)}
+                                      saving={savingLog} />
+                                  )
+                                  return (
+                                    <MissingOrDoneSetTile
+                                      key={`s-${setNum}`}
+                                      label={`S${setNum}`}
+                                      weight={w} reps={r}
+                                      missing={missing}
+                                      done={!!l?.completed}
+                                      isSaved={!!isSaved}
+                                      isArchived={isArchived}
+                                      onEdit={l ? () => startEditLog({ ...l, weight: w }) : undefined}
+                                      onMarkDone={missing ? () => createMissingLog(exId, setNum, false, session.id, athlete.id) : undefined}
+                                    />
+                                  )
+                                })
+                              : main.map((l: any) => {
+                                  // fallback: pokaż zalogowane jeśli brak ex.sets
+                                  const ov = logOverrides[l.id] || {}
+                                  const w = ov.weight ?? l.weight
+                                  const isEditing = editingLogId === l.id
+                                  if (isEditing) return (
+                                    <SetEditTile key={l.id} label={`S${l.set_number}`}
+                                      weight={editWeight} onWeight={setEditWeight}
+                                      onSave={() => saveLog(l.id)} onCancel={() => setEditingLogId(null)}
+                                      saving={savingLog} />
+                                  )
+                                  return (
+                                    <MissingOrDoneSetTile key={l.id} label={`S${l.set_number}`}
+                                      weight={w} reps={l.reps_completed} missing={false}
+                                      done={!!l.completed} isSaved={savedLogId === l.id}
+                                      isArchived={isArchived}
+                                      onEdit={() => startEditLog({ ...l, weight: w })} />
+                                  )
+                                })
+                            }
                           </div>
 
-                          {/* Notatka do ćwiczenia — edytowalna */}
                           <ExerciseNoteField
                             initialNote={initialNote}
                             firstLogId={firstMainLog?.id || null}
                             isArchived={isArchived}
                           />
 
-                          {/* Panel bólu per ćwiczenie */}
                           <ExercisePainPanel
                             exerciseName={name}
                             sessionId={session.id}
