@@ -708,8 +708,11 @@ export default function WellnessClient({ athlete, existingWellness, dateIso }: P
     setSaving(true)
     setSaveError('')
 
+    const todayDate = new Date().toISOString().split('T')[0]
+
     const basePayload = {
       athlete_id: athlete.id,
+      date: todayDate,
       sleep_hours: sleepHours,
       sleep_quality: sleepQuality,
       energy,

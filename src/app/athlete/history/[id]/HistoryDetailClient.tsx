@@ -28,6 +28,27 @@ function feelingLabel(f: string) {
   return map[f] || f
 }
 
+type MinimalSetLog = {
+  id?: number
+  created_at?: string | null
+  block_exercise_id?: number | null
+  set_number: number
+  is_warmup?: boolean | null
+}
+
+function dedupeLogs<T extends MinimalSetLog>(logs: T[]) {
+  const byKey = new Map<string, T>()
+  for (const log of logs || []) {
+    if (!log.block_exercise_id) continue
+    const key = `${log.block_exercise_id}:${log.set_number}:${log.is_warmup ? 'w' : 'm'}`
+    const existing = byKey.get(key)
+    const logTime = new Date(log.created_at || 0).getTime()
+    const existingTime = new Date(existing?.created_at || 0).getTime()
+    if (!existing || logTime >= existingTime || (log.id || 0) > (existing.id || 0)) byKey.set(key, log)
+  }
+  return Array.from(byKey.values())
+}
+
 export default function HistoryDetailClient({ athlete, session, setLogs, wellness, feedback, painLogs }: any) {
   const router = useRouter()
   const day = session.workout_day
@@ -43,7 +64,7 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
 
   // Pogrupuj logi po ćwiczeniu
   const logsByExercise: Record<number, any[]> = {}
-  for (const log of setLogs) {
+  for (const log of dedupeLogs(setLogs)) {
     if (!log.block_exercise_id) continue
     if (!logsByExercise[log.block_exercise_id]) logsByExercise[log.block_exercise_id] = []
     logsByExercise[log.block_exercise_id].push(log)
@@ -160,6 +181,7 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
                           {log.is_warmup ? 'WU' : `S${log.set_number}`}
                           {log.weight && <><br /><strong>{log.weight}kg</strong></>}
                           {log.reps_completed && <><br />{log.reps_completed} powt.</>}
+                          {log.athlete_note && <><br /><span style={{ color: '#6B7280', fontStyle: 'italic' }}>&ldquo;{log.athlete_note}&rdquo;</span></>}
                         </div>
                       ))}
                     </div>

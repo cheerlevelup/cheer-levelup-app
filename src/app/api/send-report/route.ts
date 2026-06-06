@@ -80,7 +80,7 @@ function buildEmailHtml(data: {
         return `<tr>
           <td style="padding:5px 10px;color:#888;font-size:13px;border-bottom:1px solid #f0ede8">S${l.set_number}${wu}</td>
           <td style="padding:5px 10px;font-size:14px;font-weight:700;border-bottom:1px solid #f0ede8">${weight}</td>
-          <td style="padding:5px 10px;font-size:13px;color:#555;border-bottom:1px solid #f0ede8">${reps}</td>
+          <td style="padding:5px 10px;font-size:13px;color:#555;border-bottom:1px solid #f0ede8">${reps}${l.athlete_note ? `<div style="font-size:12px;color:#666;font-style:italic;margin-top:3px">&ldquo;${l.athlete_note}&rdquo;</div>` : ''}</td>
           ${l.rir != null ? `<td style="padding:5px 10px;font-size:12px;color:#888;border-bottom:1px solid #f0ede8">RIR ${l.rir}</td>` : '<td></td>'}
         </tr>`
       }).join('')

@@ -99,6 +99,7 @@ export async function getOrCreateWorkoutSession(
     .select('*')
     .eq('athlete_id', athleteId)
     .eq('workout_day_id', dayId)
+    .eq('assignment_id', assignmentId)
     .eq('completed', false)
     .maybeSingle()
 

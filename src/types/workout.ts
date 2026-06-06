@@ -116,6 +116,7 @@ export interface SetLog {
   set_number: number
   weight?: number
   reps_completed?: number
+  athlete_note?: string | null
   duration_seconds?: number
   completed: boolean
   is_warmup: boolean

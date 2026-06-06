@@ -78,6 +78,19 @@ function fmtNumber(value: number | null, digits = 1) {
   return value.toLocaleString('pl-PL', { maximumFractionDigits: digits })
 }
 
+function dedupeSetLogs(logs: SetLog[]) {
+  const byKey = new Map<string, SetLog>()
+  for (const log of logs || []) {
+    if (!log.workout_session_id || !log.block_exercise_id) continue
+    const key = `${log.workout_session_id}:${log.block_exercise_id}:${log.set_number}:${log.is_warmup ? 'w' : 'm'}`
+    const existing = byKey.get(key)
+    const logTime = new Date(log.created_at || 0).getTime()
+    const existingTime = new Date(existing?.created_at || 0).getTime()
+    if (!existing || logTime >= existingTime || log.id > existing.id) byKey.set(key, log)
+  }
+  return Array.from(byKey.values())
+}
+
 function fmtKg(value: number) {
   return `${Math.round(value).toLocaleString('pl-PL')} kg`
 }
@@ -146,6 +159,7 @@ function MetricRow({ label, value, max = 5, lowerIsBetter = false }: { label: st
 
 export default function StatsClient({ athlete, wellnessLogs, feedbacks, painLogs, setLogs, sessions }: Props) {
   const router = useRouter()
+  const uniqueSetLogs = dedupeSetLogs(setLogs)
   const avgSleep = avg(wellnessLogs.map(w => w.sleep_hours))
   const avgSleepQuality = avg(wellnessLogs.map(w => w.sleep_quality))
   const avgEnergy = avg(wellnessLogs.map(w => w.energy))
@@ -156,9 +170,9 @@ export default function StatsClient({ athlete, wellnessLogs, feedbacks, painLogs
   const avgPain = avg(painLogs.map(p => p.vas_score))
   const highPainCount = painLogs.filter(p => (p.vas_score || 0) >= 7).length
 
-  const workSets = setLogs.filter(set => set.completed && !set.is_warmup && (set.weight || 0) > 0 && (set.reps_completed || 0) > 0)
+  const workSets = uniqueSetLogs.filter(set => set.completed && !set.is_warmup && (set.weight || 0) > 0 && (set.reps_completed || 0) > 0)
   const tonnage = workSets.reduce((sum, set) => sum + (set.weight || 0) * (set.reps_completed || 0), 0)
-  const totalReps = setLogs
+  const totalReps = uniqueSetLogs
     .filter(set => set.completed && !set.is_warmup && (set.reps_completed || 0) > 0)
     .reduce((sum, set) => sum + (set.reps_completed || 0), 0)
 

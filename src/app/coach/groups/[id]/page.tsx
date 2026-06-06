@@ -116,8 +116,8 @@ export default async function CoachGroupDetailPage({ params }: Props) {
     .from('wellness_logs')
     .select('*')
     .in('athlete_id', athleteIds)
-    .gte('date', thirtyDaysAgo.toISOString().split('T')[0])
-    .order('date', { ascending: false })
+    .gte('created_at', thirtyDaysAgo.toISOString())
+    .order('created_at', { ascending: false })
 
   // Feedback po sesjach (RPE, nastrój)
   const { data: feedbacks } = await supabase

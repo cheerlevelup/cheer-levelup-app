@@ -1,8 +1,9 @@
 'use client'
 // src/app/coach/athletes/[id]/CoachAthleteClient.tsx
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { createClient } from '@/utils/supabase/client'
 import ModuleConfigPanel from '@/components/ModuleConfigPanel'
 
 const C = {
@@ -65,6 +66,27 @@ function wScaleColor(v: number, max: number, inverse: boolean) {
 }
 function wComment(v: number, arr: string[]) { return arr[Math.max(0, Math.min(arr.length - 1, Math.round(v)))] }
 function readinessEmoji(v: number) { return v <= 1 ? '😴' : v <= 3 ? '😪' : v <= 5 ? '😐' : v <= 8 ? '😊' : '⚡' }
+
+type MinimalSetLog = {
+  id?: number
+  created_at?: string | null
+  block_exercise_id?: number | null
+  set_number: number
+  is_warmup?: boolean | null
+}
+
+function dedupeLogs<T extends MinimalSetLog>(logs: T[]) {
+  const byKey = new Map<string, T>()
+  for (const log of logs || []) {
+    if (!log.block_exercise_id) continue
+    const key = `${log.block_exercise_id}:${log.set_number}:${log.is_warmup ? 'w' : 'm'}`
+    const existing = byKey.get(key)
+    const logTime = new Date(log.created_at || 0).getTime()
+    const existingTime = new Date(existing?.created_at || 0).getTime()
+    if (!existing || logTime >= existingTime || (log.id || 0) > (existing.id || 0)) byKey.set(key, log)
+  }
+  return Array.from(byKey.values())
+}
 
 function WScale({ label, emoji, value, max, unit, comments, inverse }: { label: string; emoji?: string; value: number | null | undefined; max: number; unit?: string; comments?: string[]; inverse?: boolean }) {
   if (value == null) return null
@@ -244,67 +266,142 @@ interface Props {
   painLogs: any[]
 }
 
-// Session feedback detail modal for athlete profile
-function SessionFeedbackModal({ session, feedback, onClose }: { session: any; feedback: any | null; onClose: () => void }) {
+// Session feedback detail modal for athlete profile — ładuje dane dynamicznie
+function SessionFeedbackModal({ session, onClose }: { session: any; onClose: () => void }) {
+  const [loading, setLoading] = useState(true)
+  const [feedback, setFeedback] = useState<any | null>(null)
+  const [setLogs, setSetLogs] = useState<any[]>([])
+  const [blocks, setBlocks] = useState<any[]>([])
+
+  useEffect(() => {
+    async function load() {
+      const sb = createClient()
+      try {
+        const r = await sb.from('post_session_feedback').select('*').eq('workout_session_id', session.id).order('created_at', { ascending: false }).limit(1).maybeSingle()
+        setFeedback(r.data || null)
+      } catch {}
+      try {
+        const r = await sb.from('set_logs').select('*').eq('workout_session_id', session.id).order('set_number', { ascending: true })
+        setSetLogs(r.data || [])
+      } catch {}
+      if (session.workout_day_id) {
+        try {
+          const r = await sb.from('workout_day_blocks').select('*, workout_block_exercises(id, exercise_id, exercise_code, sets, reps, weight_kg, exercise:exercises(name))').eq('day_id', session.workout_day_id).order('block_order', { ascending: true })
+          setBlocks(r.data || [])
+        } catch {}
+      }
+      setLoading(false)
+    }
+    load()
+  }, [session.id, session.workout_day_id])
+
   const dateStr = session.date_completed
     ? new Date(session.date_completed).toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' })
     : '—'
   const rpeC = (rpe: number) => rpe >= 9 ? C.red : rpe >= 7 ? C.orange : rpe >= 5 ? C.gold : C.green
+
+  const exNameMap: Record<number, string> = {}
+  const exPlanMap: Record<number, string> = {}
+  for (const b of blocks) {
+    for (const ex of (b.workout_block_exercises || [])) {
+      exNameMap[ex.id] = ex.exercise?.name ? ex.exercise.name.replace(/-/g, ' ') : (ex.exercise_code || `Ćw.#${ex.id}`)
+      exPlanMap[ex.id] = `${ex.sets}×${ex.reps || '—'}${ex.weight_kg ? ` · ${ex.weight_kg}kg` : ''}`
+    }
+  }
+  const logsByEx: Record<number, any[]> = {}
+  for (const l of dedupeLogs(setLogs)) {
+    if (!l.block_exercise_id) continue
+    if (!logsByEx[l.block_exercise_id]) logsByEx[l.block_exercise_id] = []
+    logsByEx[l.block_exercise_id].push(l)
+  }
+  const orderedExIds: number[] = []
+  for (const b of blocks) for (const ex of (b.workout_block_exercises || [])) orderedExIds.push(ex.id)
+
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(13,27,42,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: sans }} onClick={onClose}>
-      <div style={{ width: '100%', maxWidth: 460, background: C.white, borderRadius: 18, border: `1.5px solid ${C.grayLight}`, maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
-        <div style={{ background: C.navy, padding: '1rem 1.25rem', borderRadius: '16px 16px 0 0' }}>
+      <div style={{ width: '100%', maxWidth: 500, background: C.offWhite, borderRadius: 18, border: `1.5px solid ${C.grayLight}`, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+        <div style={{ background: C.navy, padding: '1rem 1.25rem', borderRadius: '16px 16px 0 0', flexShrink: 0 }}>
           <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 3 }}>Raport z treningu</div>
           <div style={{ color: C.white, fontWeight: 800, fontSize: '1.05rem' }}>{session.workout_day?.day_name || 'Trening'}</div>
           <div style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray, marginTop: 2 }}>{dateStr}</div>
         </div>
-        <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ flex: 1, background: C.green + '18', border: `1.5px solid ${C.green}`, borderRadius: 10, padding: '0.65rem', textAlign: 'center' }}>
-              <div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.green, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Status</div>
-              <div style={{ fontFamily: mono, fontWeight: 800, color: C.green, fontSize: '0.85rem' }}>✓ Ukończony</div>
-            </div>
-            {feedback?.session_rpe != null && (
-              <div style={{ flex: 1, background: rpeC(feedback.session_rpe) + '18', border: `1.5px solid ${rpeC(feedback.session_rpe)}`, borderRadius: 10, padding: '0.65rem', textAlign: 'center' }}>
-                <div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>RPE</div>
-                <div style={{ fontFamily: mono, fontWeight: 900, fontSize: '1.4rem', color: rpeC(feedback.session_rpe) }}>{feedback.session_rpe}</div>
+        <div style={{ overflowY: 'auto', flex: 1, padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '2rem', fontFamily: mono, fontSize: '0.72rem', color: C.gray }}>Ładowanie...</div>
+          ) : (<>
+            {/* RPE + samopoczucie */}
+            {feedback && (
+              <div style={{ display: 'flex', gap: 8 }}>
+                {feedback.session_rpe != null && (
+                  <div style={{ flex: 1, background: rpeC(feedback.session_rpe) + '18', border: `1.5px solid ${rpeC(feedback.session_rpe)}`, borderRadius: 10, padding: '0.75rem', textAlign: 'center' }}>
+                    <div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.gray, textTransform: 'uppercase', marginBottom: 3 }}>RPE</div>
+                    <div style={{ fontFamily: mono, fontWeight: 900, fontSize: '1.6rem', color: rpeC(feedback.session_rpe), lineHeight: 1 }}>{feedback.session_rpe}</div>
+                    <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, marginTop: 2 }}>{feedback.session_rpe <= 3 ? 'Lekki' : feedback.session_rpe <= 5 ? 'Umiarkowany' : feedback.session_rpe <= 7 ? 'Ciężki' : 'Bardzo ciężki'}</div>
+                  </div>
+                )}
+                {feedback.feeling_after && (
+                  <div style={{ flex: 1.5, background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 10, padding: '0.75rem', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                    <div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.gray, textTransform: 'uppercase', marginBottom: 4 }}>Po treningu</div>
+                    <div style={{ fontWeight: 800, color: C.navy }}>{({'swietnie': '💪 Świetnie', 'dobrze': '😊 Dobrze', 'srednie': '😐 Średnio', 'zmeczona': '😓 Zmęczona', 'slabo': '😞 Słabo'} as Record<string,string>)[feedback.feeling_after] || feedback.feeling_after}</div>
+                  </div>
+                )}
               </div>
             )}
-            {feedback?.mood_after != null && (
-              <div style={{ flex: 1, background: C.offWhite, border: `1.5px solid ${C.grayLight}`, borderRadius: 10, padding: '0.65rem', textAlign: 'center' }}>
-                <div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Nastrój</div>
-                <div style={{ fontFamily: mono, fontWeight: 800, fontSize: '1.1rem', color: C.navy }}>{feedback.mood_after}/10</div>
+            {/* Serie */}
+            {orderedExIds.filter(id => logsByEx[id]?.length > 0).length > 0 && (
+              <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 10, overflow: 'hidden' }}>
+                <div style={{ padding: '0.6rem 0.875rem', background: C.navy, fontFamily: mono, fontSize: '0.6rem', color: C.gold, letterSpacing: '0.08em', textTransform: 'uppercase' }}>🏋️ Wykonane serie</div>
+                {orderedExIds.filter(id => logsByEx[id]?.length > 0).map(exId => {
+                  const logs = logsByEx[exId].sort((a: any, b: any) => a.set_number - b.set_number)
+                  const main = logs.filter((l: any) => !l.is_warmup)
+                  const wu = logs.filter((l: any) => l.is_warmup)
+                  return (
+                    <div key={exId} style={{ padding: '0.65rem 0.875rem', borderBottom: `1px solid ${C.grayLight}` }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                        <span style={{ fontWeight: 700, color: C.navy, fontSize: '0.88rem' }}>{exNameMap[exId] || `Ćw.#${exId}`}</span>
+                        <span style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray }}>{exPlanMap[exId]}</span>
+                      </div>
+                      {wu.map((l: any) => (
+                        <div key={l.id} style={{ padding: '3px 0', opacity: 0.75 }}>
+                          <div style={{ display: 'flex', gap: 10 }}>
+                            <span style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, minWidth: 38 }}>Rozg</span>
+                            <span style={{ fontFamily: mono, fontSize: '0.78rem', color: C.gray }}>{l.weight ? `${l.weight} kg` : '—'}</span>
+                            <span style={{ fontFamily: mono, fontSize: '0.7rem', color: C.gray }}>{l.reps_completed ? `${l.reps_completed}p` : '—'}</span>
+                          </div>
+                          {l.athlete_note && <div style={{ marginLeft: 48, marginTop: 2, fontSize: '0.72rem', color: C.gray, fontStyle: 'italic' }}>“{l.athlete_note}”</div>}
+                        </div>
+                      ))}
+                      {main.map((l: any) => (
+                        <div key={l.id} style={{ padding: '3px 0' }}>
+                          <div style={{ display: 'flex', gap: 10 }}>
+                            <span style={{ fontFamily: mono, fontSize: '0.65rem', color: l.completed ? C.gold : C.gray, fontWeight: 800, minWidth: 38 }}>S{l.set_number}</span>
+                            <span style={{ fontFamily: mono, fontSize: '0.88rem', fontWeight: 900, color: l.weight ? C.navy : C.gray }}>{l.weight ? `${l.weight} kg` : '—'}</span>
+                            <span style={{ fontFamily: mono, fontSize: '0.72rem', color: C.gray }}>{l.reps_completed ? `${l.reps_completed}p` : '—'}</span>
+                          </div>
+                          {l.athlete_note && <div style={{ marginLeft: 48, marginTop: 2, fontSize: '0.72rem', color: C.gray, fontStyle: 'italic' }}>“{l.athlete_note}”</div>}
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })}
               </div>
             )}
-            {feedback?.energy_level != null && (
-              <div style={{ flex: 1, background: C.offWhite, border: `1.5px solid ${C.grayLight}`, borderRadius: 10, padding: '0.65rem', textAlign: 'center' }}>
-                <div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Energia</div>
-                <div style={{ fontFamily: mono, fontWeight: 800, fontSize: '1.1rem', color: C.navy }}>{feedback.energy_level}/10</div>
+            {/* Feedback tekstowy */}
+            {(feedback?.what_went_well || feedback?.pain_after_comment || feedback?.general_notes) && (
+              <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 10, overflow: 'hidden' }}>
+                <div style={{ padding: '0.6rem 0.875rem', background: C.offWhite, borderBottom: `1px solid ${C.grayLight}`, fontFamily: mono, fontSize: '0.6rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase' }}>💬 Feedback</div>
+                <div style={{ padding: '0.75rem 0.875rem', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {feedback.what_went_well && <div><div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.green, textTransform: 'uppercase', marginBottom: 2 }}>Co poszło dobrze</div><div style={{ fontSize: '0.86rem', color: C.navy, fontStyle: 'italic' }}>&ldquo;{feedback.what_went_well}&rdquo;</div></div>}
+                  {feedback.pain_after_comment && <div><div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.red, textTransform: 'uppercase', marginBottom: 2 }}>Ból/dyskomfort</div><div style={{ fontSize: '0.86rem', color: C.navy, fontStyle: 'italic' }}>&ldquo;{feedback.pain_after_comment}&rdquo;</div></div>}
+                  {feedback.general_notes && <div><div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.gray, textTransform: 'uppercase', marginBottom: 2 }}>Uwagi</div><div style={{ fontSize: '0.86rem', color: C.navy }}>{feedback.general_notes}</div></div>}
+                </div>
               </div>
             )}
-          </div>
-          {feedback?.what_went_well && (
-            <div style={{ background: '#F0FDF4', border: `1.5px solid ${C.green}`, borderRadius: 10, padding: '0.875rem' }}>
-              <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.green, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Co poszło dobrze</div>
-              <div style={{ fontSize: '0.88rem', color: C.navy, lineHeight: 1.5, fontStyle: 'italic' }}>&ldquo;{feedback.what_went_well}&rdquo;</div>
-            </div>
-          )}
-          {feedback?.what_to_improve && (
-            <div style={{ background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 10, padding: '0.875rem' }}>
-              <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Do poprawy</div>
-              <div style={{ fontSize: '0.88rem', color: C.navy, lineHeight: 1.5, fontStyle: 'italic' }}>&ldquo;{feedback.what_to_improve}&rdquo;</div>
-            </div>
-          )}
-          {feedback?.notes && (
-            <div style={{ background: C.offWhite, border: `1.5px solid ${C.grayLight}`, borderRadius: 10, padding: '0.875rem' }}>
-              <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Notatki</div>
-              <div style={{ fontSize: '0.88rem', color: C.navy, lineHeight: 1.5 }}>{feedback.notes}</div>
-            </div>
-          )}
-          {!feedback && (
-            <div style={{ textAlign: 'center', padding: '0.75rem', fontFamily: mono, fontSize: '0.72rem', color: C.gray }}>Brak feedbacku po tej sesji.</div>
-          )}
-          <button onClick={onClose} style={{ padding: '0.75rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 10, fontWeight: 800, fontFamily: sans }}>Zamknij</button>
+            {!feedback && setLogs.length === 0 && <div style={{ textAlign: 'center', padding: '1rem', fontFamily: mono, fontSize: '0.72rem', color: C.gray }}>Brak danych dla tej sesji.</div>}
+          </>)}
+        </div>
+        <div style={{ padding: '0.875rem', borderTop: `1.5px solid ${C.grayLight}`, flexShrink: 0 }}>
+          <button onClick={onClose} style={{ width: '100%', padding: '0.75rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 10, fontWeight: 800, fontFamily: sans }}>Zamknij</button>
         </div>
       </div>
     </div>
@@ -319,7 +416,7 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
   const [selectedWellness, setSelectedWellness] = useState<{ wellness: any; dateLabel: string } | null>(null)
   const [mainTab, setMainTab] = useState<MainTab>('overview')
   const [moduleConfig, setModuleConfig] = useState<'wellness' | 'diet' | null>(null)
-  const [selectedSessionFeedback, setSelectedSessionFeedback] = useState<{ session: any; feedback: any | null } | null>(null)
+  const [selectedSessionFeedback, setSelectedSessionFeedback] = useState<{ session: any } | null>(null)
 
   const completedSessions = sessions.filter(s => s.completed)
   const feedbackMap: Record<number, any> = {}
@@ -387,7 +484,6 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
       {selectedSessionFeedback && (
         <SessionFeedbackModal
           session={selectedSessionFeedback.session}
-          feedback={selectedSessionFeedback.feedback}
           onClose={() => setSelectedSessionFeedback(null)}
         />
       )}
@@ -767,7 +863,7 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
                 const hasFeedback = !!fb
                 return (
                   <button key={s.id}
-                    onClick={() => setSelectedSessionFeedback({ session: s, feedback: fb || null })}
+                    onClick={() => setSelectedSessionFeedback({ session: s })}
                     style={{ width: '100%', background: 'none', border: 'none', textAlign: 'left', padding: '0.875rem 1.25rem', borderBottom: i < arr.length - 1 ? `1.5px solid ${C.grayLight}` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
                     onMouseEnter={e => (e.currentTarget.style.background = C.offWhite)}
                     onMouseLeave={e => (e.currentTarget.style.background = 'none')}>

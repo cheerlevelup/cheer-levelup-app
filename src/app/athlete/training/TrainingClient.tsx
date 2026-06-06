@@ -71,6 +71,23 @@ type TrainingWarmupSet = {
 
 // ─── TEMPO HELPERS ────────────────────────────────────────────────────────────
 
+function setLogKey(log: Pick<SetLog, 'block_exercise_id' | 'set_number' | 'is_warmup'>) {
+  return `${log.block_exercise_id || 0}:${log.set_number}:${log.is_warmup ? 'w' : 'm'}`
+}
+
+function dedupeSetLogs(logs: SetLog[]) {
+  const byKey = new Map<string, SetLog>()
+  for (const log of logs) {
+    if (!log.block_exercise_id) continue
+    const key = setLogKey(log)
+    const existing = byKey.get(key)
+    const logTime = new Date(log.created_at || 0).getTime()
+    const existingTime = new Date(existing?.created_at || 0).getTime()
+    if (!existing || logTime >= existingTime || log.id > existing.id) byKey.set(key, log)
+  }
+  return Array.from(byKey.values())
+}
+
 function normalizeTempo(tempo: string | undefined | null) {
   if (!tempo) return ''
   return tempo.toUpperCase().replace(/[^0-9X]/g, '')
@@ -434,28 +451,47 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
   const supabase = createClient()
   const [weight, setWeight] = useState(existingLog?.weight?.toString() || '')
   const [actualReps, setActualReps] = useState(existingLog?.reps_completed?.toString() || '')
+  const [athleteNote, setAthleteNote] = useState(existingLog?.athlete_note || '')
   const [done, setDone] = useState(!!existingLog?.completed)
 
-  async function toggle() {
-    const newDone = !done
-    setDone(newDone)
-    onComplete(newDone)
+  async function saveSet(nextDone = done) {
     const payload = {
       workout_session_id: sessionId, block_exercise_id: blockExerciseId,
       athlete_id: athleteId, set_number: setNum,
       weight: weight ? parseFloat(weight) : null,
       reps_completed: actualReps ? parseInt(actualReps) : null,
-      is_warmup: isWarmupRow, completed: newDone,
+      athlete_note: athleteNote.trim() || null,
+      is_warmup: isWarmupRow, completed: nextDone,
     }
-    if (existingLog) {
-      await supabase.from('set_logs').update(payload).eq('id', existingLog.id)
+    const { data: currentLog } = await supabase
+      .from('set_logs')
+      .select('id')
+      .eq('workout_session_id', sessionId)
+      .eq('block_exercise_id', blockExerciseId)
+      .eq('set_number', setNum)
+      .eq('is_warmup', isWarmupRow)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    const logId = existingLog?.id || currentLog?.id
+    if (logId) {
+      await supabase.from('set_logs').update(payload).eq('id', logId)
     } else {
       await supabase.from('set_logs').insert(payload)
     }
   }
 
+  async function toggle() {
+    const newDone = !done
+    setDone(newDone)
+    onComplete(newDone)
+    await saveSet(newDone)
+  }
+
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.75rem 1rem', background: done ? '#F0FDF4' : '#FAFBFC', borderRadius: 10, marginBottom: 6, border: `1.5px solid ${done ? '#86EFAC' : C.grayLight}`, transition: 'all 0.2s', fontFamily: sans }}>
+    <div style={{ padding: '0.75rem 1rem', background: done ? '#F0FDF4' : '#FAFBFC', borderRadius: 10, marginBottom: 6, border: `1.5px solid ${done ? '#86EFAC' : C.grayLight}`, transition: 'all 0.2s', fontFamily: sans }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <span style={{ fontWeight: 800, fontSize: '0.88rem', color: done ? C.green : C.gold, minWidth: 28, fontFamily: mono }}>
         {isWarmupRow ? 'Rozg' : `S${setNum}`}
       </span>
@@ -474,6 +510,14 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
       <button onClick={toggle} style={{ width: 36, height: 36, borderRadius: 8, background: done ? C.green : C.grayLight, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', flexShrink: 0 }}>
         {done && <span style={{ color: '#fff', fontSize: '1rem', fontWeight: 800 }}>✓</span>}
       </button>
+      </div>
+      <input
+        value={athleteNote}
+        onChange={e => setAthleteNote(e.target.value)}
+        onBlur={() => saveSet()}
+        placeholder="notatka do serii..."
+        style={{ marginTop: 8, width: '100%', padding: '0.48rem 0.65rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.82rem', color: C.navy, background: '#fff', outline: 'none' }}
+      />
     </div>
   )
 }
@@ -858,7 +902,7 @@ function PostWorkoutSection({ sessionId, athleteId, onFinish }: { sessionId: num
 export default function TrainingClient({ athlete, trainingView, existingSetLogs, existingWellness }: Props) {
   const router = useRouter()
   const { session, day, blocks, plan, week } = trainingView
-  const [setLogs, setSetLogs] = useState<SetLog[]>(existingSetLogs)
+  const [setLogs, setSetLogs] = useState<SetLog[]>(() => dedupeSetLogs(existingSetLogs))
   const [wellnessSaved, setWellnessSaved] = useState(!!existingWellness)
   const [wellnessOpen, setWellnessOpen] = useState(!existingWellness)
   const [postOpen, setPostOpen] = useState(false)

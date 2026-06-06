@@ -18,6 +18,28 @@ const thStyle: React.CSSProperties = { padding: '0.75rem 0.5rem', textAlign: 'ce
 function tdWs(bg: string): React.CSSProperties { return { padding: '0.4rem 0.5rem', textAlign: 'center', borderBottom: `1.5px solid ${C.grayLight}`, background: bg, verticalAlign: 'middle' } }
 function statTd(bg: string): React.CSSProperties { return { padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid ${C.grayLight}`, background: bg, fontFamily: mono, fontSize: '0.78rem', fontWeight: 700, color: C.navy } }
 
+type MinimalSetLog = {
+  id?: number
+  created_at?: string | null
+  workout_session_id?: number | null
+  block_exercise_id?: number | null
+  set_number: number
+  is_warmup?: boolean | null
+}
+
+function dedupeLogs<T extends MinimalSetLog>(logs: T[]) {
+  const byKey = new Map<string, T>()
+  for (const log of logs || []) {
+    if (!log.block_exercise_id) continue
+    const key = `${log.workout_session_id || 0}:${log.block_exercise_id}:${log.set_number}:${log.is_warmup ? 'w' : 'm'}`
+    const existing = byKey.get(key)
+    const logTime = new Date(log.created_at || 0).getTime()
+    const existingTime = new Date(existing?.created_at || 0).getTime()
+    if (!existing || logTime >= existingTime || (log.id || 0) > (existing.id || 0)) byKey.set(key, log)
+  }
+  return Array.from(byKey.values())
+}
+
 function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, overflow: 'hidden', boxShadow: '0 4px 20px rgba(13,27,42,0.05)', ...style }}>{children}</div>
 }
@@ -254,7 +276,7 @@ function SessionReportModal({ session, athleteId, athleteName, dayName, onClose 
 
   // Grupuj set_logs po exercise
   const logsByEx: Record<number, any[]> = {}
-  for (const l of setLogs) {
+  for (const l of dedupeLogs(setLogs)) {
     if (!l.block_exercise_id) continue
     if (!logsByEx[l.block_exercise_id]) logsByEx[l.block_exercise_id] = []
     logsByEx[l.block_exercise_id].push(l)
@@ -807,7 +829,7 @@ function WellnessBadge({ value, label, color }: { value: string; label?: string;
 function getAthleteWellnessSummary(athleteId: number, logs: any[]) {
   const myLogs = logs.filter((l: any) => l.athlete_id === athleteId)
   const today = new Date().toISOString().split('T')[0]
-  const hasToday = myLogs.some((l: any) => l.date === today)
+  const hasToday = myLogs.some((l: any) => (l.date ?? l.created_at?.slice(0, 10)) === today)
 
   const sleepVals = myLogs.map((l: any) => l.sleep_hours).filter((v: any) => v != null) as number[]
   const stressVals = myLogs.map((l: any) => l.stress).filter((v: any) => v != null) as number[]
@@ -1431,7 +1453,7 @@ function filterByDays(logs: any[], days: number, dateField = 'date') {
 
 // ── PlanExerciseTable ─────────────────────────────────────────────────────────
 
-type ActualSet = { num: number; weight: number | null; reps: number | null }
+type ActualSet = { num: number; weight: number | null; reps: number | null; note?: string | null }
 type ActualEntry = { sets: ActualSet[] }
 
 function PlanExerciseTable({ rows, athletes, overrides, actual, uniqueDays }: {
@@ -1532,7 +1554,8 @@ function PlanExerciseTable({ rows, athletes, overrides, actual, uniqueDays }: {
                             // ZIELONY — faktyczne dane z set_logs
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                               {act.sets.map((s, si) => (
-                                <div key={si} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <div key={si} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                   <span style={{ fontFamily: mono, fontSize: '0.55rem', color: '#16A34A', minWidth: 14 }}>S{s.num}</span>
                                   <span style={{ fontFamily: mono, fontSize: '0.72rem', fontWeight: 800, color: '#16A34A' }}>
                                     {s.weight !== null ? `${s.weight} kg` : '—'}
@@ -1540,6 +1563,8 @@ function PlanExerciseTable({ rows, athletes, overrides, actual, uniqueDays }: {
                                   {s.reps !== null && (
                                     <span style={{ fontFamily: mono, fontSize: '0.55rem', color: '#4ADE80' }}>{s.reps}p</span>
                                   )}
+                                  </div>
+                                  {s.note && <div style={{ fontSize: '0.55rem', color: '#15803D', fontStyle: 'italic', maxWidth: 120, whiteSpace: 'normal', lineHeight: 1.25 }}>&ldquo;{s.note}&rdquo;</div>}
                                 </div>
                               ))}
                               {mod && (
@@ -1675,20 +1700,20 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
     for (const s of (sessionsForPlan || [])) sessionAthleteMap[s.id] = s.athlete_id
 
     // set_logs dla tych sesji — zbieramy wszystkie serie per zawodniczka per ćwiczenie
-    type _ActualSet = { num: number; weight: number | null; reps: number | null }
+    type _ActualSet = { num: number; weight: number | null; reps: number | null; note?: string | null }
     type _ActualEntry = { sets: _ActualSet[] }
     const actualMap: Record<number, Record<number, _ActualEntry>> = {}
 
     if (sessionIds.length > 0 && allExIds.length > 0) {
       const { data: logs } = await sb
         .from('set_logs')
-        .select('workout_session_id, block_exercise_id, set_number, weight, reps_completed, completed, is_warmup')
+        .select('id, created_at, workout_session_id, block_exercise_id, set_number, weight, reps_completed, completed, is_warmup, athlete_note')
         .in('workout_session_id', sessionIds)
         .in('block_exercise_id', allExIds)
         .eq('is_warmup', false)
         .order('set_number', { ascending: true })
 
-      for (const l of (logs || [])) {
+      for (const l of dedupeLogs(logs || [])) {
         const athleteId = sessionAthleteMap[l.workout_session_id]
         if (!athleteId) continue
         if (!actualMap[l.block_exercise_id]) actualMap[l.block_exercise_id] = {}
@@ -1697,6 +1722,7 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
           num: l.set_number,
           weight: l.weight ?? null,
           reps: l.reps_completed ?? null,
+          note: l.athlete_note ?? null,
         })
       }
     }
