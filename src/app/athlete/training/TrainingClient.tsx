@@ -438,7 +438,7 @@ function WarmupSetRow({ warmup, setNum, existingLog, sessionId, athleteId, block
     const payload = {
       workout_session_id: sessionId, block_exercise_id: blockExerciseId,
       athlete_id: athleteId, set_number: setNum,
-      weight: weight ? parseFloat(weight) : null,
+      weight: weight ? parseFloat(weight.replace(',', '.')) : null,
       reps_completed: null, is_warmup: true, completed: newDone,
     }
     if (existingLog?.id) {
@@ -464,8 +464,8 @@ function WarmupSetRow({ warmup, setNum, existingLog, sessionId, athleteId, block
         </span>
         <div style={{ flex: 1 }}>
           <input
-            type="number" inputMode="decimal" placeholder="kg"
-            value={weight} onChange={e => setWeight(e.target.value)}
+            inputMode="decimal" placeholder="kg"
+            value={weight} onChange={e => setWeight(e.target.value.replace(',', '.'))}
             style={{ width: '100%', padding: '0.4rem 0.5rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.9rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center' }}
           />
         </div>
@@ -499,7 +499,7 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
     const payload = {
       workout_session_id: sessionId, block_exercise_id: blockExerciseId,
       athlete_id: athleteId, set_number: setNum,
-      weight: weight ? parseFloat(weight) : null,
+      weight: weight ? parseFloat(weight.replace(',', '.')) : null,
       reps_completed: actualReps ? parseInt(actualReps) : null,
       is_warmup: false, completed: nextDone,
     }
@@ -528,7 +528,7 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
       </span>
       <span style={{ fontWeight: 700, fontSize: '0.95rem', color: C.navy, minWidth: 36 }}>{reps}</span>
       <div style={{ flex: 1 }}>
-        <input type="number" inputMode="decimal" placeholder="kg" value={weight} onChange={e => setWeight(e.target.value)} onBlur={() => saveSet()}
+        <input inputMode="decimal" placeholder="kg" value={weight} onChange={e => setWeight(e.target.value.replace(',', '.'))} onBlur={() => saveSet()}
           style={{ width: '100%', padding: '0.4rem 0.5rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.9rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center' }} />
         {prevWeight && !weight && (
           <div style={{ fontSize: '0.62rem', color: C.gray, textAlign: 'center', marginTop: 2 }}>poprzednio: {prevWeight} kg</div>

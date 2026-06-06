@@ -106,36 +106,36 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
   )
 }
 
-// Kafelek edycji serii
-function SetEditTile({ label, isWarmup, weight, reps, onWeight, onReps, onSave, onCancel, saving }: {
-  label: string; isWarmup?: boolean; weight: string; reps: string
-  onWeight: (v: string) => void; onReps: (v: string) => void
+// Kafelek edycji serii — tylko ciężar (powtórzenia są w planie trenera)
+function SetEditTile({ label, weight, onWeight, onSave, onCancel, saving }: {
+  label: string; weight: string
+  onWeight: (v: string) => void
   onSave: () => void; onCancel: () => void; saving: boolean
 }) {
+  // Obsługa przecinka jako separatora dziesiętnego
+  function handleWeightChange(raw: string) {
+    onWeight(raw.replace(',', '.'))
+  }
+
   return (
-    <div style={{ padding: '0.625rem', background: '#FFFBEB', border: `2px solid ${C.gold}`, borderRadius: 12, minWidth: 140, display: 'flex', flexDirection: 'column', gap: 6, flex: '0 0 auto' }}>
+    <div style={{ padding: '0.625rem', background: '#FFFBEB', border: `2px solid ${C.gold}`, borderRadius: 12, minWidth: 120, display: 'flex', flexDirection: 'column', gap: 6, flex: '0 0 auto' }}>
       <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gold, fontWeight: 700 }}>{label} — edytuj</div>
-      <div style={{ display: 'flex', gap: 5 }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: mono, fontSize: '0.52rem', color: C.gray, marginBottom: 2 }}>kg</div>
-          <input type="number" step="0.5" value={weight} onChange={e => onWeight(e.target.value)} placeholder="0"
-            style={{ width: '100%', padding: '0.35rem', border: `1.5px solid ${C.gold}`, borderRadius: 6, fontFamily: mono, fontSize: '0.9rem', fontWeight: 800, color: C.navy, textAlign: 'center', background: C.white, outline: 'none', boxSizing: 'border-box' }} />
-        </div>
-        {!isWarmup && (
-          <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: mono, fontSize: '0.52rem', color: C.gray, marginBottom: 2 }}>pow.</div>
-            <input type="number" min="0" value={reps} onChange={e => onReps(e.target.value)} placeholder="0"
-              style={{ width: '100%', padding: '0.35rem', border: `1.5px solid ${C.gold}`, borderRadius: 6, fontFamily: mono, fontSize: '0.9rem', fontWeight: 800, color: C.navy, textAlign: 'center', background: C.white, outline: 'none', boxSizing: 'border-box' }} />
-          </div>
-        )}
+      <div>
+        <div style={{ fontFamily: mono, fontSize: '0.52rem', color: C.gray, marginBottom: 2 }}>Ciężar (kg)</div>
+        <input
+          inputMode="decimal"
+          value={weight}
+          onChange={e => handleWeightChange(e.target.value)}
+          placeholder="0"
+          style={{ width: '100%', padding: '0.45rem', border: `1.5px solid ${C.gold}`, borderRadius: 6, fontFamily: mono, fontSize: '1rem', fontWeight: 800, color: C.navy, textAlign: 'center', background: C.white, outline: 'none', boxSizing: 'border-box' }} />
       </div>
       <div style={{ display: 'flex', gap: 5 }}>
         <button onClick={onSave} disabled={saving}
-          style={{ flex: 2, padding: '0.35rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 7, fontFamily: mono, fontWeight: 800, fontSize: '0.72rem' }}>
+          style={{ flex: 2, padding: '0.4rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 7, fontFamily: mono, fontWeight: 800, fontSize: '0.75rem' }}>
           {saving ? '...' : '✓ Zapisz'}
         </button>
         <button onClick={onCancel}
-          style={{ flex: 1, padding: '0.35rem', background: C.offWhite, color: C.gray, border: `1px solid ${C.grayLight}`, borderRadius: 7, fontFamily: mono, fontWeight: 700, fontSize: '0.68rem' }}>
+          style={{ flex: 1, padding: '0.4rem', background: C.offWhite, color: C.gray, border: `1px solid ${C.grayLight}`, borderRadius: 7, fontFamily: mono, fontWeight: 700, fontSize: '0.7rem' }}>
           ✕
         </button>
       </div>
@@ -289,10 +289,9 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
   // Edycja serii
   const [editingLogId, setEditingLogId] = useState<number | null>(null)
   const [editWeight, setEditWeight] = useState('')
-  const [editReps, setEditReps] = useState('')
   const [savingLog, setSavingLog] = useState(false)
   const [savedLogId, setSavedLogId] = useState<number | null>(null)
-  const [logOverrides, setLogOverrides] = useState<Record<number, { weight?: number; reps_completed?: number }>>({})
+  const [logOverrides, setLogOverrides] = useState<Record<number, { weight?: number }>>({})
 
   // Mapa ćwiczeń
   const exerciseMap: Record<number, any> = {}
@@ -327,14 +326,13 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
   function startEditLog(log: any) {
     setEditingLogId(log.id)
     setEditWeight(log.weight != null ? String(log.weight) : '')
-    setEditReps(log.reps_completed != null ? String(log.reps_completed) : '')
   }
 
   async function saveLog(logId: number) {
     setSavingLog(true)
+    const w = parseFloat(editWeight.replace(',', '.'))
     const patch: any = {}
-    if (editWeight !== '') patch.weight = parseFloat(editWeight) || 0
-    if (editReps !== '') patch.reps_completed = parseInt(editReps) || 0
+    if (!isNaN(w)) patch.weight = w
     await supabase.from('set_logs').update(patch).eq('id', logId)
     setLogOverrides(prev => ({ ...prev, [logId]: { ...prev[logId], ...patch } }))
     setSavingLog(false); setSavedLogId(logId); setEditingLogId(null)
@@ -549,15 +547,14 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
                               const w = ov.weight ?? l.weight
                               const isEditing = editingLogId === l.id
                               if (isEditing) return (
-                                <SetEditTile key={l.id} label="Rozg" isWarmup
-                                  weight={editWeight} reps={editReps}
-                                  onWeight={setEditWeight} onReps={setEditReps}
+                                <SetEditTile key={l.id} label="Rozg"
+                                  weight={editWeight} onWeight={setEditWeight}
                                   onSave={() => saveLog(l.id)} onCancel={() => setEditingLogId(null)}
                                   saving={savingLog} />
                               )
                               return (
                                 <button key={l.id}
-                                  onClick={() => !isArchived && startEditLog({ ...l, weight: w })}
+                                  onClick={() => !isArchived && startEditLog(ov.weight != null ? { ...l, weight: ov.weight } : l)}
                                   style={{ padding: '0.5rem 0.75rem', background: C.offWhite, border: savedLogId === l.id ? `2px solid ${C.green}` : `1px solid ${C.grayLight}`, borderRadius: 9, minWidth: 54, textAlign: 'center', cursor: isArchived ? 'default' : 'pointer', position: 'relative' }}>
                                   <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, marginBottom: 3 }}>Rozg</div>
                                   {w != null && <div style={{ fontFamily: mono, fontSize: '0.82rem', fontWeight: 800, color: C.gray }}>{w}kg</div>}
@@ -569,12 +566,11 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
                             {main.map((l: any) => {
                               const ov = logOverrides[l.id] || {}
                               const w = ov.weight ?? l.weight
-                              const r = ov.reps_completed ?? l.reps_completed
+                              const r = l.reps_completed
                               const isEditing = editingLogId === l.id
                               if (isEditing) return (
                                 <SetEditTile key={l.id} label={`S${l.set_number}`}
-                                  weight={editWeight} reps={editReps}
-                                  onWeight={setEditWeight} onReps={setEditReps}
+                                  weight={editWeight} onWeight={setEditWeight}
                                   onSave={() => saveLog(l.id)} onCancel={() => setEditingLogId(null)}
                                   saving={savingLog} />
                               )
