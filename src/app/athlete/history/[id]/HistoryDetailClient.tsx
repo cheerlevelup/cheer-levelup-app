@@ -180,6 +180,97 @@ function MissingOrDoneSetTile({ label, weight, reps, missing, done, isSaved, isA
   )
 }
 
+// ─── EDYTOWALNY PANEL WELLNESS ────────────────────────────────────────────────
+function WellnessEditPanel({ wellness, athleteId, sessionDate, onSaved }: {
+  wellness: any; athleteId: number; sessionDate: string; onSaved: (w: any) => void
+}) {
+  const supabase = createClient()
+
+  const [sleepHours, setSleepHours] = useState<number>(wellness?.sleep_hours ?? 7)
+  const [sleepQ, setSleepQ] = useState<number>(wellness?.sleep_quality ?? 7)
+  const [readiness, setReadiness] = useState<number>(wellness?.readiness ?? 7)
+  const [energy, setEnergy] = useState<number>(wellness?.energy ?? 7)
+  const [stress, setStress] = useState<number>(wellness?.stress ?? 3)
+  const [soreness, setSoreness] = useState<number>(wellness?.muscle_sorness ?? 0)
+  const [bodyWeight, setBodyWeight] = useState<string>(wellness?.body_weight_kg ? String(wellness.body_weight_kg) : '')
+  const [concerns, setConcerns] = useState<string>(wellness?.concerns ?? '')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  const sliders = [
+    { label: '🌙 Sen', value: sleepHours, set: setSleepHours, min: 3, max: 12, step: 0.5, unit: 'h', comments: null as null | string[], inverse: false },
+    { label: 'Jakość snu', value: sleepQ, set: setSleepQ, min: 0, max: 10, step: 1, unit: '/10', comments: WC.sleepQ, inverse: false },
+    { label: `${readinessEmoji(readiness)} Wypoczęcie`, value: readiness, set: setReadiness, min: 0, max: 10, step: 1, unit: '/10', comments: WC.readiness, inverse: false },
+    { label: 'Energia', value: energy, set: setEnergy, min: 0, max: 10, step: 1, unit: '/10', comments: WC.energy, inverse: false },
+    { label: 'Stres', value: stress, set: setStress, min: 0, max: 10, step: 1, unit: '/10', comments: WC.stress, inverse: true },
+    { label: 'Zakwasy', value: soreness, set: setSoreness, min: 0, max: 10, step: 1, unit: '/10', comments: WC.soreness, inverse: true },
+  ]
+
+  async function save() {
+    setSaving(true)
+    const payload = {
+      athlete_id: athleteId,
+      date: sessionDate,
+      sleep_hours: sleepHours,
+      sleep_quality: sleepQ,
+      readiness,
+      energy,
+      stress,
+      muscle_sorness: soreness,
+      body_weight_kg: bodyWeight ? parseFloat(bodyWeight.replace(',', '.')) : null,
+      concerns: concerns.trim() || null,
+    }
+    let result
+    if (wellness?.id) {
+      result = await supabase.from('wellness_logs').update(payload).eq('id', wellness.id).select().single()
+    } else {
+      result = await supabase.from('wellness_logs').upsert({ ...payload }, { onConflict: 'athlete_id,date' }).select().single()
+    }
+    setSaving(false)
+    if (result.data) { setSaved(true); onSaved(result.data); setTimeout(() => setSaved(false), 2500) }
+  }
+
+  return (
+    <div style={{ padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+      {sliders.map(s => {
+        const color = wScaleColor(s.value, s.max, s.inverse)
+        const comment = s.comments ? wComment(s.value, s.comments) : null
+        return (
+          <div key={s.label}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+              <span style={{ fontSize: '0.84rem', color: C.gray }}>{s.label}</span>
+              <span style={{ fontFamily: mono, fontSize: '0.84rem', fontWeight: 800, color }}>{s.value}{s.unit}</span>
+            </div>
+            <input type="range" min={s.min} max={s.max} step={s.step} value={s.value}
+              onChange={e => s.set(parseFloat(e.target.value))}
+              style={{ width: '100%', accentColor: color }} />
+            {comment && <div style={{ fontSize: '0.66rem', fontWeight: 700, color, textAlign: 'right', marginTop: 2 }}>{comment}</div>}
+          </div>
+        )
+      })}
+
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Masa ciała (kg)</div>
+          <input inputMode="decimal" value={bodyWeight} onChange={e => setBodyWeight(e.target.value)} placeholder="np. 62.5"
+            style={{ width: '100%', padding: '0.5rem 0.75rem', border: `1.5px solid ${C.grayLight}`, borderRadius: 8, fontFamily: mono, fontSize: '0.9rem', color: C.navy, background: C.offWhite, outline: 'none', boxSizing: 'border-box' }} />
+        </div>
+      </div>
+
+      <div>
+        <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Uwagi dla trenera</div>
+        <textarea value={concerns} onChange={e => setConcerns(e.target.value)} placeholder="Coś do zgłoszenia..." rows={2}
+          style={{ width: '100%', padding: '0.5rem 0.75rem', border: `1.5px solid ${C.grayLight}`, borderRadius: 8, fontFamily: sans, fontSize: '0.84rem', color: C.navy, resize: 'none', outline: 'none', background: C.offWhite, boxSizing: 'border-box' }} />
+      </div>
+
+      <button onClick={save} disabled={saving}
+        style={{ width: '100%', padding: '0.75rem', background: saved ? C.green : C.navy, color: saved ? C.white : C.gold, border: 'none', borderRadius: 12, fontWeight: 800, fontSize: '0.88rem' }}>
+        {saving ? 'Zapisuję...' : saved ? '✓ Wellness zapisany!' : 'Zapisz wellness'}
+      </button>
+    </div>
+  )
+}
+
 // Panel bólu i notatki per ćwiczenie
 function ExercisePainPanel({ exerciseName, sessionId, athleteId, existingPains, isArchived }: {
   exerciseName: string; sessionId: number; athleteId: number
@@ -322,6 +413,15 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
   const [sending, setSending] = useState(false)
   const [sendResult, setSendResult] = useState<'ok' | 'err' | null>(null)
   const [showPrintDialog, setShowPrintDialog] = useState(false)
+
+  // Wellness — lokalny stan (po edycji bez przeładowania)
+  const [currentWellness, setCurrentWellness] = useState<any>(wellness)
+  const [wellnessEditMode, setWellnessEditMode] = useState(false)
+
+  // Data sesji do zapisu wellness
+  const sessionDate = session.date_completed
+    ? new Date(session.date_completed).toISOString().split('T')[0]
+    : new Date().toISOString().split('T')[0]
 
   // Edycja serii
   const [editingLogId, setEditingLogId] = useState<number | null>(null)
@@ -467,73 +567,87 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
           </div>
 
           {/* ── WELLNESS PRZED TRENINGIEM ── */}
-          {wellness ? (
-            <Card>
-              <SectionHeader>🩺 Wellness przed treningiem</SectionHeader>
+          <Card>
+            <SectionHeader>
+              🩺 Wellness przed treningiem
+              <button onClick={() => setWellnessEditMode(m => !m)}
+                style={{ marginLeft: 'auto', padding: '2px 10px', background: wellnessEditMode ? C.gold : C.navyLight, color: wellnessEditMode ? C.navy : C.gray, border: 'none', borderRadius: 6, fontFamily: mono, fontSize: '0.58rem', fontWeight: 700, cursor: 'pointer' }}>
+                {wellnessEditMode ? '✕ zamknij' : '✏️ edytuj'}
+              </button>
+            </SectionHeader>
+
+            {wellnessEditMode ? (
+              <WellnessEditPanel
+                wellness={currentWellness}
+                athleteId={athlete.id}
+                sessionDate={sessionDate}
+                onSaved={(w) => { setCurrentWellness(w); setWellnessEditMode(false) }}
+              />
+            ) : currentWellness ? (
               <div style={{ padding: '1rem 1.25rem' }}>
-                {wellness.sleep_hours != null && (
+                {currentWellness.sleep_hours != null && (
                   <div style={{ marginBottom: '0.75rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                       <span style={{ fontSize: '0.82rem', color: C.gray }}>🌙 Sen</span>
-                      <span style={{ fontFamily: mono, fontWeight: 800, color: wScaleColor(wellness.sleep_hours, 12, false) }}>{wellness.sleep_hours}h</span>
+                      <span style={{ fontFamily: mono, fontWeight: 800, color: wScaleColor(currentWellness.sleep_hours, 12, false) }}>{currentWellness.sleep_hours}h</span>
                     </div>
                     <div style={{ height: 6, background: C.grayLight, borderRadius: 3, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${Math.min(100,(wellness.sleep_hours/12)*100)}%`, background: wScaleColor(wellness.sleep_hours, 12, false), borderRadius: 3 }} />
+                      <div style={{ height: '100%', width: `${Math.min(100,(currentWellness.sleep_hours/12)*100)}%`, background: wScaleColor(currentWellness.sleep_hours, 12, false), borderRadius: 3 }} />
                     </div>
                   </div>
                 )}
-                <WBar label="Jakość snu" value={wellness.sleep_quality} max={10} comments={WC.sleepQ} />
-                <WBar label={`${readinessEmoji(wellness.readiness ?? 5)} Wypoczęcie`} value={wellness.readiness} max={10} comments={WC.readiness} />
-                <WBar label="Energia" value={wellness.energy} max={10} comments={WC.energy} />
-                <WBar label="Stres" value={wellness.stress} max={10} comments={WC.stress} inverse />
-                <WBar label="Zakwasy" value={wellness.muscle_sorness} max={10} comments={WC.soreness} inverse />
-                {wellness.body_weight_kg && (
+                <WBar label="Jakość snu" value={currentWellness.sleep_quality} max={10} comments={WC.sleepQ} />
+                <WBar label={`${readinessEmoji(currentWellness.readiness ?? 5)} Wypoczęcie`} value={currentWellness.readiness} max={10} comments={WC.readiness} />
+                <WBar label="Energia" value={currentWellness.energy} max={10} comments={WC.energy} />
+                <WBar label="Stres" value={currentWellness.stress} max={10} comments={WC.stress} inverse />
+                <WBar label="Zakwasy" value={currentWellness.muscle_sorness} max={10} comments={WC.soreness} inverse />
+                {currentWellness.body_weight_kg && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderTop: `1px solid ${C.grayLight}`, marginTop: 4 }}>
                     <span style={{ fontSize: '0.82rem', color: C.gray }}>Masa ciała</span>
-                    <span style={{ fontFamily: mono, fontWeight: 800, color: C.navy }}>{wellness.body_weight_kg} kg</span>
+                    <span style={{ fontFamily: mono, fontWeight: 800, color: C.navy }}>{currentWellness.body_weight_kg} kg</span>
                   </div>
                 )}
-                {wellness.resting_hr && (
+                {currentWellness.resting_hr && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderTop: `1px solid ${C.grayLight}` }}>
                     <span style={{ fontSize: '0.82rem', color: C.gray }}>HR spoczynkowe</span>
-                    <span style={{ fontFamily: mono, fontWeight: 800, color: C.navy }}>{wellness.resting_hr} bpm</span>
+                    <span style={{ fontFamily: mono, fontWeight: 800, color: C.navy }}>{currentWellness.resting_hr} bpm</span>
                   </div>
                 )}
-                {wellness.cycle_phase && (
-                  <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: (cycleColors[wellness.cycle_phase] || C.gray) + '18', borderRadius: 8 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: cycleColors[wellness.cycle_phase] || C.gray }} />
-                    <span style={{ fontFamily: mono, fontSize: '0.72rem', fontWeight: 700, color: cycleColors[wellness.cycle_phase] || C.gray }}>
-                      {wellness.cycle_phase}{wellness.cycle_day ? ` · dzień ${wellness.cycle_day}` : ''}
+                {currentWellness.cycle_phase && (
+                  <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: (cycleColors[currentWellness.cycle_phase] || C.gray) + '18', borderRadius: 8 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: cycleColors[currentWellness.cycle_phase] || C.gray }} />
+                    <span style={{ fontFamily: mono, fontSize: '0.72rem', fontWeight: 700, color: cycleColors[currentWellness.cycle_phase] || C.gray }}>
+                      {currentWellness.cycle_phase}{currentWellness.cycle_day ? ` · dzień ${currentWellness.cycle_day}` : ''}
                     </span>
                   </div>
                 )}
-                {wellness.activity_data?.type && (
+                {currentWellness.activity_data?.type && (
                   <div style={{ marginTop: 10, padding: '0.75rem', background: C.offWhite, borderRadius: 10 }}>
                     <div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Aktywność dodatkowa</div>
-                    <div style={{ fontWeight: 700, color: C.navy }}>{wellness.activity_data.type}</div>
+                    <div style={{ fontWeight: 700, color: C.navy }}>{currentWellness.activity_data.type}</div>
                     <div style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray, marginTop: 2 }}>
-                      {[wellness.activity_data.time, wellness.activity_data.duration && `${wellness.activity_data.duration} min`, wellness.activity_data.rpe && `RPE ${wellness.activity_data.rpe}`].filter(Boolean).join(' · ')}
+                      {[currentWellness.activity_data.time, currentWellness.activity_data.duration && `${currentWellness.activity_data.duration} min`, currentWellness.activity_data.rpe && `RPE ${currentWellness.activity_data.rpe}`].filter(Boolean).join(' · ')}
                     </div>
                   </div>
                 )}
-                {wellness.pain_data?.painDuring > 0 && (
+                {currentWellness.pain_data?.painDuring > 0 && (
                   <div style={{ marginTop: 10, padding: '0.75rem', background: '#FEF2F2', border: `1.5px solid #FCA5A5`, borderRadius: 10 }}>
                     <div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.red, textTransform: 'uppercase', marginBottom: 3 }}>Ból podczas treningu</div>
-                    <div style={{ fontFamily: mono, fontWeight: 800, color: C.red }}>{wellness.pain_data.painDuring}/10</div>
-                    {wellness.pain_data.location && <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: 2 }}>📍 {wellness.pain_data.location}</div>}
+                    <div style={{ fontFamily: mono, fontWeight: 800, color: C.red }}>{currentWellness.pain_data.painDuring}/10</div>
+                    {currentWellness.pain_data.location && <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: 2 }}>📍 {currentWellness.pain_data.location}</div>}
                   </div>
                 )}
-                {wellness.concerns && (
+                {currentWellness.concerns && (
                   <div style={{ marginTop: 10, padding: '0.65rem 0.875rem', background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 10 }}>
                     <div style={{ fontFamily: mono, fontSize: '0.56rem', color: '#92400E', textTransform: 'uppercase', marginBottom: 3 }}>Uwagi dla trenera</div>
-                    <div style={{ fontSize: '0.84rem', color: C.navy, fontStyle: 'italic' }}>&ldquo;{wellness.concerns}&rdquo;</div>
+                    <div style={{ fontSize: '0.84rem', color: C.navy, fontStyle: 'italic' }}>&ldquo;{currentWellness.concerns}&rdquo;</div>
                   </div>
                 )}
-                {wellness.supplements_data?.counts && Object.values(wellness.supplements_data.counts).some((v: any) => v > 0) && (
+                {currentWellness.supplements_data?.counts && Object.values(currentWellness.supplements_data.counts).some((v: any) => v > 0) && (
                   <div style={{ marginTop: 10, padding: '0.65rem 0.875rem', background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 10 }}>
                     <div style={{ fontFamily: mono, fontSize: '0.56rem', color: '#92400E', textTransform: 'uppercase', marginBottom: 5 }}>Suplementy</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                      {Object.entries(wellness.supplements_data.counts).filter(([,v]: any) => v > 0).map(([id, count]: any) => (
+                      {Object.entries(currentWellness.supplements_data.counts).filter(([,v]: any) => v > 0).map(([id, count]: any) => (
                         <span key={id} style={{ padding: '2px 8px', background: '#FEF9C3', border: '1px solid #FDE68A', borderRadius: 6, fontFamily: mono, fontSize: '0.65rem', color: '#92400E' }}>
                           {id.replace(/_/g,' ')} ×{count}
                         </span>
@@ -542,16 +656,19 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
                   </div>
                 )}
               </div>
-            </Card>
-          ) : (
-            <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: '1.25rem' }}>🩺</span>
-              <div>
-                <div style={{ fontWeight: 700, color: C.navy, fontSize: '0.88rem', marginBottom: 2 }}>Wellness przed treningiem</div>
-                <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray }}>Brak wpisu wellness na dzień tego treningu</div>
+            ) : (
+              <div style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: '1.5rem' }}>📋</span>
+                <div>
+                  <div style={{ fontWeight: 700, color: C.navy, fontSize: '0.88rem', marginBottom: 3 }}>Brak wpisu wellness</div>
+                  <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, lineHeight: 1.4 }}>
+                    Wellness nie był wypełniony w dniu tego treningu.<br />
+                    Kliknij <strong style={{ color: C.gold }}>✏️ edytuj</strong> aby uzupełnić.
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </Card>
 
           {/* ── SERIE Z ĆWICZENIAMI ── */}
           {blockOrder.some(b => b.exIds.length > 0) && (
