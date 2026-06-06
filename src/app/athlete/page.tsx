@@ -55,7 +55,7 @@ export default async function AthletePage() {
     getAthleteTrainingHistory(athlete.id, 5),
     supabase
       .from('wellness_logs')
-      .select('sleep_hours, sleep_quality, energy, stress, muscle_sorness, readiness')
+      .select('sleep_hours, sleep_quality, energy, stress, muscle_sorness, readiness, body_weight_kg, hydration_glasses, resting_hr, cycle_phase, recovery_score, sitting_hours, activity_data, pain_data, supplements_data, concerns')
       .eq('athlete_id', athlete.id)
       .eq('date', todayDateStr)          // tylko dzienne wellness (zapisane przez stronę wellness)
       .not('date', 'is', null)           // wyklucza wpisy z treningu (brak pola date)
@@ -104,9 +104,30 @@ export default async function AthletePage() {
   const wellnessConfig = athleteWellnessConfig || groupWellnessConfig || null
   const wellnessEnabled = wellnessConfig?.enabled !== false
 
-  const wellnessFields = ['sleep_hours', 'sleep_quality', 'energy', 'stress', 'muscle_sorness', 'readiness'] as const
+  const defaultWellnessFields = ['sleep_hours', 'sleep_quality', 'readiness', 'energy', 'stress', 'muscle_soreness', 'hydration', 'recovery_score']
+  const wellnessFields: string[] = wellnessConfig?.pre_params?.length ? wellnessConfig.pre_params : defaultWellnessFields
+  const wellnessFieldValue = (field: string) => {
+    const log = todayWellnessLog as any
+    if (!log) return null
+    if (field === 'muscle_soreness') return log.muscle_sorness
+    if (field === 'body_weight') return log.body_weight_kg
+    if (field === 'hydration') return log.hydration_glasses
+    if (field === 'resting_hr') return log.resting_hr
+    if (field === 'cycle') return log.cycle_phase
+    if (field === 'activity') return log.activity_data?.type || log.activity_data?.duration || log.activity_data?.note
+    if (field === 'pain_during') return log.pain_data?.painDuring
+    if (field === 'menstrual_pain') return log.pain_data?.menstrualPain
+    if (field === 'headache') return log.pain_data?.headache
+    if (field === 'stomachache') return log.pain_data?.stomachache
+    if (field === 'joint_stiffness') return log.pain_data?.jointStiffness
+    if (field === 'anxiety') return log.pain_data?.anxiety
+    if (field === 'mental_overload') return log.pain_data?.mentalOverload
+    if (field === 'supplements') return Object.values(log.supplements_data?.counts || {}).some((v: any) => Number(v) > 0)
+    if (field === 'notes') return log.concerns
+    return log[field]
+  }
   const completedWellnessFields = wellnessFields.filter(field => {
-    const value = todayWellnessLog?.[field]
+    const value = wellnessFieldValue(field)
     return value !== null && value !== undefined
   }).length
 
@@ -124,6 +145,7 @@ export default async function AthletePage() {
       todayDiet={!!todayDietLog}
       dietEnabled={dietEnabled}
       wellnessEnabled={wellnessEnabled}
+      wellnessFields={wellnessFields}
     />
   )
 }

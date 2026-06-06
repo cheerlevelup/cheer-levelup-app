@@ -61,6 +61,7 @@ type WellnessLog = {
 
 type Props = {
   athlete: Athlete
+  enabledFields?: string[]
   onClose: () => void
   onSaved: () => void
 }
@@ -340,7 +341,7 @@ function ModuleDrawer({ title, modules, activeModules, onToggle, onClose }: { ti
   )
 }
 
-export default function WellnessModal({ athlete, onClose, onSaved }: Props) {
+export default function WellnessModal({ athlete, enabledFields, onClose, onSaved }: Props) {
   const supabase = createClient()
   const [loading, setLoading] = useState(true)
   const [existingWellness, setExistingWellness] = useState<WellnessLog | null>(null)
@@ -407,9 +408,41 @@ export default function WellnessModal({ athlete, onClose, onSaved }: Props) {
   const [saveError, setSaveError] = useState('')
   const [saved, setSaved] = useState(false)
 
+  const enabledSet = useMemo(() => new Set(enabledFields || []), [enabledFields])
+  const fieldOn = (id: string) => !enabledFields?.length || enabledSet.has(id)
+  const basicModules = optionalModules.Basic.filter(m => fieldOn(
+    m.id === 'bodyWeight' ? 'body_weight' :
+    m.id === 'hrv' ? 'resting_hr' :
+    m.id === 'recovery' ? 'recovery_score' :
+    m.id === 'sitting' ? 'sitting_hours' :
+    m.id
+  ))
+  const painModules = optionalModules.Bol.filter(m => fieldOn(
+    m.id === 'menstrualPain' ? 'menstrual_pain' :
+    m.id === 'jointStiffness' ? 'joint_stiffness' :
+    m.id === 'mentalOverload' ? 'mental_overload' :
+    m.id
+  ))
+  const visibleTabs = tabs.filter(tab => {
+    if (tab === 'Basic') return ['sleep_hours', 'sleep_quality', 'readiness', 'energy', 'stress', ...basicModules.map(m => m.id)].some(id => fieldOn(id) || basicModules.some(m => m.id === id))
+    if (tab === 'Aktywnosci') return fieldOn('activity')
+    if (tab === 'Bol') return fieldOn('muscle_soreness') || fieldOn('pain_during') || painModules.length > 0
+    if (tab === 'Suplementy') return fieldOn('supplements')
+    return true
+  })
+
   useEffect(() => {
-    setActiveBasicModules(readStored('wellness-basic-modules', ['bodyWeight', 'cycle', 'recovery']))
-    setActivePainModules(readStored('wellness-pain-modules', []))
+    if (!visibleTabs.includes(activeTab)) setActiveTab(visibleTabs[0] || 'Basic')
+  }, [activeTab, visibleTabs])
+
+  useEffect(() => {
+    if (enabledFields?.length) {
+      setActiveBasicModules(basicModules.map(m => m.id))
+      setActivePainModules(painModules.map(m => m.id))
+    } else {
+      setActiveBasicModules(readStored('wellness-basic-modules', ['bodyWeight', 'cycle', 'recovery']))
+      setActivePainModules(readStored('wellness-pain-modules', []))
+    }
     setSupplementsList(readStoredSupplements())
 
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
@@ -534,17 +567,17 @@ export default function WellnessModal({ athlete, onClose, onSaved }: Props) {
   async function saveWellness() {
     setSaving(true); setSaveError('')
     const extendedPayload = {
-      athlete_id: athlete.id, sleep_hours: sleepHours, sleep_quality: sleepQuality, energy, stress, mood: null, muscle_sorness: soreness, readiness, concerns: concerns.trim() || null,
-      body_weight_kg: activeBasicModules.includes('bodyWeight') && bodyWeight ? parseFloat(bodyWeight) : null,
-      hydration_glasses: activeBasicModules.includes('hydration') ? hydration : null,
-      resting_hr: activeBasicModules.includes('hrv') ? hrv : null,
-      cycle_phase: activeBasicModules.includes('cycle') ? cyclePhase || null : null,
-      cycle_day: activeBasicModules.includes('cycle') && cycleDay ? parseInt(cycleDay) : null,
-      recovery_score: activeBasicModules.includes('recovery') ? recovery : null,
-      sitting_hours: activeBasicModules.includes('sitting') ? sittingHours : null,
-      activity_data: { type: activityType, time: activityTime, duration: activityDuration, motivation: activityMotivation, rpe: activityRpe, feelingAfter: activityFeelingAfter, satisfaction: activitySatisfaction, goal: activityGoal, goalComment: activityGoalComment, note: activityNote },
-      pain_data: { painDuring, menstrualPain: activePainModules.includes('menstrualPain') ? menstrualPain : null, headache: activePainModules.includes('headache') ? headache : null, stomachache: activePainModules.includes('stomachache') ? stomachache : null, jointStiffness: activePainModules.includes('jointStiffness') ? jointStiffness : null, anxiety: activePainModules.includes('anxiety') ? anxiety : null, headacheNote: activePainModules.includes('headache') ? headacheNote : '', stomachacheNote: activePainModules.includes('stomachache') ? stomachacheNote : '', anxietySources: activePainModules.includes('anxiety') ? selectedAnxietySources : [], anxietyNote: activePainModules.includes('anxiety') ? anxietyNote : '', mentalOverload: activePainModules.includes('mentalOverload') ? mentalOverload : null, mentalSources: activePainModules.includes('mentalOverload') ? selectedMentalSources : [], mentalNote: activePainModules.includes('mentalOverload') ? mentalNote : '', location: painLocation, note: painNote },
-      supplements_data: { counts: supplements, note: supplementNote, caffeineSources, caffeineOther },
+      athlete_id: athlete.id, sleep_hours: fieldOn('sleep_hours') ? sleepHours : null, sleep_quality: fieldOn('sleep_quality') ? sleepQuality : null, energy: fieldOn('energy') ? energy : null, stress: fieldOn('stress') ? stress : null, mood: null, muscle_sorness: fieldOn('muscle_soreness') ? soreness : null, readiness: fieldOn('readiness') ? readiness : null, concerns: fieldOn('notes') ? (concerns.trim() || null) : null,
+      body_weight_kg: fieldOn('body_weight') && activeBasicModules.includes('bodyWeight') && bodyWeight ? parseFloat(bodyWeight) : null,
+      hydration_glasses: fieldOn('hydration') && activeBasicModules.includes('hydration') ? hydration : null,
+      resting_hr: fieldOn('resting_hr') && activeBasicModules.includes('hrv') ? hrv : null,
+      cycle_phase: fieldOn('cycle') && activeBasicModules.includes('cycle') ? cyclePhase || null : null,
+      cycle_day: fieldOn('cycle') && activeBasicModules.includes('cycle') && cycleDay ? parseInt(cycleDay) : null,
+      recovery_score: fieldOn('recovery_score') && activeBasicModules.includes('recovery') ? recovery : null,
+      sitting_hours: fieldOn('sitting_hours') && activeBasicModules.includes('sitting') ? sittingHours : null,
+      activity_data: fieldOn('activity') ? { type: activityType, time: activityTime, duration: activityDuration, motivation: activityMotivation, rpe: activityRpe, feelingAfter: activityFeelingAfter, satisfaction: activitySatisfaction, goal: activityGoal, goalComment: activityGoalComment, note: activityNote } : null,
+      pain_data: { painDuring: fieldOn('pain_during') ? painDuring : null, menstrualPain: fieldOn('menstrual_pain') && activePainModules.includes('menstrualPain') ? menstrualPain : null, headache: fieldOn('headache') && activePainModules.includes('headache') ? headache : null, stomachache: fieldOn('stomachache') && activePainModules.includes('stomachache') ? stomachache : null, jointStiffness: fieldOn('joint_stiffness') && activePainModules.includes('jointStiffness') ? jointStiffness : null, anxiety: fieldOn('anxiety') && activePainModules.includes('anxiety') ? anxiety : null, headacheNote: fieldOn('headache') && activePainModules.includes('headache') ? headacheNote : '', stomachacheNote: fieldOn('stomachache') && activePainModules.includes('stomachache') ? stomachacheNote : '', anxietySources: fieldOn('anxiety') && activePainModules.includes('anxiety') ? selectedAnxietySources : [], anxietyNote: fieldOn('anxiety') && activePainModules.includes('anxiety') ? anxietyNote : '', mentalOverload: fieldOn('mental_overload') && activePainModules.includes('mentalOverload') ? mentalOverload : null, mentalSources: fieldOn('mental_overload') && activePainModules.includes('mentalOverload') ? selectedMentalSources : [], mentalNote: fieldOn('mental_overload') && activePainModules.includes('mentalOverload') ? mentalNote : '', location: fieldOn('pain_during') ? painLocation : '', note: fieldOn('pain_during') ? painNote : '' },
+      supplements_data: fieldOn('supplements') ? { counts: supplements, note: supplementNote, caffeineSources, caffeineOther } : null,
     }
     const { error } = existingWellness?.id
       ? await supabase.from('wellness_logs').update(extendedPayload).eq('id', existingWellness.id)
@@ -584,7 +617,7 @@ export default function WellnessModal({ athlete, onClose, onSaved }: Props) {
             <div style={{ width: 48, height: 48, borderRadius: 13, background: saved ? C.green : C.gold, color: saved ? C.white : C.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: mono, fontWeight: 900 }}>{progress}/6</div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 5 }}>
-            {tabs.map(tab => {
+            {visibleTabs.map(tab => {
               const active = activeTab === tab
               return (
                 <button key={tab} onClick={() => setActiveTab(tab)} style={{ border: 'none', borderRadius: active ? 9 : 0, background: active ? C.navy : 'transparent', color: active ? C.gold : C.gray, padding: '0.55rem 0.25rem', fontWeight: 900, fontSize: '0.72rem', borderBottom: active ? 'none' : `2px solid ${C.grayLight}`, fontFamily: sans }}>
@@ -598,7 +631,7 @@ export default function WellnessModal({ athlete, onClose, onSaved }: Props) {
         {drawerOpen && (activeTab === 'Basic' || activeTab === 'Bol') && (
           <ModuleDrawer
             title={activeTab}
-            modules={activeTab === 'Basic' ? optionalModules.Basic : optionalModules.Bol}
+            modules={activeTab === 'Basic' ? basicModules : painModules}
             activeModules={activeTab === 'Basic' ? activeBasicModules : activePainModules}
             onToggle={activeTab === 'Basic' ? toggleBasicModule : togglePainModule}
             onClose={() => setDrawerOpen(false)}
@@ -612,7 +645,7 @@ export default function WellnessModal({ athlete, onClose, onSaved }: Props) {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', paddingBottom: '1rem' }}>
 
-              {(activeTab === 'Basic' || activeTab === 'Bol') && (
+              {!enabledFields?.length && (activeTab === 'Basic' || activeTab === 'Bol') && (
                 <button onClick={() => setDrawerOpen(true)} style={{ alignSelf: 'flex-end', border: `1.5px solid ${C.grayLight}`, background: C.white, color: C.navy, borderRadius: 10, padding: '0.65rem 0.85rem', fontWeight: 800, fontFamily: sans }}>
                   Edytuj pola
                 </button>
@@ -621,20 +654,20 @@ export default function WellnessModal({ athlete, onClose, onSaved }: Props) {
               {activeTab === 'Basic' && (
                 <>
                   <Section title="Basic - najwazniejsze">
-                    <SliderField label="Sen - ilosc godzin" subtitle="Ile godzin spalas ostatniej nocy?" value={sleepHours} onChange={setSleepHours} min={0} max={12} step={0.5} unit="h" lowLabel="Za malo snu" highLabel="Dobry zapas regeneracji" valueLabel={scaleComment(sleepHours, 12, 'Organizm moze potrzebowac lzej', 'W porzadku', 'Bardzo dobra baza')} />
-                    <SliderField label="Jakosc snu" value={sleepQuality} onChange={setSleepQuality} min={0} max={10} scaleStart="0 = bardzo slabo" scaleEnd="10 = swietnie" lowLabel="Slaby sen" highLabel="Swietny sen" valueLabel={scaleText(sleepQuality, sleepQualityComments)} />
-                    <SliderField label="Poziom wypoczecia" subtitle="Jak bardzo czujesz sie wypoczeta po nocy?" emoji={readinessEmoji(readiness)} value={readiness} onChange={setReadiness} min={0} max={10} lowLabel="Bardzo zmeczona" highLabel="Bardzo wypoczeta" valueLabel={scaleText(readiness, readinessComments)} />
-                    <SliderField label="Energia" subtitle="Ile masz dzisiaj energii do dzialania?" value={energy} onChange={setEnergy} min={0} max={10} lowLabel="Niska" highLabel="Wysoka" valueLabel={scaleText(energy, energyComments)} />
-                    <SliderField label="Obciazenie stresem" value={stress} onChange={setStress} min={0} max={10} inverse scaleStart="0 = spokojnie" scaleEnd="10 = bardzo duzo stresu" lowLabel="Spokojnie" highLabel="Duzo stresu" valueLabel={scaleText(stress, stressComments)} />
+                    {fieldOn('sleep_hours') && <SliderField label="Sen - ilosc godzin" subtitle="Ile godzin spalas ostatniej nocy?" value={sleepHours} onChange={setSleepHours} min={0} max={12} step={0.5} unit="h" lowLabel="Za malo snu" highLabel="Dobry zapas regeneracji" valueLabel={scaleComment(sleepHours, 12, 'Organizm moze potrzebowac lzej', 'W porzadku', 'Bardzo dobra baza')} />}
+                    {fieldOn('sleep_quality') && <SliderField label="Jakosc snu" value={sleepQuality} onChange={setSleepQuality} min={0} max={10} scaleStart="0 = bardzo slabo" scaleEnd="10 = swietnie" lowLabel="Slaby sen" highLabel="Swietny sen" valueLabel={scaleText(sleepQuality, sleepQualityComments)} />}
+                    {fieldOn('readiness') && <SliderField label="Poziom wypoczecia" subtitle="Jak bardzo czujesz sie wypoczeta po nocy?" emoji={readinessEmoji(readiness)} value={readiness} onChange={setReadiness} min={0} max={10} lowLabel="Bardzo zmeczona" highLabel="Bardzo wypoczeta" valueLabel={scaleText(readiness, readinessComments)} />}
+                    {fieldOn('energy') && <SliderField label="Energia" subtitle="Ile masz dzisiaj energii do dzialania?" value={energy} onChange={setEnergy} min={0} max={10} lowLabel="Niska" highLabel="Wysoka" valueLabel={scaleText(energy, energyComments)} />}
+                    {fieldOn('stress') && <SliderField label="Obciazenie stresem" value={stress} onChange={setStress} min={0} max={10} inverse scaleStart="0 = spokojnie" scaleEnd="10 = bardzo duzo stresu" lowLabel="Spokojnie" highLabel="Duzo stresu" valueLabel={scaleText(stress, stressComments)} />}
                   </Section>
                   <Section title="Dodatkowe obserwacje">
                     {activeBasicModules.length === 0 && <div style={{ color: C.gray, fontSize: '0.86rem' }}>Brak dodatkowych pol. Kliknij Edytuj pola, zeby wybrac co chcesz sledzic.</div>}
-                    {activeBasicModules.includes('bodyWeight') && <div style={{ marginBottom: '1rem' }}><TextInput label="Masa ciala" value={bodyWeight} onChange={setBodyWeight} placeholder="kg" type="number" /></div>}
-                    {activeBasicModules.includes('hydration') && <SliderField label="Nawodnienie" subtitle="Ilosc szklanek wody (250ml)" value={hydration} onChange={setHydration} min={0} max={15} step={0.5} unit=" szkl." lowLabel="0 szkl." highLabel="15 szkl." valueLabel={scaleComment(hydration, 15, 'Do uzupelnienia', 'Niezle', 'Dobre nawodnienie')} />}
-                    {activeBasicModules.includes('hrv') && <SliderField label="Tetno spoczynkowe HR" value={hrv} onChange={setHrv} min={40} max={120} unit=" bpm" neutral />}
-                    {activeBasicModules.includes('recovery') && <SliderField label="Jakosc regeneracji po ostatnim treningu" subtitle="Jak dobrze czujesz, ze sie zregenerowalas?" value={recovery} onChange={setRecovery} min={0} max={10} lowLabel="Slaba regeneracja" highLabel="Pelna regeneracja" valueLabel={scaleComment(recovery, 10, 'Cialo prosi o ostroznosc', 'Regeneracja srednia', 'Gotowosc wyglada dobrze')} />}
-                    {activeBasicModules.includes('sitting') && <SliderField label="Czas siedzenia" value={sittingHours} onChange={setSittingHours} min={0} max={16} step={0.5} unit="h" inverse lowLabel="Malo siedzenia" highLabel="Duzo siedzenia" />}
-                    {activeBasicModules.includes('cycle') && (
+                    {fieldOn('body_weight') && activeBasicModules.includes('bodyWeight') && <div style={{ marginBottom: '1rem' }}><TextInput label="Masa ciala" value={bodyWeight} onChange={setBodyWeight} placeholder="kg" type="number" /></div>}
+                    {fieldOn('hydration') && activeBasicModules.includes('hydration') && <SliderField label="Nawodnienie" subtitle="Ilosc szklanek wody (250ml)" value={hydration} onChange={setHydration} min={0} max={15} step={0.5} unit=" szkl." lowLabel="0 szkl." highLabel="15 szkl." valueLabel={scaleComment(hydration, 15, 'Do uzupelnienia', 'Niezle', 'Dobre nawodnienie')} />}
+                    {fieldOn('resting_hr') && activeBasicModules.includes('hrv') && <SliderField label="Tetno spoczynkowe HR" value={hrv} onChange={setHrv} min={40} max={120} unit=" bpm" neutral />}
+                    {fieldOn('recovery_score') && activeBasicModules.includes('recovery') && <SliderField label="Jakosc regeneracji po ostatnim treningu" subtitle="Jak dobrze czujesz, ze sie zregenerowalas?" value={recovery} onChange={setRecovery} min={0} max={10} lowLabel="Slaba regeneracja" highLabel="Pelna regeneracja" valueLabel={scaleComment(recovery, 10, 'Cialo prosi o ostroznosc', 'Regeneracja srednia', 'Gotowosc wyglada dobrze')} />}
+                    {fieldOn('sitting_hours') && activeBasicModules.includes('sitting') && <SliderField label="Czas siedzenia" value={sittingHours} onChange={setSittingHours} min={0} max={16} step={0.5} unit="h" inverse lowLabel="Malo siedzenia" highLabel="Duzo siedzenia" />}
+                    {fieldOn('cycle') && activeBasicModules.includes('cycle') && (
                       <div>
                         <div style={{ fontWeight: 900, color: C.navy, marginBottom: 4 }}>Faza cyklu menstruacyjnego</div>
                         <div style={{ color: C.gray, fontSize: '0.82rem', marginBottom: '0.75rem' }}>Pomaga trenerowi lepiej planowac intensywnosc</div>
@@ -681,13 +714,13 @@ export default function WellnessModal({ athlete, onClose, onSaved }: Props) {
 
               {activeTab === 'Bol' && (
                 <Section title="Bol i obciazenie">
-                  <SliderField label="Zakwasy" subtitle="0 = brak · 10 = bardzo mocne" value={soreness} onChange={setSoreness} min={0} max={10} inverse lowLabel="Brak zakwasow" highLabel="Bardzo mocne" valueLabel={scaleText(soreness, sorenessComments)} />
-                  <SliderField label="Bol podczas dnia/treningu" value={painDuring} onChange={setPainDuring} min={0} max={10} inverse scaleStart="0 = brak bolu" scaleEnd="10 = silny bol" lowLabel="Brak bolu" highLabel="Silny bol" valueLabel={scaleText(painDuring, painComments)} />
-                  {activePainModules.includes('menstrualPain') && <TintedPanel title="🩸 Bol menstruacyjny (VAS)" color="#EF4444" bg="#FEF2F2"><SliderField label="Poziom bolu" value={menstrualPain} onChange={setMenstrualPain} min={0} max={10} inverse lowLabel="0" highLabel="10" /></TintedPanel>}
-                  {activePainModules.includes('headache') && <TintedPanel title="Bol glowy" color="#EF4444" bg="#FEF2F2"><SliderField label="Nasilenie" value={headache} onChange={setHeadache} min={0} max={10} inverse lowLabel="Brak" highLabel="Silny" valueLabel={scaleText(headache, painComments)} /><textarea value={headacheNote} onChange={e => setHeadacheNote(e.target.value)} placeholder="Z jakiego powodu? np. zmeczenie, stres, za malo wody, ekran..." rows={3} style={{ width: '100%', border: '1.5px solid #FCA5A5', background: '#FFF7F7', color: C.navy, borderRadius: 12, padding: '0.85rem', outline: 'none', resize: 'vertical', fontSize: '0.9rem' }} /></TintedPanel>}
-                  {activePainModules.includes('stomachache') && <TintedPanel title="Dolegliwosci zoladkowe" color="#F97316" bg="#FFF7ED"><SliderField label="Nasilenie" value={stomachache} onChange={setStomachache} min={0} max={10} inverse lowLabel="Brak" highLabel="Silne" valueLabel={scaleText(stomachache, painComments)} /><textarea value={stomachacheNote} onChange={e => setStomachacheNote(e.target.value)} placeholder="Z jakiego powodu?" rows={3} style={{ width: '100%', border: '1.5px solid #FDBA74', background: '#FFFBEB', color: C.navy, borderRadius: 12, padding: '0.85rem', outline: 'none', resize: 'vertical', fontSize: '0.9rem' }} /></TintedPanel>}
-                  {activePainModules.includes('jointStiffness') && <TintedPanel title="🦴 Sztywnosc stawow" color="#0EA5E9" bg="#ECFEFF"><SliderField label="Poziom sztywnosci" value={jointStiffness} onChange={setJointStiffness} min={0} max={10} inverse lowLabel="Brak sztywnosci" highLabel="Bardzo sztywne" /></TintedPanel>}
-                  {activePainModules.includes('anxiety') && (
+                  {fieldOn('muscle_soreness') && <SliderField label="Zakwasy" subtitle="0 = brak · 10 = bardzo mocne" value={soreness} onChange={setSoreness} min={0} max={10} inverse lowLabel="Brak zakwasow" highLabel="Bardzo mocne" valueLabel={scaleText(soreness, sorenessComments)} />}
+                  {fieldOn('pain_during') && <SliderField label="Bol podczas dnia/treningu" value={painDuring} onChange={setPainDuring} min={0} max={10} inverse scaleStart="0 = brak bolu" scaleEnd="10 = silny bol" lowLabel="Brak bolu" highLabel="Silny bol" valueLabel={scaleText(painDuring, painComments)} />}
+                  {fieldOn('menstrual_pain') && activePainModules.includes('menstrualPain') && <TintedPanel title="🩸 Bol menstruacyjny (VAS)" color="#EF4444" bg="#FEF2F2"><SliderField label="Poziom bolu" value={menstrualPain} onChange={setMenstrualPain} min={0} max={10} inverse lowLabel="0" highLabel="10" /></TintedPanel>}
+                  {fieldOn('headache') && activePainModules.includes('headache') && <TintedPanel title="Bol glowy" color="#EF4444" bg="#FEF2F2"><SliderField label="Nasilenie" value={headache} onChange={setHeadache} min={0} max={10} inverse lowLabel="Brak" highLabel="Silny" valueLabel={scaleText(headache, painComments)} /><textarea value={headacheNote} onChange={e => setHeadacheNote(e.target.value)} placeholder="Z jakiego powodu? np. zmeczenie, stres, za malo wody, ekran..." rows={3} style={{ width: '100%', border: '1.5px solid #FCA5A5', background: '#FFF7F7', color: C.navy, borderRadius: 12, padding: '0.85rem', outline: 'none', resize: 'vertical', fontSize: '0.9rem' }} /></TintedPanel>}
+                  {fieldOn('stomachache') && activePainModules.includes('stomachache') && <TintedPanel title="Dolegliwosci zoladkowe" color="#F97316" bg="#FFF7ED"><SliderField label="Nasilenie" value={stomachache} onChange={setStomachache} min={0} max={10} inverse lowLabel="Brak" highLabel="Silne" valueLabel={scaleText(stomachache, painComments)} /><textarea value={stomachacheNote} onChange={e => setStomachacheNote(e.target.value)} placeholder="Z jakiego powodu?" rows={3} style={{ width: '100%', border: '1.5px solid #FDBA74', background: '#FFFBEB', color: C.navy, borderRadius: 12, padding: '0.85rem', outline: 'none', resize: 'vertical', fontSize: '0.9rem' }} /></TintedPanel>}
+                  {fieldOn('joint_stiffness') && activePainModules.includes('jointStiffness') && <TintedPanel title="🦴 Sztywnosc stawow" color="#0EA5E9" bg="#ECFEFF"><SliderField label="Poziom sztywnosci" value={jointStiffness} onChange={setJointStiffness} min={0} max={10} inverse lowLabel="Brak sztywnosci" highLabel="Bardzo sztywne" /></TintedPanel>}
+                  {fieldOn('anxiety') && activePainModules.includes('anxiety') && (
                     <TintedPanel title="💜 Poziom leku / niepokoju" color="#7C3AED" bg="#F5F3FF">
                       <SliderField label="Nasilenie" value={anxiety} onChange={setAnxiety} min={0} max={10} inverse scaleStart="0 = spokoj" scaleEnd="10 = silny lek" lowLabel="Spokoj" highLabel="Silny lek" valueLabel={scaleText(anxiety, anxietyComments)} />
                       <div style={{ color: '#6D28D9', fontSize: '0.82rem', fontWeight: 800, marginBottom: 8 }}>Glowne zrodlo leku / niepokoju</div>
@@ -697,7 +730,7 @@ export default function WellnessModal({ athlete, onClose, onSaved }: Props) {
                       <textarea value={anxietyNote} onChange={e => setAnxietyNote(e.target.value)} placeholder="Napisz cos wiecej jesli chcesz... (tylko Ty i trener to widza)" rows={3} style={{ width: '100%', border: '1.5px solid #C4B5FD', background: '#FAF5FF', color: C.navy, borderRadius: 12, padding: '0.85rem', outline: 'none', resize: 'vertical', fontSize: '0.9rem' }} />
                     </TintedPanel>
                   )}
-                  {activePainModules.includes('mentalOverload') && (
+                  {fieldOn('mental_overload') && activePainModules.includes('mentalOverload') && (
                     <TintedPanel title="🧠 Przeciazenie mentalne" color="#B45309" bg="#FFFBEB">
                       <SliderField label="Poziom przeciazenia" value={mentalOverload} onChange={setMentalOverload} min={0} max={10} inverse lowLabel="Jasna glowa" highLabel="Totalnie przytloczona" valueLabel={scaleComment(mentalOverload, 10, 'Spokojnie', 'Duzo bodzcow', 'Wysokie przeciazenie')} />
                       <div style={{ color: '#92400E', fontSize: '0.82rem', fontWeight: 800, marginBottom: 8 }}>Glowne zrodlo przeciazenia</div>

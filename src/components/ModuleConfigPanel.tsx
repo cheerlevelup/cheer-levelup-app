@@ -21,30 +21,21 @@ const mono = "'Space Mono', monospace"
 
 type Param = { id: string; label: string; desc: string; emoji: string }
 
-const WELLNESS_PRE: Param[] = [
+const WELLNESS_DAILY: Param[] = [
   { id: 'sleep_hours',    label: 'Godziny snu',         desc: 'Ile godzin spała',                  emoji: '🌙' },
   { id: 'sleep_quality',  label: 'Jakość snu',           desc: 'Skala 1–10',                        emoji: '😴' },
-  { id: 'energy',         label: 'Poziom energii',       desc: 'Skala 1–10',                        emoji: '⚡' },
-  { id: 'stress',         label: 'Stres',                desc: 'Skala 1–10',                        emoji: '🧠' },
-  { id: 'mood',           label: 'Nastrój',              desc: 'Skala 1–10',                        emoji: '😊' },
-  { id: 'readiness',      label: 'Gotowość do treningu', desc: 'Skala 1–10',                        emoji: '💪' },
+  { id: 'readiness',      label: 'Poziom wypoczęcia',    desc: 'Skala 0–10',                        emoji: '💪' },
+  { id: 'energy',         label: 'Poziom energii',       desc: 'Skala 0–10',                        emoji: '⚡' },
+  { id: 'stress',         label: 'Obciążenie stresem',   desc: 'Skala 0–10',                        emoji: '🧠' },
   { id: 'muscle_soreness',label: 'Zakwasy',              desc: 'Ból mięśni po poprzednim',          emoji: '🔥' },
-  { id: 'motivation_pre', label: 'Motywacja przed',      desc: 'Chęć do treningu',                  emoji: '🎯' },
   { id: 'body_weight',    label: 'Masa ciała',           desc: 'Waga w kg',                         emoji: '⚖️' },
   { id: 'hydration',      label: 'Nawodnienie',          desc: 'Szklanki wody',                     emoji: '💧' },
   { id: 'resting_hr',     label: 'Tętno spoczynkowe',   desc: 'HR w spoczynku (bpm)',               emoji: '❤️' },
   { id: 'cycle',          label: 'Faza cyklu',           desc: 'Faza menstruacyjna',                emoji: '🌸' },
+  { id: 'recovery_score', label: 'Regeneracja',          desc: 'Po ostatnim treningu',              emoji: '🔋' },
   { id: 'sitting_hours',  label: 'Godziny siedzenia',   desc: 'Czas siedzący',                     emoji: '🪑' },
-]
-
-const WELLNESS_POST: Param[] = [
-  { id: 'activity_type',  label: 'Typ aktywności',       desc: 'Rest / trening / inne',             emoji: '🏃' },
-  { id: 'motivation',     label: 'Motywacja',            desc: 'Chęć do treningu przed',            emoji: '🎯' },
-  { id: 'rpe',            label: 'RPE (intensywność)',   desc: 'Skala wysiłku 1–10',                emoji: '📊' },
-  { id: 'feeling_after',  label: 'Samopoczucie po',      desc: 'Jak się czuje po treningu',         emoji: '🤩' },
-  { id: 'goal',           label: 'Realizacja celu',      desc: 'Czy wykonała plan',                 emoji: '✅' },
-  { id: 'recovery_score', label: 'Regeneracja',          desc: 'Ocena regeneracji 1–10',            emoji: '🔋' },
-  { id: 'pain_during',    label: 'Ból podczas treningu', desc: 'Skala 0–10',                        emoji: '🩹' },
+  { id: 'activity',       label: 'Aktywność dnia',       desc: 'Typ, czas, opis i odczucia',        emoji: '🏃' },
+  { id: 'pain_during',    label: 'Ból / dyskomfort',     desc: 'Skala 0–10 i opis',                 emoji: '🩹' },
   { id: 'menstrual_pain', label: 'Ból menstruacyjny',    desc: 'Skala 0–10',                        emoji: '🌹' },
   { id: 'headache',       label: 'Ból głowy',            desc: 'Skala 0–10',                        emoji: '🤕' },
   { id: 'stomachache',    label: 'Dolegliwości żołądkowe',desc: 'Skala 0–10',                       emoji: '😣' },
@@ -66,9 +57,9 @@ const DIET_PARAMS: Param[] = [
 ]
 
 const WELLNESS_PRESETS = [
-  { label: 'Minimalne',    pre: ['sleep_hours', 'energy', 'readiness'], post: ['rpe', 'feeling_after'] },
-  { label: 'Standardowe', pre: ['sleep_hours', 'sleep_quality', 'energy', 'stress', 'readiness', 'muscle_soreness', 'motivation_pre'], post: ['motivation', 'rpe', 'feeling_after', 'goal', 'recovery_score', 'notes'] },
-  { label: 'Pełne',       pre: WELLNESS_PRE.map(p => p.id), post: WELLNESS_POST.map(p => p.id) },
+  { label: 'Minimalne',    pre: ['sleep_hours', 'sleep_quality', 'readiness', 'energy', 'stress'], post: [] },
+  { label: 'Standardowe', pre: ['sleep_hours', 'sleep_quality', 'readiness', 'energy', 'stress', 'muscle_soreness', 'hydration', 'recovery_score'], post: [] },
+  { label: 'Pełne',       pre: WELLNESS_DAILY.map(p => p.id), post: [] },
   { label: 'Wyczyść',     pre: [], post: [] },
 ]
 
@@ -106,8 +97,8 @@ export default function ModuleConfigPanel({ groupId, athleteId, module, groupCon
   const [error, setError] = useState('')
 
   const isDiet = module === 'diet'
-  const preCatalog  = isDiet ? DIET_PARAMS : WELLNESS_PRE
-  const postCatalog = isDiet ? [] : WELLNESS_POST
+  const preCatalog  = isDiet ? DIET_PARAMS : WELLNESS_DAILY
+  const postCatalog: Param[] = []
   const presets     = isDiet ? DIET_PRESETS : WELLNESS_PRESETS
   const moduleLabel = isDiet ? '🥗 Dieta' : '🩺 Wellness'
 
@@ -120,12 +111,12 @@ export default function ModuleConfigPanel({ groupId, athleteId, module, groupCon
       if (data) {
         setEnabled(data.enabled ?? true)
         setPre(data.pre_params || [])
-        setPost(data.post_params || [])
+        setPost(isDiet ? (data.post_params || []) : [])
       } else if (groupConfig) {
         // inherit from group as default
         setEnabled(groupConfig.enabled)
         setPre(groupConfig.pre)
-        setPost(groupConfig.post)
+        setPost(isDiet ? groupConfig.post : [])
       }
       setLoading(false)
     })
@@ -137,14 +128,14 @@ export default function ModuleConfigPanel({ groupId, athleteId, module, groupCon
   }
 
   function applyPreset(p: { label: string; pre: string[]; post: string[] }) {
-    setPre(p.pre); setPost(p.post); setSaved(false)
+    setPre(p.pre); setPost(isDiet ? p.post : []); setSaved(false)
   }
 
   async function handleSave() {
     setSaving(true)
     setError('')
     const payload: any = {
-      module, enabled, pre_params: pre, post_params: post,
+      module, enabled, pre_params: pre, post_params: isDiet ? post : [],
       updated_at: new Date().toISOString(),
     }
     if (groupId)   payload.group_id   = groupId
@@ -194,7 +185,7 @@ export default function ModuleConfigPanel({ groupId, athleteId, module, groupCon
         <div style={{ padding: '0.875rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div>
             <div style={{ fontWeight: 700, fontSize: '0.9rem', color: C.navy }}>
-              {enabled ? `✅ ${isDiet ? 'Dieta' : 'Wellness'} włączone` : `🚫 ${isDiet ? 'Dieta' : 'Wellness'} wyłączone`}
+              {enabled ? `✅ ${isDiet ? 'Dieta' : 'Dzienny wellness'} włączone` : `🚫 ${isDiet ? 'Dieta' : 'Dzienny wellness'} wyłączone`}
             </div>
             <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, marginTop: 2 }}>
               {enabled ? 'Zawodniczka widzi i uzupełnia formularz' : 'Arkusz ukryty — zawodniczka nie ma dostępu'}
@@ -226,7 +217,7 @@ export default function ModuleConfigPanel({ groupId, athleteId, module, groupCon
                   </button>
                 ))}
                 {isAthlete && groupConfig && (
-                  <button onClick={() => { setPre(groupConfig.pre); setPost(groupConfig.post); setSaved(false) }}
+                  <button onClick={() => { setPre(groupConfig.pre); setPost(isDiet ? groupConfig.post : []); setSaved(false) }}
                     style={{ borderRadius: 8, border: `1.5px solid ${C.gold}`, background: `${C.navy}10`, color: C.navy, padding: '0.3rem 0.65rem', fontFamily: mono, fontSize: '0.63rem', fontWeight: 700, cursor: 'pointer' }}>
                     ↩ Jak grupa
                   </button>
@@ -234,19 +225,11 @@ export default function ModuleConfigPanel({ groupId, athleteId, module, groupCon
               </div>
             </div>
 
-            {/* Tabs (only wellness has pre/post) */}
-            {!isDiet && (
-              <div style={{ display: 'flex', borderBottom: `1.5px solid ${C.grayLight}`, flexShrink: 0 }}>
-                {(['pre', 'post'] as const).map(t => (
-                  <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: '0.65rem', border: 'none', background: tab === t ? C.white : C.offWhite, color: tab === t ? C.navy : C.gray, fontWeight: tab === t ? 800 : 600, fontFamily: mono, fontSize: '0.7rem', borderBottom: tab === t ? `2px solid ${C.gold}` : '2px solid transparent', cursor: 'pointer' }}>
-                    {t === 'pre' ? `🌅 Przed treningiem (${pre.length})` : `🏁 Po treningu (${post.length})`}
-                  </button>
-                ))}
-              </div>
-            )}
-            {isDiet && (
+            {(isDiet || module === 'wellness') && (
               <div style={{ padding: '0.5rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}`, flexShrink: 0 }}>
-                <span style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray }}>{pre.length} parametrów aktywnych</span>
+                <span style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray }}>
+                  {isDiet ? `${pre.length} parametrów aktywnych` : `${pre.length} pól dziennego wellness`}
+                </span>
               </div>
             )}
 
@@ -255,7 +238,7 @@ export default function ModuleConfigPanel({ groupId, athleteId, module, groupCon
               <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                 {catalog.map(param => {
                   const on = active.includes(param.id)
-                  const inheritedOn = tab === 'pre' ? groupConfig?.pre.includes(param.id) : groupConfig?.post.includes(param.id)
+                  const inheritedOn = groupConfig?.pre.includes(param.id)
                   return (
                     <button key={param.id} onClick={() => toggle(active, setActive, param.id)} style={{ display: 'grid', gridTemplateColumns: '32px 1fr auto', alignItems: 'center', gap: 10, padding: '0.55rem 0.75rem', borderRadius: 10, border: `1.5px solid ${on ? C.gold : C.grayLight}`, background: on ? `${C.navy}08` : C.offWhite, cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s' }}>
                       <span style={{ fontSize: '1.1rem', textAlign: 'center' }}>{param.emoji}</span>
@@ -284,7 +267,7 @@ export default function ModuleConfigPanel({ groupId, athleteId, module, groupCon
         {/* Footer */}
         <div style={{ padding: '0.75rem 1.25rem', borderTop: `1.5px solid ${C.grayLight}`, display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
           <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, flex: 1 }}>
-            {enabled ? (isDiet ? `${pre.length} param.` : `Przed: ${pre.length} · Po: ${post.length}`) : 'Arkusz wyłączony'}
+            {enabled ? (isDiet ? `${pre.length} param.` : `${pre.length} pól dziennego wellness`) : 'Arkusz wyłączony'}
           </div>
           <button onClick={onClose} style={{ padding: '0.6rem 0.875rem', borderRadius: 9, border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.gray, fontWeight: 700, cursor: 'pointer' }}>Anuluj</button>
           <button onClick={handleSave} disabled={saving} style={{ padding: '0.6rem 1.1rem', borderRadius: 9, border: 'none', background: saved ? C.green : C.navy, color: saved ? C.white : C.gold, fontWeight: 800, cursor: 'pointer', minWidth: 90 }}>

@@ -428,8 +428,8 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
   const moduleDefaults = {
     diet: { pre: ['had_breakfast', 'meal_count', 'water_ml'], post: [] },
     wellness: {
-      pre: ['sleep_hours', 'sleep_quality', 'energy', 'stress', 'readiness', 'muscle_soreness'],
-      post: ['rpe', 'feeling_after', 'goal', 'recovery_score', 'notes'],
+      pre: ['sleep_hours', 'sleep_quality', 'readiness', 'energy', 'stress', 'muscle_soreness', 'hydration', 'recovery_score'],
+      post: [],
     },
   }
   const groupConfigFor = (module: 'wellness' | 'diet') => groupModuleConfigs.find((config: any) => config.module === module)

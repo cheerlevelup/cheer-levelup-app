@@ -1644,8 +1644,8 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
   const [planExLoading, setPlanExLoading] = useState(false)
 
   const defaultDietParams = ['had_breakfast', 'meal_count', 'water_ml']
-  const defaultWellnessPreParams = ['sleep_hours', 'sleep_quality', 'energy', 'stress', 'readiness', 'muscle_soreness']
-  const defaultWellnessPostParams = ['rpe', 'feeling_after', 'goal', 'recovery_score', 'notes']
+  const defaultWellnessPreParams = ['sleep_hours', 'sleep_quality', 'readiness', 'energy', 'stress', 'muscle_soreness', 'hydration', 'recovery_score']
+  const defaultWellnessPostParams: string[] = []
   const groupDietConfig = localModuleConfigs.find((config: any) => config.module === 'diet' && config.group_id === group.id)
   const groupDietEnabled = groupDietConfig?.enabled !== false
   const groupWellnessConfig = localModuleConfigs.find((config: any) => config.module === 'wellness' && config.group_id === group.id)
