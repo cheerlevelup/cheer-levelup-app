@@ -422,36 +422,77 @@ function FloatingTimer() {
   )
 }
 
-// ─── WARMUP ROW ───────────────────────────────────────────────────────────────
+// ─── WARMUP SET ROW ───────────────────────────────────────────────────────────
 
-function WarmupRow({ warmup }: { warmup: { reps: number; weight: string; fixed: boolean } }) {
-  const [done, setDone] = useState(false)
+function WarmupSetRow({ warmup, setNum, existingLog, sessionId, athleteId, blockExerciseId }: {
+  warmup: TrainingWarmupSet; setNum: number
+  existingLog?: SetLog; sessionId: number; athleteId: number; blockExerciseId: number
+}) {
+  const supabase = createClient()
+  const [weight, setWeight] = useState(existingLog?.weight?.toString() || '')
+  const [done, setDone] = useState(!!existingLog?.completed)
+
+  async function toggle() {
+    const newDone = !done
+    setDone(newDone)
+    const payload = {
+      workout_session_id: sessionId, block_exercise_id: blockExerciseId,
+      athlete_id: athleteId, set_number: setNum,
+      weight: weight ? parseFloat(weight) : null,
+      reps_completed: null, is_warmup: true, completed: newDone,
+    }
+    if (existingLog?.id) {
+      await supabase.from('set_logs').update(payload).eq('id', existingLog.id)
+    } else {
+      await supabase.from('set_logs').insert(payload)
+    }
+  }
+
+  // ref info: reps + weight from plan
+  const refText = [
+    warmup.reps ? `${warmup.reps} powt.` : null,
+    warmup.weight_kg ? `ref. ${warmup.weight_kg} kg` : null,
+    warmup.note || null,
+  ].filter(Boolean).join(' · ')
+
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.75rem 1rem', background: done ? '#F0FDF4' : '#FAFBFC', borderRadius: 10, marginBottom: 6, border: `1.5px solid ${done ? '#86EFAC' : C.grayLight}`, transition: 'all 0.2s', fontFamily: sans }}>
-      <span style={{ fontWeight: 800, fontSize: '0.75rem', color: C.gray, minWidth: 44, fontFamily: mono }}>Rozg</span>
-      <div style={{ flex: 1 }}>
-        <span style={{ fontWeight: 700, fontSize: '0.9rem', color: C.navy }}>{warmup.reps} pow.</span>
-        <span style={{ color: C.gray, fontSize: '0.88rem' }}> · {warmup.weight}</span>
-        {!warmup.fixed && <span style={{ fontSize: '0.7rem', color: C.gray, marginLeft: 6 }}>(ref.)</span>}
+    <div style={{ padding: '0.6rem 0.875rem', background: done ? '#F0FDF4' : '#FAFBFC', borderRadius: 10, marginBottom: 6, border: `1.5px solid ${done ? '#86EFAC' : C.grayLight}`, fontFamily: sans }}>
+      {/* Wiersz: etykieta + ciężar + przycisk */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontFamily: mono, fontSize: '0.7rem', fontWeight: 800, color: C.gray, minWidth: 40 }}>
+          Rozg {setNum > 1 ? setNum : ''}
+        </span>
+        <div style={{ flex: 1 }}>
+          <input
+            type="number" inputMode="decimal" placeholder="kg"
+            value={weight} onChange={e => setWeight(e.target.value)}
+            style={{ width: '100%', padding: '0.4rem 0.5rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.9rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center' }}
+          />
+        </div>
+        <button onClick={toggle} style={{ width: 36, height: 36, borderRadius: 8, background: done ? C.green : C.grayLight, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          {done && <span style={{ color: '#fff', fontSize: '1rem', fontWeight: 800 }}>✓</span>}
+        </button>
       </div>
-      <button onClick={() => setDone(!done)} style={{ width: 36, height: 36, borderRadius: 8, background: done ? C.green : C.grayLight, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', flexShrink: 0 }}>
-        {done && <span style={{ color: '#fff', fontSize: '1rem', fontWeight: 800 }}>✓</span>}
-      </button>
+      {/* Ref info pod spodem — małą czcionką, nie nachodzi na input */}
+      {refText && (
+        <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, marginTop: 4, paddingLeft: 48 }}>
+          {refText}
+        </div>
+      )}
     </div>
   )
 }
 
 // ─── SET ROW ──────────────────────────────────────────────────────────────────
 
-function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, athleteId, blockExerciseId, isWarmupRow, onComplete }: {
+function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, athleteId, blockExerciseId, onComplete }: {
   setNum: number; reps: string | number; isAmrap: boolean; prevWeight?: number | null
   existingLog?: SetLog; sessionId: number; athleteId: number; blockExerciseId: number
-  isWarmupRow: boolean; onComplete: (done: boolean) => void
+  onComplete: (done: boolean) => void
 }) {
   const supabase = createClient()
   const [weight, setWeight] = useState(existingLog?.weight?.toString() || '')
   const [actualReps, setActualReps] = useState(existingLog?.reps_completed?.toString() || '')
-  const [athleteNote, setAthleteNote] = useState(existingLog?.athlete_note || '')
   const [done, setDone] = useState(!!existingLog?.completed)
 
   async function saveSet(nextDone = done) {
@@ -460,26 +501,17 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
       athlete_id: athleteId, set_number: setNum,
       weight: weight ? parseFloat(weight) : null,
       reps_completed: actualReps ? parseInt(actualReps) : null,
-      athlete_note: athleteNote.trim() || null,
-      is_warmup: isWarmupRow, completed: nextDone,
+      is_warmup: false, completed: nextDone,
     }
     const { data: currentLog } = await supabase
-      .from('set_logs')
-      .select('id')
-      .eq('workout_session_id', sessionId)
-      .eq('block_exercise_id', blockExerciseId)
-      .eq('set_number', setNum)
-      .eq('is_warmup', isWarmupRow)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+      .from('set_logs').select('id')
+      .eq('workout_session_id', sessionId).eq('block_exercise_id', blockExerciseId)
+      .eq('set_number', setNum).eq('is_warmup', false)
+      .order('created_at', { ascending: false }).limit(1).maybeSingle()
 
     const logId = existingLog?.id || currentLog?.id
-    if (logId) {
-      await supabase.from('set_logs').update(payload).eq('id', logId)
-    } else {
-      await supabase.from('set_logs').insert(payload)
-    }
+    if (logId) await supabase.from('set_logs').update(payload).eq('id', logId)
+    else await supabase.from('set_logs').insert(payload)
   }
 
   async function toggle() {
@@ -490,34 +522,25 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
   }
 
   return (
-    <div style={{ padding: '0.75rem 1rem', background: done ? '#F0FDF4' : '#FAFBFC', borderRadius: 10, marginBottom: 6, border: `1.5px solid ${done ? '#86EFAC' : C.grayLight}`, transition: 'all 0.2s', fontFamily: sans }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.65rem 0.875rem', background: done ? '#F0FDF4' : '#FAFBFC', borderRadius: 10, marginBottom: 6, border: `1.5px solid ${done ? '#86EFAC' : C.grayLight}`, transition: 'all 0.2s', fontFamily: sans }}>
       <span style={{ fontWeight: 800, fontSize: '0.88rem', color: done ? C.green : C.gold, minWidth: 28, fontFamily: mono }}>
-        {isWarmupRow ? 'Rozg' : `S${setNum}`}
+        S{setNum}
       </span>
       <span style={{ fontWeight: 700, fontSize: '0.95rem', color: C.navy, minWidth: 36 }}>{reps}</span>
       <div style={{ flex: 1 }}>
-        <input type="number" inputMode="decimal" placeholder="kg" value={weight} onChange={e => setWeight(e.target.value)}
+        <input type="number" inputMode="decimal" placeholder="kg" value={weight} onChange={e => setWeight(e.target.value)} onBlur={() => saveSet()}
           style={{ width: '100%', padding: '0.4rem 0.5rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.9rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center' }} />
         {prevWeight && !weight && (
           <div style={{ fontSize: '0.62rem', color: C.gray, textAlign: 'center', marginTop: 2 }}>poprzednio: {prevWeight} kg</div>
         )}
       </div>
       {isAmrap && (
-        <input type="number" inputMode="numeric" placeholder="powt." value={actualReps} onChange={e => setActualReps(e.target.value)}
+        <input type="number" inputMode="numeric" placeholder="powt." value={actualReps} onChange={e => setActualReps(e.target.value)} onBlur={() => saveSet()}
           style={{ width: 60, padding: '0.4rem 0.5rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.9rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center' }} />
       )}
-      <button onClick={toggle} style={{ width: 36, height: 36, borderRadius: 8, background: done ? C.green : C.grayLight, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', flexShrink: 0 }}>
+      <button onClick={toggle} style={{ width: 36, height: 36, borderRadius: 8, background: done ? C.green : C.grayLight, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s', flexShrink: 0 }}>
         {done && <span style={{ color: '#fff', fontSize: '1rem', fontWeight: 800 }}>✓</span>}
       </button>
-      </div>
-      <input
-        value={athleteNote}
-        onChange={e => setAthleteNote(e.target.value)}
-        onBlur={() => saveSet()}
-        placeholder="notatka do serii..."
-        style={{ marginTop: 8, width: '100%', padding: '0.48rem 0.65rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.82rem', color: C.navy, background: '#fff', outline: 'none' }}
-      />
     </div>
   )
 }
@@ -597,7 +620,12 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
   const [vas, setVas] = useState(0)
   const [painNote, setPainNote] = useState('')
   const [painSaved, setPainSaved] = useState(false)
-  const [exerciseNote, setExerciseNote] = useState('')
+  const [exerciseNote, setExerciseNote] = useState(() => {
+    // Wczytaj notatkę z pierwszej serii (zapisanej wcześniej)
+    const firstLog = setLogs.filter(l => l.block_exercise_id === exercise.id && !l.is_warmup)
+      .sort((a, b) => a.set_number - b.set_number)[0]
+    return (firstLog as any)?.athlete_note || ''
+  })
 
   const effectiveSets = exercise.override?.sets_override || exercise.sets
   const effectiveReps = exercise.override?.reps_override || exercise.reps || '—'
@@ -624,7 +652,11 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
   const visibleWarmupSets = warmupSets.length ? warmupSets : legacyWarmupSets
 
   const exSetLogs = setLogs.filter(l => l.block_exercise_id === exercise.id)
-  const completedSets = exSetLogs.filter(l => l.completed && !l.is_warmup).length
+  // Lokalny licznik — aktualizuje się od razu po kliknięciu
+  const [localCompleted, setLocalCompleted] = useState(() =>
+    exSetLogs.filter(l => l.completed && !l.is_warmup).length
+  )
+  const completedSets = localCompleted
   const allDone = completedSets >= effectiveSets
   const isAmrap = typeof effectiveReps === 'string' && effectiveReps.toUpperCase() === 'AMRAP'
   const exerciseName = getEffectiveName()
@@ -707,18 +739,14 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
               <div style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: '0.64rem', fontWeight: 700, color: C.gray, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.35rem', fontFamily: mono }}>Rozgrzewka</div>
                 {visibleWarmupSets.map((warmup, index) => (
-                  <SetRow
+                  <WarmupSetRow
                     key={`warmup-${index}`}
+                    warmup={warmup}
                     setNum={index + 1}
-                    reps={`${warmup.reps || '-'}${warmup.weight_kg ? ` / ${warmup.weight_kg} kg` : ''}${warmup.note ? ` / ${warmup.note}` : ''}`}
-                    isAmrap={false}
-                    prevWeight={null}
                     existingLog={exSetLogs.find(l => l.set_number === index + 1 && l.is_warmup)}
                     sessionId={sessionId}
                     athleteId={athleteId}
                     blockExerciseId={exercise.id}
-                    isWarmupRow
-                    onComplete={() => undefined}
                   />
                 ))}
               </div>
@@ -735,16 +763,33 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
                 sessionId={sessionId}
                 athleteId={athleteId}
                 blockExerciseId={exercise.id}
-                isWarmupRow={false}
-                onComplete={done => onSetsChange(done ? 1 : -1)}
+                onComplete={done => {
+                  setLocalCompleted(prev => Math.max(0, prev + (done ? 1 : -1)))
+                  onSetsChange(done ? 1 : -1)
+                }}
               />
             ))}
 
-            {/* Notatki */}
+            {/* Notatka do ćwiczenia (jedna, zapisuje do first set_log) */}
             <div style={{ marginTop: 10, marginBottom: 8 }}>
-              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: C.gray, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 5, fontFamily: mono }}>Twoje notatki</div>
-              <textarea placeholder="Jak poszło? Uwagi do następnego razu..." value={exerciseNote} onChange={e => setExerciseNote(e.target.value)} rows={2}
-                style={{ width: '100%', padding: '0.625rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.85rem', color: C.navy, resize: 'none', outline: 'none', background: '#FAFBFC', boxSizing: 'border-box' }} />
+              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: C.gray, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 5, fontFamily: mono }}>Notatka do ćwiczenia</div>
+              <textarea
+                placeholder="Jak poszło? Uwagi do następnego razu, co poprawić..."
+                value={exerciseNote}
+                onChange={e => setExerciseNote(e.target.value)}
+                onBlur={async () => {
+                  if (!sessionId || !exercise.id) return
+                  // Zapisz jako athlete_note do pierwszej serii
+                  const { data: firstLog } = await supabase.from('set_logs').select('id')
+                    .eq('workout_session_id', sessionId).eq('block_exercise_id', exercise.id)
+                    .eq('is_warmup', false).order('set_number', { ascending: true }).limit(1).maybeSingle()
+                  if (firstLog?.id) {
+                    await supabase.from('set_logs').update({ athlete_note: exerciseNote.trim() || null }).eq('id', firstLog.id)
+                  }
+                }}
+                rows={2}
+                style={{ width: '100%', padding: '0.625rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.85rem', color: C.navy, resize: 'none', outline: 'none', background: '#FAFBFC', boxSizing: 'border-box' }}
+              />
             </div>
 
             {/* Ból */}
@@ -783,7 +828,7 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
 
 // ─── POST WORKOUT ─────────────────────────────────────────────────────────────
 
-function PostWorkoutSection({ sessionId, athleteId, onFinish }: { sessionId: number; athleteId: number; onFinish: () => void }) {
+function PostWorkoutSection({ sessionId, athleteId, wellnessFilled, onFinish }: { sessionId: number; athleteId: number; wellnessFilled: boolean; onFinish: () => void }) {
   const supabase = createClient()
   const router = useRouter()
   const [rpe, setRpe] = useState(6)
@@ -793,6 +838,7 @@ function PostWorkoutSection({ sessionId, athleteId, onFinish }: { sessionId: num
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [sent, setSent] = useState(false)
+  const [showValidation, setShowValidation] = useState(false)
 
   async function finish(sendReport: boolean) {
     if (!feeling && sendReport) return
@@ -883,10 +929,32 @@ function PostWorkoutSection({ sessionId, athleteId, onFinish }: { sessionId: num
         </div>
       ))}
 
+      {/* Walidacja */}
+      {showValidation && (() => {
+        const missing = []
+        if (!wellnessFilled) missing.push('Wellness przed treningiem')
+        if (!feeling) missing.push('Samopoczucie po treningu')
+        return missing.length > 0 ? (
+          <div style={{ padding: '0.875rem', background: '#FEF2F2', border: `1.5px solid #FCA5A5`, borderRadius: 10, marginBottom: 10 }}>
+            <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.red, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 6 }}>Aby wysłać raport, uzupełnij:</div>
+            {missing.map(m => (
+              <div key={m} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.86rem', color: C.red, marginBottom: 3 }}>
+                <span>✗</span> <span>{m}</span>
+              </div>
+            ))}
+          </div>
+        ) : null
+      })()}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <button onClick={() => finish(true)} disabled={saving || !feeling}
-          style={{ width: '100%', padding: '0.875rem', background: !feeling ? C.grayLight : C.navy, color: !feeling ? C.gray : C.gold, border: 'none', borderRadius: 10, fontFamily: sans, fontWeight: 700, fontSize: '0.9rem', cursor: !feeling ? 'default' : 'pointer' }}>
-          {saving ? 'Wysyłam raport...' : !feeling ? 'Wybierz samopoczucie ↑' : 'Zakończ i wyślij raport do trenera 🏁'}
+        <button
+          onClick={() => {
+            if (!feeling || !wellnessFilled) { setShowValidation(true); return }
+            finish(true)
+          }}
+          disabled={saving}
+          style={{ width: '100%', padding: '0.875rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 10, fontFamily: sans, fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer' }}>
+          {saving ? 'Wysyłam raport...' : 'Zakończ i wyślij raport do trenera 🏁'}
         </button>
         <button onClick={() => finish(false)} disabled={saving}
           style={{ width: '100%', padding: '0.75rem', background: 'transparent', color: C.gray, border: `1.5px solid ${C.grayLight}`, borderRadius: 10, fontFamily: sans, fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer' }}>
@@ -1054,7 +1122,7 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
               <span style={{ marginLeft: 'auto', color: C.gray, fontSize: '0.75rem', transform: postOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
             </button>
             {postOpen && session && (
-              <PostWorkoutSection sessionId={session.id} athleteId={athlete.id} onFinish={() => router.push('/athlete')} />
+              <PostWorkoutSection sessionId={session.id} athleteId={athlete.id} wellnessFilled={wellnessSaved} onFinish={() => router.push('/athlete')} />
             )}
           </div>
         </div>

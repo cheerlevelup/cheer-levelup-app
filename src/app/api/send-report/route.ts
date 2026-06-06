@@ -71,16 +71,18 @@ function buildEmailHtml(data: {
   let setsHtml = ''
   for (const [exId, logs] of Object.entries(logsByExercise)) {
     const name = exerciseNameMap[parseInt(exId)] || `Ćwiczenie #${exId}`
-    const rows = logs
-      .sort((a, b) => a.set_number - b.set_number)
-      .map(l => {
+    const sortedLogs = (logs as any[]).sort((a, b) => a.set_number - b.set_number)
+    // Notatka do ćwiczenia (z pierwszej nierozgrzewkowej serii)
+    const exNote = sortedLogs.find((l: any) => !l.is_warmup && l.athlete_note)?.athlete_note || null
+
+    const rows = sortedLogs.map((l: any) => {
         const wu = l.is_warmup ? ' <span style="color:#888;font-size:11px">(WU)</span>' : ''
         const weight = l.weight ? `<strong>${l.weight} kg</strong>` : '—'
         const reps = l.reps_completed ? `${l.reps_completed} powt.` : '—'
         return `<tr>
           <td style="padding:5px 10px;color:#888;font-size:13px;border-bottom:1px solid #f0ede8">S${l.set_number}${wu}</td>
           <td style="padding:5px 10px;font-size:14px;font-weight:700;border-bottom:1px solid #f0ede8">${weight}</td>
-          <td style="padding:5px 10px;font-size:13px;color:#555;border-bottom:1px solid #f0ede8">${reps}${l.athlete_note ? `<div style="font-size:12px;color:#666;font-style:italic;margin-top:3px">&ldquo;${l.athlete_note}&rdquo;</div>` : ''}</td>
+          <td style="padding:5px 10px;font-size:13px;color:#555;border-bottom:1px solid #f0ede8">${reps}</td>
           ${l.rir != null ? `<td style="padding:5px 10px;font-size:12px;color:#888;border-bottom:1px solid #f0ede8">RIR ${l.rir}</td>` : '<td></td>'}
         </tr>`
       }).join('')
@@ -99,6 +101,7 @@ function buildEmailHtml(data: {
           </thead>
           <tbody>${rows}</tbody>
         </table>
+        ${exNote ? `<div style="margin-top:6px;padding:8px 10px;background:#fffbeb;border-left:3px solid #F5C842;font-size:12px;color:#555;font-style:italic">💬 Notatka zawodniczki: ${exNote}</div>` : ''}
       </div>`
   }
 
