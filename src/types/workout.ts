@@ -20,6 +20,7 @@ export interface WorkoutDay {
   day_name: string
   day_order: number
   coach_intro?: string | null
+  coach_outro?: string | null
   week?: WorkoutWeek
 }
 

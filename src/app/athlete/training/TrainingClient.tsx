@@ -1043,6 +1043,83 @@ function CoachIntroCard({ intro, trainerName }: { intro: string; trainerName: st
   )
 }
 
+// ─── COACH OUTRO CARD ─────────────────────────────────────────────────────────
+
+function CoachOutroCard({ outro, trainerName }: { outro: string; trainerName: string }) {
+  const [expanded, setExpanded] = useState(false)
+  const isLong = outro.length > 220
+  const displayed = isLong && !expanded ? outro.slice(0, 220).trimEnd() + '…' : outro
+
+  return (
+    <div style={{
+      marginBottom: '1rem',
+      borderRadius: 16,
+      overflow: 'hidden',
+      background: `linear-gradient(135deg, #052E16 0%, #14532D 100%)`,
+      border: `1.5px solid #22C55E30`,
+      boxShadow: '0 4px 24px rgba(5,46,22,0.22)',
+    }}>
+      {/* Zielony pasek na górze */}
+      <div style={{ height: 4, background: `linear-gradient(90deg, #22C55E, #86EFAC, #22C55E)` }} />
+
+      <div style={{ padding: '1rem 1.1rem 1.1rem' }}>
+        {/* Nagłówek */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '0.875rem' }}>
+          <div style={{
+            width: 40, height: 40, borderRadius: '50%',
+            background: '#22C55E', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '1.25rem', flexShrink: 0,
+            boxShadow: `0 0 0 3px #052E16, 0 0 0 5px #22C55E40`,
+          }}>
+            🏁
+          </div>
+          <div>
+            <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#86EFAC', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700 }}>
+              Słowo od trenera po treningu
+            </div>
+            <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#fff' }}>
+              {trainerName}
+            </div>
+          </div>
+        </div>
+
+        {/* Treść */}
+        <div style={{
+          background: 'rgba(255,255,255,0.06)',
+          borderRadius: 12,
+          padding: '0.875rem 1rem',
+          borderLeft: `3px solid #22C55E`,
+          position: 'relative',
+        }}>
+          <div style={{
+            position: 'absolute', top: -8, left: 12,
+            fontFamily: 'Georgia, serif', fontSize: '3rem', lineHeight: 1,
+            color: '#22C55E', opacity: 0.3, userSelect: 'none', pointerEvents: 'none',
+          }}>"</div>
+          <p style={{
+            fontFamily: sans, fontSize: '0.92rem', lineHeight: 1.65,
+            color: '#D1FAE5', fontWeight: 500, margin: 0,
+            whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          }}>
+            {displayed}
+          </p>
+          {isLong && (
+            <button
+              onClick={() => setExpanded(e => !e)}
+              style={{
+                marginTop: 8, background: 'none', border: 'none', color: '#86EFAC',
+                fontFamily: sans, fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', padding: 0,
+              }}
+            >
+              {expanded ? '↑ Zwiń' : '↓ Czytaj dalej'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
 export default function TrainingClient({ athlete, trainingView, existingSetLogs, existingWellness }: Props) {
@@ -1193,6 +1270,11 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
               ))}
             </div>
           ))}
+
+          {/* Notatka końcowa trenera */}
+          {(day as any).coach_outro && (
+            <CoachOutroCard outro={(day as any).coach_outro} trainerName={trainerName} />
+          )}
 
           {/* Podsumowanie */}
           <div style={{ background: '#fff', borderRadius: 14, marginTop: '1rem', border: `1.5px solid ${C.grayLight}`, overflow: 'hidden', boxShadow: postOpen ? '0 4px 20px rgba(13,27,42,0.08)' : 'none' }}>

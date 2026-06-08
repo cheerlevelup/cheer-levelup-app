@@ -26,6 +26,7 @@ type Day = {
   day_name: string
   day_order: number
   coach_intro?: string | null
+  coach_outro?: string | null
 }
 
 type ExerciseLibraryItem = {
@@ -707,6 +708,14 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
     setTargetDays(prev => prev.map(day => day.id === dayId ? { ...day, coach_intro: value } : day))
   }
 
+  async function saveCoachOutro(dayId: number, outro: string) {
+    const value = outro.trim() || null
+    const { error } = await supabase.from('workout_days').update({ coach_outro: value }).eq('id', dayId)
+    if (error) { showError(`Nie udało się zapisać notatki końcowej: ${error.message}`); return }
+    setLocalDays(prev => prev.map(day => day.id === dayId ? { ...day, coach_outro: value } : day))
+    setTargetDays(prev => prev.map(day => day.id === dayId ? { ...day, coach_outro: value } : day))
+  }
+
   async function deleteDay(dayId: number) {
     if (!confirm('Usunac ten trening razem z blokami i cwiczeniami?')) return
     // CASCADE na FK usuwa bloki i ćwiczenia automatycznie; sessions dostaną workout_day_id = NULL
@@ -1264,16 +1273,33 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                       <span style={{ fontSize: '1rem' }}>📣</span>
                       <span style={{ fontFamily: mono, fontSize: '0.62rem', color: '#92660A', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>
-                        Przemowa trenera — widoczna jako pierwsza dla zawodniczek
+                        Przemowa przed treningiem — widoczna jako pierwsza dla zawodniczek
                       </span>
                     </div>
                     <textarea
                       value={currentDay.coach_intro || ''}
                       onChange={event => setLocalDays(prev => prev.map(day => day.id === selectedDayId ? { ...day, coach_intro: event.target.value } : day))}
                       onBlur={event => saveCoachIntro(selectedDayId, event.target.value)}
-                      placeholder="Napisz wiadomość do zawodniczek na ten trening — motywacja, wskazówki, na co zwrócić uwagę... Zawodniczki zobaczą to zanim zaczną ćwiczyć."
+                      placeholder="Motywacja, wskazówki, na co zwrócić uwagę... Zawodniczki zobaczą to zanim zaczną ćwiczyć."
                       rows={3}
                       style={{ width: '100%', border: `1.5px solid #F5C84260`, borderRadius: 10, background: C.white, color: C.navy, padding: '0.625rem 0.75rem', fontFamily: sans, fontSize: '0.86rem', resize: 'vertical', outline: 'none', lineHeight: 1.5 }}
+                    />
+                  </div>
+                  {/* Notatka końcowa trenera */}
+                  <div style={{ borderTop: `1.5px solid ${C.grayLight}`, padding: '0.875rem 1rem', background: '#F0FDF4' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                      <span style={{ fontSize: '1rem' }}>🏁</span>
+                      <span style={{ fontFamily: mono, fontSize: '0.62rem', color: '#166534', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>
+                        Słowo od trenera po treningu — widoczna po zakończeniu ćwiczeń
+                      </span>
+                    </div>
+                    <textarea
+                      value={currentDay.coach_outro || ''}
+                      onChange={event => setLocalDays(prev => prev.map(day => day.id === selectedDayId ? { ...day, coach_outro: event.target.value } : day))}
+                      onBlur={event => saveCoachOutro(selectedDayId, event.target.value)}
+                      placeholder="Gratulacje, co teraz, recovery, refleksja po treningu... Zawodniczki zobaczą to na końcu, przed wypełnieniem raportu."
+                      rows={3}
+                      style={{ width: '100%', border: `1.5px solid #22C55E40`, borderRadius: 10, background: C.white, color: C.navy, padding: '0.625rem 0.75rem', fontFamily: sans, fontSize: '0.86rem', resize: 'vertical', outline: 'none', lineHeight: 1.5 }}
                     />
                   </div>
                 </Card>
