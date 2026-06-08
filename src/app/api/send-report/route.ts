@@ -2,6 +2,16 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
+import { createClient as createAdminClient } from '@supabase/supabase-js'
+
+function getAdminClient() {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return null
+  return createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  )
+}
 
 function rpeLabel(rpe: number): string {
   if (rpe <= 3) return 'Lekki'
@@ -298,12 +308,26 @@ export async function POST(req: NextRequest) {
 
     if (!session) return NextResponse.json({ error: 'Sesja nie znaleziona' }, { status: 404 })
 
-    // 2. Pobierz zawodniczkę
+    // 2. Pobierz zawodniczkę (z user_id do pobrania emaila)
     const { data: athlete } = await supabase
       .from('athletes')
-      .select('full_name')
+      .select('full_name, user_id')
       .eq('id', athleteId)
       .single()
+
+    // Pobierz email zawodniczki przez admin API
+    let athleteEmail: string | null = null
+    if (athlete?.user_id) {
+      try {
+        const admin = getAdminClient()
+        if (admin) {
+          const { data: authUser } = await admin.auth.admin.getUserById(athlete.user_id)
+          athleteEmail = authUser?.user?.email || null
+        }
+      } catch (e) {
+        console.warn('Nie udało się pobrać emaila zawodniczki:', e)
+      }
+    }
 
     // 3. Pobierz feedback (właśnie zapisany przez zawodniczkę)
     const { data: feedback } = await supabase
@@ -368,7 +392,9 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         from: 'Cheer LevelUP <onboarding@resend.dev>',
-        to: ['cheerlevelup@gmail.com'],
+        to: athleteEmail && athleteEmail !== 'cheerlevelup@gmail.com'
+          ? ['cheerlevelup@gmail.com', athleteEmail]
+          : ['cheerlevelup@gmail.com'],
         subject: `📋 ${emailData.athleteName} — ${emailData.dayName} (${new Date().toLocaleDateString('pl-PL')})`,
         html,
       }),

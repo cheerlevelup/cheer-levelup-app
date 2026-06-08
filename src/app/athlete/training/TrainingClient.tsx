@@ -826,6 +826,140 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
   )
 }
 
+// ─── REPORT SENT SCREEN ───────────────────────────────────────────────────────
+
+const FEELING_LABELS: Record<string, string> = {
+  swietnie: '🤩 Świetnie', dobrze: '😊 Dobrze',
+  srednie: '😐 Średnio', zmeczona: '😓 Zmęczona', slabo: '😞 Słabo',
+}
+
+function rpeLabel(rpe: number) {
+  if (rpe <= 3) return 'Lekki'
+  if (rpe <= 5) return 'Umiarkowany'
+  if (rpe <= 7) return 'Ciężki'
+  if (rpe <= 9) return 'Bardzo ciężki'
+  return 'Maksymalny'
+}
+
+function rpeColor(rpe: number) {
+  if (rpe <= 4) return '#22C55E'
+  if (rpe <= 6) return '#F5C842'
+  if (rpe <= 8) return '#F97316'
+  return '#EF4444'
+}
+
+function ReportSentScreen({ rpe, feeling, whatWell, pain, notes, onBack }: {
+  rpe: number; feeling: string; whatWell: string; pain: string; notes: string; onBack: () => void
+}) {
+  return (
+    <>
+      <style>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          #print-report, #print-report * { visibility: visible !important; }
+          #print-report { position: fixed; inset: 0; padding: 2rem; background: white; }
+        }
+      `}</style>
+
+      <div style={{ padding: '1.5rem 1rem 2rem', fontFamily: sans }}>
+        {/* Nagłówek sukcesu */}
+        <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+          <div style={{ fontSize: '3rem', marginBottom: 8 }}>✅</div>
+          <div style={{ fontWeight: 800, color: C.navy, fontSize: '1.25rem', marginBottom: 4 }}>
+            Raport wysłany!
+          </div>
+          <div style={{ fontSize: '0.84rem', color: C.gray, lineHeight: 1.5 }}>
+            Raport trafił do Ciebie i do trenera na maila.<br />
+            Sprawdź czy wszystko jest poprawnie zapisane.
+          </div>
+        </div>
+
+        {/* Podgląd raportu do druku */}
+        <div id="print-report" style={{
+          background: C.white, border: `1.5px solid ${C.grayLight}`,
+          borderRadius: 16, overflow: 'hidden', marginBottom: '1.25rem',
+          boxShadow: '0 4px 20px rgba(13,27,42,0.07)',
+        }}>
+          {/* Hero */}
+          <div style={{ background: C.navy, padding: '1.25rem' }}>
+            <div style={{ fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: mono, marginBottom: 4 }}>
+              Raport treningowy
+            </div>
+            <div style={{ fontWeight: 800, fontSize: '1.1rem', color: C.white, marginBottom: '1rem' }}>
+              {new Date().toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 10, padding: '0.875rem' }}>
+                <div style={{ fontSize: '0.6rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: mono, marginBottom: 4 }}>RPE</div>
+                <div style={{ fontSize: '2rem', fontWeight: 900, color: rpeColor(rpe), lineHeight: 1 }}>{rpe}</div>
+                <div style={{ fontSize: '0.72rem', color: C.gray, marginTop: 2 }}>{rpeLabel(rpe)}</div>
+              </div>
+              {feeling && (
+                <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 10, padding: '0.875rem' }}>
+                  <div style={{ fontSize: '0.6rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: mono, marginBottom: 4 }}>Po treningu</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: C.white, lineHeight: 1.3 }}>{FEELING_LABELS[feeling] || feeling}</div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Feedback */}
+          <div style={{ padding: '1rem' }}>
+            {[
+              { label: '✅ Co poszło dobrze', val: whatWell, color: '#22C55E' },
+              { label: '🩹 Ból / dyskomfort', val: pain, color: '#EF4444' },
+              { label: '💬 Dodatkowe uwagi', val: notes, color: C.gray },
+            ].filter(f => f.val).map(f => (
+              <div key={f.label} style={{ marginBottom: '0.875rem', padding: '0.75rem', background: C.offWhite, borderRadius: 10, borderLeft: `3px solid ${f.color}` }}>
+                <div style={{ fontFamily: mono, fontSize: '0.6rem', color: f.color, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 4 }}>
+                  {f.label}
+                </div>
+                <div style={{ fontSize: '0.88rem', color: C.navy, lineHeight: 1.5 }}>{f.val}</div>
+              </div>
+            ))}
+
+            {!whatWell && !pain && !notes && (
+              <div style={{ color: C.gray, fontSize: '0.84rem', textAlign: 'center', padding: '0.5rem' }}>
+                Brak dodatkowych uwag.
+              </div>
+            )}
+
+            <div style={{ marginTop: '0.5rem', padding: '0.75rem', background: '#F0FDF4', borderRadius: 10, border: `1px solid #86EFAC` }}>
+              <div style={{ fontSize: '0.78rem', color: '#166534', fontWeight: 600 }}>
+                📧 Raport wysłany na Twój email i do trenera
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Przyciski */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <button
+            onClick={() => window.print()}
+            style={{
+              width: '100%', padding: '0.875rem', borderRadius: 12, border: `1.5px solid ${C.grayLight}`,
+              background: C.white, color: C.navy, fontFamily: sans, fontWeight: 700, fontSize: '0.9rem',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            }}
+          >
+            🖨️ Drukuj raport
+          </button>
+          <button
+            onClick={onBack}
+            style={{
+              width: '100%', padding: '0.875rem', borderRadius: 12, border: 'none',
+              background: C.navy, color: C.gold, fontFamily: sans, fontWeight: 800, fontSize: '0.9rem',
+              cursor: 'pointer',
+            }}
+          >
+            Wróć do panelu →
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}
+
 // ─── POST WORKOUT ─────────────────────────────────────────────────────────────
 
 function PostWorkoutSection({ sessionId, athleteId, wellnessFilled, onFinish }: { sessionId: number; athleteId: number; wellnessFilled: boolean; onFinish: () => void }) {
@@ -885,11 +1019,14 @@ function PostWorkoutSection({ sessionId, athleteId, wellnessFilled, onFinish }: 
   }
 
   if (sent) return (
-    <div style={{ padding: '1.5rem 1rem', textAlign: 'center', fontFamily: sans }}>
-      <div style={{ fontSize: '2rem', marginBottom: 8 }}>✅</div>
-      <div style={{ fontWeight: 700, color: C.navy, fontSize: '1rem' }}>Trening zapisany!</div>
-      <div style={{ fontSize: '0.82rem', color: C.gray, marginTop: 4 }}>Wracam do panelu...</div>
-    </div>
+    <ReportSentScreen
+      rpe={rpe}
+      feeling={feeling}
+      whatWell={whatWell}
+      pain={pain}
+      notes={notes}
+      onBack={() => router.push('/athlete')}
+    />
   )
 
   return (
