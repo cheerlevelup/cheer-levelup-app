@@ -448,6 +448,13 @@ function WarmupSetRow({ warmup, setNum, existingLog, sessionId, athleteId, block
     }
   }
 
+  // Notatka dla zawodniczki: powtórzenia, ciężar (bez słowa "ref" i zduplikowanego "kg"), treść notatki
+  const noteText = [
+    warmup.reps ? `${warmup.reps} powt.` : null,
+    warmup.weight_kg ? String(warmup.weight_kg).replace(/\s*kg\s*$/i, '') + ' kg' : null,
+    warmup.note || null,
+  ].filter(Boolean).join(' · ')
+
   return (
     <div style={{ padding: '0.6rem 0.875rem', background: done ? '#F0FDF4' : '#FAFBFC', borderRadius: 10, marginBottom: 6, border: `1.5px solid ${done ? '#86EFAC' : C.grayLight}`, fontFamily: sans }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -465,6 +472,11 @@ function WarmupSetRow({ warmup, setNum, existingLog, sessionId, athleteId, block
           {done && <span style={{ color: '#fff', fontSize: '1rem', fontWeight: 800 }}>✓</span>}
         </button>
       </div>
+      {noteText && (
+        <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, marginTop: 4, paddingLeft: 48 }}>
+          {noteText}
+        </div>
+      )}
     </div>
   )
 }
