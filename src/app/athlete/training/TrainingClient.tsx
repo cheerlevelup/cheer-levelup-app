@@ -759,7 +759,7 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
               {(effectiveTempo || effectiveTempoNote) && (
                 <button onClick={e => { e.stopPropagation(); setTempoOpen(true) }}
                   style={{ padding: '2px 8px', background: C.navyLight, borderRadius: 6, border: 'none', cursor: 'pointer', fontFamily: mono, fontWeight: 700, fontSize: '0.68rem', color: C.gold }}>
-                  {effectiveTempo || 'wolno'}
+                  ⏱ {effectiveTempo || 'wolno'}
                 </button>
               )}
               <span style={{ padding: '2px 8px', background: C.grayLight, borderRadius: 6, fontSize: '0.7rem', color: C.gray, fontWeight: 500 }}>
