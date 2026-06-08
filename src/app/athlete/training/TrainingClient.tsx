@@ -448,23 +448,15 @@ function WarmupSetRow({ warmup, setNum, existingLog, sessionId, athleteId, block
     }
   }
 
-  // ref info: reps + weight from plan
-  const refText = [
-    warmup.reps ? `${warmup.reps} powt.` : null,
-    warmup.weight_kg ? `ref. ${warmup.weight_kg} kg` : null,
-    warmup.note || null,
-  ].filter(Boolean).join(' · ')
-
   return (
     <div style={{ padding: '0.6rem 0.875rem', background: done ? '#F0FDF4' : '#FAFBFC', borderRadius: 10, marginBottom: 6, border: `1.5px solid ${done ? '#86EFAC' : C.grayLight}`, fontFamily: sans }}>
-      {/* Wiersz: etykieta + ciężar + przycisk */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ fontFamily: mono, fontSize: '0.7rem', fontWeight: 800, color: C.gray, minWidth: 40 }}>
-          Rozg {setNum > 1 ? setNum : ''}
+          Rozg{setNum > 1 ? ` ${setNum}` : ''}
         </span>
         <div style={{ flex: 1 }}>
           <input
-            inputMode="decimal" placeholder="kg"
+            inputMode="decimal" placeholder=""
             value={weight} onChange={e => setWeight(e.target.value.replace(',', '.'))}
             style={{ width: '100%', padding: '0.4rem 0.5rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.9rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center' }}
           />
@@ -473,12 +465,6 @@ function WarmupSetRow({ warmup, setNum, existingLog, sessionId, athleteId, block
           {done && <span style={{ color: '#fff', fontSize: '1rem', fontWeight: 800 }}>✓</span>}
         </button>
       </div>
-      {/* Ref info pod spodem — małą czcionką, nie nachodzi na input */}
-      {refText && (
-        <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, marginTop: 4, paddingLeft: 48 }}>
-          {refText}
-        </div>
-      )}
     </div>
   )
 }
