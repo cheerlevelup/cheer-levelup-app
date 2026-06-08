@@ -524,8 +524,13 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
   const [weight, setWeight] = useState(existingLog?.weight?.toString() || '')
   const [actualReps, setActualReps] = useState(existingLog?.reps_completed?.toString() || '')
   const [done, setDone] = useState(!!existingLog?.completed)
+  const [saveError, setSaveError] = useState('')
+  const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Cache ID po pierwszym zapisie, żeby uniknąć wyścigu INSERT vs INSERT
+  const savedLogIdRef = React.useRef<number | null>(existingLog?.id ?? null)
 
-  async function saveSet(nextDone = done, currentWeight = weight) {
+  async function saveSet(nextDone: boolean, currentWeight: string) {
+    setSaveError('')
     const payload = {
       workout_session_id: sessionId, block_exercise_id: blockExerciseId,
       athlete_id: athleteId, set_number: setNum,
@@ -533,39 +538,59 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
       reps_completed: actualReps ? parseInt(actualReps) : null,
       is_warmup: false, completed: nextDone,
     }
+
+    // Jeśli mamy już ID z cache — update; w przeciwnym razie szukaj lub twórz nowy
+    if (savedLogIdRef.current) {
+      const { error } = await supabase.from('set_logs').update(payload).eq('id', savedLogIdRef.current)
+      if (error) setSaveError(error.message)
+      return
+    }
+
     const { data: currentLog } = await supabase
       .from('set_logs').select('id')
       .eq('workout_session_id', sessionId).eq('block_exercise_id', blockExerciseId)
       .eq('set_number', setNum).eq('is_warmup', false)
       .order('created_at', { ascending: false }).limit(1).maybeSingle()
 
-    const logId = existingLog?.id || currentLog?.id
-    if (logId) await supabase.from('set_logs').update(payload).eq('id', logId)
-    else await supabase.from('set_logs').insert(payload)
+    const logId = currentLog?.id
+    if (logId) {
+      savedLogIdRef.current = logId
+      const { error } = await supabase.from('set_logs').update(payload).eq('id', logId)
+      if (error) setSaveError(error.message)
+    } else {
+      const { data, error } = await supabase.from('set_logs').insert(payload).select('id').single()
+      if (error) setSaveError(error.message)
+      else if (data?.id) savedLogIdRef.current = data.id
+    }
   }
 
   async function toggle() {
     const newDone = !done
     setDone(newDone)
     onComplete(newDone)
-    await saveSet(newDone)
+    await saveSet(newDone, weight)
   }
 
   function handleWeightChange(val: string) {
     const cleaned = val.replace(',', '.')
     setWeight(cleaned)
     const hasWeight = cleaned.trim() !== ''
+
+    // Natychmiastowa zmiana stanu UI
     if (hasWeight && !done) {
       setDone(true)
       onComplete(true)
-      saveSet(true, cleaned)
     } else if (!hasWeight && done) {
       setDone(false)
       onComplete(false)
-      saveSet(false, cleaned)
-    } else {
-      saveSet(done, cleaned)
     }
+
+    // Debounce 350ms — zapis do DB dopiero po zakończeniu wpisywania
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      const nextDone = hasWeight ? true : (!hasWeight && done ? false : done)
+      saveSet(nextDone, cleaned)
+    }, 350)
   }
 
   // Sprawdź czy reps to długi opis (>12 znaków) — wtedy układ 2-rzędowy
@@ -604,7 +629,7 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
             </div>
             {isAmrap && (
               <input type="number" inputMode="numeric" placeholder="powt." value={actualReps}
-                onChange={e => setActualReps(e.target.value)} onBlur={() => saveSet()}
+                onChange={e => setActualReps(e.target.value)} onBlur={() => saveSet(done, weight)}
                 style={{ width: 60, padding: '0.4rem 0.5rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.9rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center' }} />
             )}
             <button onClick={toggle} style={{ width: 36, height: 36, borderRadius: 8, background: done ? C.green : C.grayLight, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s', flexShrink: 0 }}>
@@ -627,7 +652,7 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
           </div>
           {isAmrap && (
             <input type="number" inputMode="numeric" placeholder="powt." value={actualReps}
-              onChange={e => setActualReps(e.target.value)} onBlur={() => saveSet()}
+              onChange={e => setActualReps(e.target.value)} onBlur={() => saveSet(done, weight)}
               style={{ width: 70, padding: '0.55rem 0.5rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '1rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center', fontWeight: 700 }} />
           )}
           <button onClick={toggle} style={{
@@ -641,6 +666,11 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
               {done ? '✓' : '○'}
             </span>
           </button>
+        </div>
+      )}
+      {saveError && (
+        <div style={{ marginTop: 4, fontSize: '0.65rem', color: C.red, background: '#FEF2F2', borderRadius: 6, padding: '2px 8px' }}>
+          ❌ {saveError}
         </div>
       )}
     </div>
