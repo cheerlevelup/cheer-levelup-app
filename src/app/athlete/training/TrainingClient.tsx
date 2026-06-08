@@ -335,22 +335,53 @@ function TempoModal({ tempo, note, onClose }: { tempo: string; note?: string; on
 
 // ─── VIDEO MODAL ──────────────────────────────────────────────────────────────
 
-function VideoModal({ exerciseName, onClose }: { exerciseName: string; onClose: () => void }) {
+function getYouTubeEmbedUrl(url: string): string | null {
+  try {
+    const u = new URL(url)
+    // youtu.be/ID lub youtube.com/watch?v=ID lub youtube.com/shorts/ID
+    let videoId: string | null = null
+    if (u.hostname === 'youtu.be') videoId = u.pathname.slice(1)
+    else if (u.hostname.includes('youtube.com')) {
+      videoId = u.searchParams.get('v') || u.pathname.split('/shorts/')[1] || null
+    }
+    if (videoId) return `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`
+  } catch {}
+  return null
+}
+
+function VideoModal({ exerciseName, exerciseUrl, onClose }: { exerciseName: string; exerciseUrl?: string | null; onClose: () => void }) {
+  const embedUrl = exerciseUrl ? getYouTubeEmbedUrl(exerciseUrl) : null
+
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(13,27,42,0.75)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }} onClick={onClose}>
       <div style={{ width: '100%', maxWidth: 480, background: '#fff', borderRadius: '20px 20px 0 0', padding: '1.5rem', borderTop: `4px solid ${C.gold}`, fontFamily: sans }} onClick={e => e.stopPropagation()}>
         <div style={{ width: 40, height: 4, background: '#E0E0E0', borderRadius: 2, margin: '0 auto 1.25rem' }} />
         <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: C.navy, marginBottom: '1rem' }}>📹 {exerciseName}</h3>
-        <div style={{ background: C.navy, borderRadius: 14, aspectRatio: '16/9', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', marginBottom: '1rem', gap: 10 }}>
-          <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(245,200,66,0.15)', border: `2px solid ${C.gold}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ fontSize: '1.5rem', marginLeft: 4 }}>▶</span>
+
+        {embedUrl ? (
+          <div style={{ borderRadius: 14, overflow: 'hidden', aspectRatio: '16/9', marginBottom: '1rem' }}>
+            <iframe
+              src={embedUrl}
+              style={{ width: '100%', height: '100%', border: 'none' }}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
           </div>
-          <span style={{ fontSize: '0.82rem', color: C.gray, textAlign: 'center', maxWidth: 200 }}>Film instruktażowy zostanie dodany przez trenera</span>
-        </div>
-        <div style={{ background: C.grayLight, borderRadius: 10, padding: '0.75rem 1rem', marginBottom: '1rem' }}>
-          <div style={{ fontSize: '0.72rem', fontWeight: 700, color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4, fontFamily: mono }}>Wskazówki</div>
-          <div style={{ fontSize: '0.85rem', color: C.navy, lineHeight: 1.5 }}>Brak filmiku? Szukaj: <span style={{ color: C.gold, fontWeight: 600 }}>&quot;{exerciseName} tutorial&quot;</span></div>
-        </div>
+        ) : exerciseUrl ? (
+          <div style={{ marginBottom: '1rem' }}>
+            <a href={exerciseUrl} target="_blank" rel="noopener noreferrer"
+              style={{ display: 'block', background: C.navy, borderRadius: 14, padding: '1.25rem', textAlign: 'center', textDecoration: 'none' }}>
+              <div style={{ fontSize: '1.5rem', marginBottom: 8 }}>🔗</div>
+              <div style={{ color: C.gold, fontWeight: 700, fontSize: '0.9rem' }}>Otwórz film / instrukcję</div>
+              <div style={{ color: C.gray, fontSize: '0.72rem', marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{exerciseUrl}</div>
+            </a>
+          </div>
+        ) : (
+          <div style={{ background: C.navy, borderRadius: 14, aspectRatio: '16/9', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', marginBottom: '1rem', gap: 10 }}>
+            <span style={{ fontSize: '0.82rem', color: C.gray, textAlign: 'center', maxWidth: 200 }}>Brak filmiku. Szukaj: <span style={{ color: C.gold, fontWeight: 600 }}>&quot;{exerciseName} tutorial&quot;</span></span>
+          </div>
+        )}
+
         <button onClick={onClose} style={{ width: '100%', padding: '0.875rem', border: '1.5px solid #E0E0E0', borderRadius: 12, background: 'none', fontSize: '0.9rem', color: C.gray, cursor: 'pointer', fontWeight: 600, fontFamily: sans }}>Zamknij</button>
       </div>
     </div>
@@ -767,7 +798,7 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
   return (
     <>
       {tempoOpen && effectiveTempo && <TempoModal tempo={effectiveTempo} note={effectiveTempoNote || undefined} onClose={() => setTempoOpen(false)} />}
-      {videoOpen && <VideoModal exerciseName={exerciseName} onClose={() => setVideoOpen(false)} />}
+      {videoOpen && <VideoModal exerciseName={exerciseName} exerciseUrl={exercise.exercise_url} onClose={() => setVideoOpen(false)} />}
       {rirOpen && effectiveRir != null && <RirModal rir={effectiveRir} onClose={() => setRirOpen(false)} />}
 
       <div style={{ background: '#fff', borderRadius: 14, border: allDone ? '1.5px solid #86EFAC' : `1.5px solid ${C.grayLight}`, marginBottom: 10, overflow: 'hidden', boxShadow: expanded ? '0 4px 20px rgba(13,27,42,0.08)' : 'none', transition: 'all 0.2s', fontFamily: sans }}>
@@ -802,12 +833,14 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
             </div>
           </div>
 
-          {/* Video icon */}
-          <button onClick={e => { e.stopPropagation(); setVideoOpen(true) }}
-            style={{ width: 32, height: 32, borderRadius: 8, background: C.grayLight, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-            title="Film instruktażowy">
-            <span style={{ fontSize: '0.85rem' }}>▶️</span>
-          </button>
+          {/* Video icon — tylko gdy jest URL */}
+          {exercise.exercise_url && (
+            <button onClick={e => { e.stopPropagation(); setVideoOpen(true) }}
+              style={{ width: 32, height: 32, borderRadius: 8, background: C.navy, border: `1.5px solid ${C.gold}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+              title="Film instruktażowy">
+              <span style={{ fontSize: '0.8rem' }}>▶️</span>
+            </button>
+          )}
 
           {/* Kropki serii */}
           <div style={{ display: 'flex', gap: 3, alignItems: 'center', marginLeft: 2 }}>
