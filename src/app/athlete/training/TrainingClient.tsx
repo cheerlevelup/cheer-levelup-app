@@ -649,6 +649,31 @@ const WELLNESS_FIELD_MAP: Record<string, { key: string; label: string; min: numb
   recovery_score: { key: 'recovery_score',   label: 'Regeneracja',         min: 1,  max: 10,  step: 1,   unit: '/10',  defaultVal: 7 },
 }
 
+// Opisy wartości dla suwaków
+function getWellnessDesc(key: string, val: number, max: number): string {
+  const pct = val / max
+  if (key === 'sleep_hours') {
+    if (val < 5) return 'Bardzo mało — niedobór snu'
+    if (val < 6.5) return 'Poniżej normy'
+    if (val < 8) return 'OK'
+    if (val < 9.5) return 'Dobrze'
+    return 'Bardzo dużo snu'
+  }
+  const isInverse = ['stress', 'muscle_sorness', 'muscle_soreness'].includes(key)
+  if (isInverse) {
+    if (pct <= 0.2) return 'Brak / minimalne'
+    if (pct <= 0.4) return 'Niskie'
+    if (pct <= 0.6) return 'Umiarkowane'
+    if (pct <= 0.8) return 'Wysokie'
+    return 'Bardzo wysokie'
+  }
+  if (pct <= 0.2) return 'Bardzo nisko'
+  if (pct <= 0.4) return 'Nisko'
+  if (pct <= 0.6) return 'Średnio'
+  if (pct <= 0.8) return 'Dobrze'
+  return 'Znakomicie'
+}
+
 // Domyślna lista pól gdy brak konfiguracji planu
 const DEFAULT_PRE_FIELDS = ['sleep_hours', 'sleep_quality', 'energy', 'stress', 'mood', 'muscle_soreness', 'readiness']
 
@@ -698,17 +723,32 @@ function WellnessExpanded({ sessionId, athleteId, existingWellness, preFields, o
 
   return (
     <div style={{ padding: '0 1rem 1rem', fontFamily: sans }}>
-      {fields.map(f => (
-        <div key={f.key} style={{ marginBottom: '0.875rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: C.navy }}>{f.label}</span>
-            <span style={{ fontFamily: mono, fontSize: '0.88rem', fontWeight: 700, color: C.gold }}>{vals[f.key]}{f.unit}</span>
+      {fields.map(f => {
+        const val = vals[f.key] ?? f.defaultVal
+        const pct = (val - f.min) / (f.max - f.min)
+        // Kolory: stres/zakwasy odwrócone (wysoka wartość = zła), reszta normalna
+        const isInverse = ['stress', 'muscle_sorness', 'muscle_soreness'].includes(f.key)
+        const risk = isInverse ? pct : 1 - pct
+        const sliderColor = risk < 0.35 ? C.green : risk < 0.65 ? C.gold : C.red
+        // Krótki opis wg wartości
+        const desc = getWellnessDesc(f.key, val, f.max)
+        return (
+          <div key={f.key} style={{ marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
+              <span style={{ fontSize: '0.84rem', fontWeight: 700, color: C.navy }}>{f.label}</span>
+              <span style={{ fontFamily: mono, fontSize: '0.9rem', fontWeight: 800, color: sliderColor }}>{val}{f.unit}</span>
+            </div>
+            <input type="range" min={f.min} max={f.max} step={f.step} value={val}
+              onChange={e => setVals(v => ({ ...v, [f.key]: parseFloat(e.target.value) }))}
+              style={{ width: '100%', accentColor: sliderColor, height: 6 }} />
+            {desc && (
+              <div style={{ fontSize: '0.7rem', fontWeight: 600, color: sliderColor, marginTop: 2, textAlign: 'center' }}>
+                {desc}
+              </div>
+            )}
           </div>
-          <input type="range" min={f.min} max={f.max} step={f.step} value={vals[f.key]}
-            onChange={e => setVals(v => ({ ...v, [f.key]: parseFloat(e.target.value) }))}
-            style={{ width: '100%', accentColor: C.gold }} />
-        </div>
-      ))}
+        )
+      })}
       <textarea placeholder="Uwagi dla trenera..." value={concerns} onChange={e => setConcerns(e.target.value)} rows={2}
         style={{ width: '100%', padding: '0.625rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.85rem', color: C.navy, resize: 'none', outline: 'none', marginBottom: 8, boxSizing: 'border-box' }} />
       {saveError && (

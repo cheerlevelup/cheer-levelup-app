@@ -121,22 +121,6 @@ export default function PlanWellnessConfig({ planId, onClose }: Props) {
           </p>
         </div>
 
-        {/* Quick presets */}
-        <div style={{ padding: '0.75rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}`, flexShrink: 0 }}>
-          <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>Szybkie ustawienia</div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {QUICK_PRESETS.map(p => (
-              <button key={p.label} onClick={() => applyPreset(p)} style={{
-                borderRadius: 8, border: `1.5px solid ${C.grayLight}`,
-                background: C.offWhite, color: C.navy,
-                padding: '0.35rem 0.7rem', fontFamily: mono, fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer',
-              }}>
-                {p.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
         {/* Tabs */}
         <div style={{ display: 'flex', borderBottom: `1.5px solid ${C.grayLight}`, flexShrink: 0 }}>
           {(['pre', 'post'] as const).map(t => (
