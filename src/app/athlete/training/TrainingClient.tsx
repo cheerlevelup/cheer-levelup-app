@@ -1476,15 +1476,14 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
         {/* ── HEADER ── */}
         <div style={{ background: C.navy, padding: '1rem 1.25rem 0', position: 'sticky', top: 0, zIndex: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.875rem', position: 'relative' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-              <button onClick={() => router.push('/athlete')} style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', border: `2px solid ${C.navyBorder}`, background: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}>
-                <img src="/level up.jpg" alt="Level Up" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+              <button onClick={() => router.push('/athlete')}
+                style={{ width: 28, height: 28, borderRadius: '50%', border: `1.5px solid ${C.navyBorder}`, background: C.navyLight, color: C.gray, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', flexShrink: 0 }}
+                title="Powrót do panelu">
+                ←
               </button>
-              <button
-                onClick={() => router.push('/athlete')}
-                style={{ border: `1.5px solid ${C.navyBorder}`, background: C.navyLight, color: C.white, borderRadius: 10, padding: '0.58rem 0.75rem', fontSize: '0.78rem', fontWeight: 800 }}
-              >
-                Powrot
+              <button onClick={() => router.push('/athlete')} style={{ width: 40, height: 40, borderRadius: '50%', overflow: 'hidden', border: `2px solid ${C.navyBorder}`, background: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}>
+                <img src="/level up.jpg" alt="Level Up" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </button>
             </div>
             <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', textAlign: 'center', width: `min(60vw, ${contentMaxWidth}px)`, pointerEvents: 'none' }}>
