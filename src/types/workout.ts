@@ -56,6 +56,7 @@ export interface WorkoutBlockExercise {
   is_warmup: boolean
   warmup_sets?: WarmupSet[] | null
   coach_comment?: string
+  exercise_url?: string | null
   accessories?: string
   exercise?: Exercise
   override?: AthleteExerciseOverride | null
