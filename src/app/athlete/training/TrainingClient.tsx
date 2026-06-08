@@ -2,7 +2,7 @@
 // src/app/athlete/training/TrainingClient.tsx
 // Nowy design — Sesja 7
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import type { Athlete, TrainingView, SetLog, WorkoutBlockExercise } from '@/types/workout'
@@ -1052,7 +1052,10 @@ function ReportSentScreen({ rpe, feeling, whatWell, pain, notes, onBack }: {
 
 // ─── POST WORKOUT ─────────────────────────────────────────────────────────────
 
-function PostWorkoutSection({ sessionId, athleteId, wellnessFilled, onFinish, inModal }: { sessionId: number; athleteId: number; wellnessFilled: boolean; onFinish: () => void; inModal?: boolean }) {
+function PostWorkoutSection({ sessionId, athleteId, wellnessFilled, onFinish, inModal, sendRef }: {
+  sessionId: number; athleteId: number; wellnessFilled: boolean; onFinish: () => void
+  inModal?: boolean; sendRef?: React.MutableRefObject<(() => void) | null>
+}) {
   const supabase = createClient()
   const router = useRouter()
   const [rpe, setRpe] = useState(6)
@@ -1063,6 +1066,16 @@ function PostWorkoutSection({ sessionId, athleteId, wellnessFilled, onFinish, in
   const [saving, setSaving] = useState(false)
   const [sent, setSent] = useState(false)
   const [showValidation, setShowValidation] = useState(false)
+
+  // Udostępnij funkcję wysyłki dla FinishModal (przez ref)
+  React.useEffect(() => {
+    if (sendRef) {
+      sendRef.current = () => {
+        if (!feeling || !wellnessFilled) { setShowValidation(true); return }
+        finish(true)
+      }
+    }
+  })
 
   async function finish(sendReport: boolean) {
     if (!feeling && sendReport) return
@@ -1163,33 +1176,6 @@ function PostWorkoutSection({ sessionId, athleteId, wellnessFilled, onFinish, in
         ) : null
       })()}
 
-      {/* Przyciski na dole modala */}
-      <div style={{
-        position: inModal ? 'sticky' : 'static',
-        bottom: 0,
-        background: C.white,
-        padding: inModal ? '1rem' : '0',
-        marginTop: inModal ? 0 : '0.5rem',
-        borderTop: inModal ? `1.5px solid ${C.grayLight}` : 'none',
-        display: 'flex', flexDirection: 'column', gap: 8,
-      }}>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            onClick={() => window.print()}
-            style={{ flex: 1, padding: '0.875rem 0.5rem', background: C.offWhite, color: C.navy, border: `1.5px solid ${C.grayLight}`, borderRadius: 12, fontFamily: sans, fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer' }}>
-            🖨️ Drukuj
-          </button>
-          <button
-            onClick={() => {
-              if (!feeling || !wellnessFilled) { setShowValidation(true); return }
-              finish(true)
-            }}
-            disabled={saving}
-            style={{ flex: 2, padding: '0.875rem', background: saving ? C.grayLight : C.navy, color: saving ? C.gray : C.gold, border: 'none', borderRadius: 12, fontFamily: sans, fontWeight: 800, fontSize: '0.88rem', cursor: 'pointer' }}>
-            {saving ? 'Wysyłam...' : '✅ Wyślij raport do trenera'}
-          </button>
-        </div>
-      </div>
     </div>
   )
 }
@@ -1348,13 +1334,15 @@ function FinishModal({ sessionId, athleteId, wellnessFilled, doneSets, totalSets
   doneSets: number; totalSets: number
   onClose: () => void; onFinish: () => void
 }) {
+  const sendRef = React.useRef<(() => void) | null>(null)
+
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 100,
       background: C.offWhite, fontFamily: sans,
-      display: 'flex', flexDirection: 'column', overflowY: 'auto',
+      display: 'flex', flexDirection: 'column',
     }}>
-      {/* Nagłówek modala */}
+      {/* Nagłówek */}
       <div style={{ background: C.navy, padding: '1rem 1.25rem', flexShrink: 0 }}>
         <div style={{ maxWidth: 560, margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
@@ -1366,15 +1354,12 @@ function FinishModal({ sessionId, athleteId, wellnessFilled, doneSets, totalSets
               Zakończenie
             </div>
           </div>
-
-          {/* Baner ostrzegawczy */}
           <div style={{ background: 'rgba(245,200,66,0.12)', border: `1.5px solid ${C.gold}`, borderRadius: 12, padding: '0.875rem 1rem' }}>
             <div style={{ fontWeight: 800, fontSize: '1rem', color: C.gold, marginBottom: 4 }}>
               ⚠️ Sprawdź czy wszystko się zgadza
             </div>
             <div style={{ fontSize: '0.82rem', color: '#C8B96A', lineHeight: 1.5 }}>
-              Upewnij się że serie, ciężary i notatki są poprawne zanim wyślesz raport.
-              Po wysłaniu nie można edytować treningu.
+              Upewnij się że serie, ciężary i notatki są poprawne. Po wysłaniu nie można edytować treningu.
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: '0.75rem' }}>
               <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 8, padding: '0.4rem 0.75rem', fontFamily: mono, fontSize: '0.72rem', color: doneSets >= totalSets ? C.green : C.gold, fontWeight: 700 }}>
@@ -1388,9 +1373,9 @@ function FinishModal({ sessionId, athleteId, wellnessFilled, doneSets, totalSets
         </div>
       </div>
 
-      {/* Treść — formularz podsumowania */}
+      {/* Formularz — scrollowalny */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
-        <div style={{ maxWidth: 560, margin: '0 auto' }}>
+        <div style={{ maxWidth: 560, margin: '0 auto', paddingBottom: '1rem' }}>
           {sessionId > 0 && (
             <PostWorkoutSection
               sessionId={sessionId}
@@ -1398,8 +1383,25 @@ function FinishModal({ sessionId, athleteId, wellnessFilled, doneSets, totalSets
               wellnessFilled={wellnessFilled}
               onFinish={onFinish}
               inModal
+              sendRef={sendRef}
             />
           )}
+        </div>
+      </div>
+
+      {/* Przyciski — na samym dole, zawsze widoczne */}
+      <div style={{ flexShrink: 0, background: C.white, borderTop: `1.5px solid ${C.grayLight}`, padding: '0.875rem 1rem' }}>
+        <div style={{ maxWidth: 560, margin: '0 auto', display: 'flex', gap: 8 }}>
+          <button
+            onClick={() => window.print()}
+            style={{ flex: 1, padding: '0.875rem 0.5rem', background: C.offWhite, color: C.navy, border: `1.5px solid ${C.grayLight}`, borderRadius: 12, fontFamily: sans, fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer' }}>
+            🖨️ Drukuj
+          </button>
+          <button
+            onClick={() => sendRef.current?.()}
+            style={{ flex: 2, padding: '0.875rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 12, fontFamily: sans, fontWeight: 800, fontSize: '0.88rem', cursor: 'pointer' }}>
+            ✅ Wyślij raport do trenera
+          </button>
         </div>
       </div>
     </div>
