@@ -25,6 +25,7 @@ type Day = {
   week_id: number
   day_name: string
   day_order: number
+  coach_intro?: string | null
 }
 
 type ExerciseLibraryItem = {
@@ -698,6 +699,14 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
     setTargetDays(prev => prev.map(day => day.id === dayId ? { ...day, day_name: nextName } : day))
   }
 
+  async function saveCoachIntro(dayId: number, intro: string) {
+    const value = intro.trim() || null
+    const { error } = await supabase.from('workout_days').update({ coach_intro: value }).eq('id', dayId)
+    if (error) { showError(`Nie udało się zapisać notatki wstępnej: ${error.message}`); return }
+    setLocalDays(prev => prev.map(day => day.id === dayId ? { ...day, coach_intro: value } : day))
+    setTargetDays(prev => prev.map(day => day.id === dayId ? { ...day, coach_intro: value } : day))
+  }
+
   async function deleteDay(dayId: number) {
     if (!confirm('Usunac ten trening razem z blokami i cwiczeniami?')) return
     // CASCADE na FK usuwa bloki i ćwiczenia automatycznie; sessions dostaną workout_day_id = NULL
@@ -1249,6 +1258,23 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
                       <button onClick={() => setMovingItem({ type: 'day', day: currentDay })} title="Przenieś trening" style={iconBtn()}>↕</button>
                       <button onClick={() => deleteDay(selectedDayId)} title="Usuń trening" style={iconBtn('#FEF2F2', C.red)}>🗑</button>
                     </div>
+                  </div>
+                  {/* Notatka wstępna trenera */}
+                  <div style={{ borderTop: `1.5px solid ${C.grayLight}`, padding: '0.875rem 1rem', background: '#FFFBEC' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                      <span style={{ fontSize: '1rem' }}>📣</span>
+                      <span style={{ fontFamily: mono, fontSize: '0.62rem', color: '#92660A', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>
+                        Przemowa trenera — widoczna jako pierwsza dla zawodniczek
+                      </span>
+                    </div>
+                    <textarea
+                      value={currentDay.coach_intro || ''}
+                      onChange={event => setLocalDays(prev => prev.map(day => day.id === selectedDayId ? { ...day, coach_intro: event.target.value } : day))}
+                      onBlur={event => saveCoachIntro(selectedDayId, event.target.value)}
+                      placeholder="Napisz wiadomość do zawodniczek na ten trening — motywacja, wskazówki, na co zwrócić uwagę... Zawodniczki zobaczą to zanim zaczną ćwiczyć."
+                      rows={3}
+                      style={{ width: '100%', border: `1.5px solid #F5C84260`, borderRadius: 10, background: C.white, color: C.navy, padding: '0.625rem 0.75rem', fontFamily: sans, fontSize: '0.86rem', resize: 'vertical', outline: 'none', lineHeight: 1.5 }}
+                    />
                   </div>
                 </Card>
 

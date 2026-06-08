@@ -965,6 +965,84 @@ function PostWorkoutSection({ sessionId, athleteId, wellnessFilled, onFinish }: 
   )
 }
 
+// ─── COACH INTRO CARD ─────────────────────────────────────────────────────────
+
+function CoachIntroCard({ intro, trainerName }: { intro: string; trainerName: string }) {
+  const [expanded, setExpanded] = useState(false)
+  const isLong = intro.length > 220
+  const displayed = isLong && !expanded ? intro.slice(0, 220).trimEnd() + '…' : intro
+
+  return (
+    <div style={{
+      marginBottom: '1rem',
+      borderRadius: 16,
+      overflow: 'hidden',
+      background: `linear-gradient(135deg, ${C.navy} 0%, #1A2E45 100%)`,
+      border: `1.5px solid #F5C84230`,
+      boxShadow: '0 4px 24px rgba(13,27,42,0.18)',
+    }}>
+      {/* Złoty pasek na górze */}
+      <div style={{ height: 4, background: `linear-gradient(90deg, ${C.gold}, #FFE082, ${C.gold})` }} />
+
+      <div style={{ padding: '1rem 1.1rem 1.1rem' }}>
+        {/* Nagłówek */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '0.875rem' }}>
+          <div style={{
+            width: 40, height: 40, borderRadius: '50%',
+            background: C.gold, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '1.25rem', flexShrink: 0,
+            boxShadow: `0 0 0 3px ${C.navy}, 0 0 0 5px #F5C84250`,
+          }}>
+            📣
+          </div>
+          <div>
+            <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700 }}>
+              Wiadomość od trenera
+            </div>
+            <div style={{ fontWeight: 800, fontSize: '0.92rem', color: C.white }}>
+              {trainerName}
+            </div>
+          </div>
+        </div>
+
+        {/* Treść */}
+        <div style={{
+          background: 'rgba(255,255,255,0.06)',
+          borderRadius: 12,
+          padding: '0.875rem 1rem',
+          borderLeft: `3px solid ${C.gold}`,
+          position: 'relative',
+        }}>
+          {/* Cudzysłów dekoracyjny */}
+          <div style={{
+            position: 'absolute', top: -8, left: 12,
+            fontFamily: 'Georgia, serif', fontSize: '3rem', lineHeight: 1,
+            color: C.gold, opacity: 0.3, userSelect: 'none', pointerEvents: 'none',
+          }}>"</div>
+          <p style={{
+            fontFamily: sans, fontSize: '0.92rem', lineHeight: 1.65,
+            color: '#E8F0F8', fontWeight: 500, margin: 0,
+            whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          }}>
+            {displayed}
+          </p>
+          {isLong && (
+            <button
+              onClick={() => setExpanded(e => !e)}
+              style={{
+                marginTop: 8, background: 'none', border: 'none', color: C.gold,
+                fontFamily: sans, fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', padding: 0,
+              }}
+            >
+              {expanded ? '↑ Zwiń' : '↓ Czytaj dalej'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
 export default function TrainingClient({ athlete, trainingView, existingSetLogs, existingWellness }: Props) {
@@ -1072,6 +1150,11 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
         {/* ── CONTENT ── */}
         <div style={{ padding: '1rem 1rem 10rem' }}>
           <div style={{ maxWidth: contentMaxWidth, margin: '0 auto' }}>
+
+          {/* Przemowa trenera */}
+          {(day as any).coach_intro && (
+            <CoachIntroCard intro={(day as any).coach_intro} trainerName={trainerName} />
+          )}
 
           {/* Wellness */}
           <div style={{ background: '#fff', borderRadius: 14, marginBottom: '1rem', border: `1.5px solid ${C.grayLight}`, overflow: 'hidden', boxShadow: wellnessOpen ? '0 4px 20px rgba(13,27,42,0.08)' : 'none' }}>
