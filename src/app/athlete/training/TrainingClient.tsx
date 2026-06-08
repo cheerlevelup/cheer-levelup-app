@@ -521,26 +521,81 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
     await saveSet(newDone)
   }
 
+  // Sprawdź czy reps to długi opis (>12 znaków) — wtedy układ 2-rzędowy
+  const repsStr = String(reps || '—')
+  const isLongReps = repsStr.length > 12
+
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.65rem 0.875rem', background: done ? '#F0FDF4' : '#FAFBFC', borderRadius: 10, marginBottom: 6, border: `1.5px solid ${done ? '#86EFAC' : C.grayLight}`, transition: 'all 0.2s', fontFamily: sans }}>
-      <span style={{ fontWeight: 800, fontSize: '0.88rem', color: done ? C.green : C.gold, minWidth: 28, fontFamily: mono }}>
-        S{setNum}
-      </span>
-      <span style={{ fontWeight: 700, fontSize: '0.95rem', color: C.navy, minWidth: 36 }}>{reps}</span>
-      <div style={{ flex: 1 }}>
-        <input inputMode="decimal" placeholder="kg" value={weight} onChange={e => setWeight(e.target.value.replace(',', '.'))} onBlur={() => saveSet()}
-          style={{ width: '100%', padding: '0.4rem 0.5rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.9rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center' }} />
-        {prevWeight && !weight && (
-          <div style={{ fontSize: '0.62rem', color: C.gray, textAlign: 'center', marginTop: 2 }}>poprzednio: {prevWeight} kg</div>
+    <div style={{
+      padding: '0.625rem 0.875rem',
+      background: done ? '#F0FDF4' : '#FAFBFC',
+      borderRadius: 10, marginBottom: 6,
+      border: `1.5px solid ${done ? '#86EFAC' : C.grayLight}`,
+      transition: 'all 0.2s', fontFamily: sans,
+    }}>
+      {/* Górny rząd: numer serii + opis powtórzeń */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: isLongReps ? 8 : 0 }}>
+        <span style={{ fontWeight: 800, fontSize: '0.82rem', color: done ? C.green : C.gold, minWidth: 24, fontFamily: mono, paddingTop: 1 }}>
+          S{setNum}
+        </span>
+        <span style={{
+          fontWeight: isLongReps ? 600 : 700,
+          fontSize: isLongReps ? '0.82rem' : '0.95rem',
+          color: C.navy,
+          flex: 1,
+          lineHeight: 1.4,
+        }}>
+          {repsStr}
+        </span>
+        {/* Na krótkich repsach — inputy i przycisk w tym samym rzędzie */}
+        {!isLongReps && (
+          <>
+            <div style={{ width: 72 }}>
+              <input inputMode="decimal" placeholder="kg" value={weight}
+                onChange={e => setWeight(e.target.value.replace(',', '.'))} onBlur={() => saveSet()}
+                style={{ width: '100%', padding: '0.4rem 0.5rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.9rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center' }} />
+            </div>
+            {isAmrap && (
+              <input type="number" inputMode="numeric" placeholder="powt." value={actualReps}
+                onChange={e => setActualReps(e.target.value)} onBlur={() => saveSet()}
+                style={{ width: 60, padding: '0.4rem 0.5rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.9rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center' }} />
+            )}
+            <button onClick={toggle} style={{ width: 36, height: 36, borderRadius: 8, background: done ? C.green : C.grayLight, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s', flexShrink: 0 }}>
+              {done && <span style={{ color: '#fff', fontSize: '1rem', fontWeight: 800 }}>✓</span>}
+            </button>
+          </>
         )}
       </div>
-      {isAmrap && (
-        <input type="number" inputMode="numeric" placeholder="powt." value={actualReps} onChange={e => setActualReps(e.target.value)} onBlur={() => saveSet()}
-          style={{ width: 60, padding: '0.4rem 0.5rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.9rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center' }} />
+
+      {/* Dolny rząd: inputy na pełną szerokość (tylko przy długim opisie) */}
+      {isLongReps && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ flex: 1 }}>
+            <input inputMode="decimal" placeholder="wpisz ciężar (kg)" value={weight}
+              onChange={e => setWeight(e.target.value.replace(',', '.'))} onBlur={() => saveSet()}
+              style={{ width: '100%', padding: '0.55rem 0.75rem', border: `1.5px solid ${done ? '#86EFAC' : '#E0E8F0'}`, borderRadius: 8, fontFamily: sans, fontSize: '1rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center', fontWeight: 700 }} />
+            {prevWeight && !weight && (
+              <div style={{ fontSize: '0.6rem', color: C.gray, textAlign: 'center', marginTop: 2 }}>poprzednio: {prevWeight} kg</div>
+            )}
+          </div>
+          {isAmrap && (
+            <input type="number" inputMode="numeric" placeholder="powt." value={actualReps}
+              onChange={e => setActualReps(e.target.value)} onBlur={() => saveSet()}
+              style={{ width: 70, padding: '0.55rem 0.5rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '1rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center', fontWeight: 700 }} />
+          )}
+          <button onClick={toggle} style={{
+            width: 48, height: 44, borderRadius: 10,
+            background: done ? C.green : C.navy,
+            border: 'none', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'background 0.15s', flexShrink: 0,
+          }}>
+            <span style={{ color: done ? '#fff' : C.gold, fontSize: '1.1rem', fontWeight: 800 }}>
+              {done ? '✓' : '○'}
+            </span>
+          </button>
+        </div>
       )}
-      <button onClick={toggle} style={{ width: 36, height: 36, borderRadius: 8, background: done ? C.green : C.grayLight, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s', flexShrink: 0 }}>
-        {done && <span style={{ color: '#fff', fontSize: '1rem', fontWeight: 800 }}>✓</span>}
-      </button>
     </div>
   )
 }
