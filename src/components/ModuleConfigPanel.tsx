@@ -185,7 +185,7 @@ export default function ModuleConfigPanel({ groupId, athleteId, module, groupCon
         <div style={{ padding: '0.875rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div>
             <div style={{ fontWeight: 700, fontSize: '0.9rem', color: C.navy }}>
-              {enabled ? `✅ ${isDiet ? 'Dieta' : 'Dzienny wellness'} włączone` : `🚫 ${isDiet ? 'Dieta' : 'Dzienny wellness'} wyłączone`}
+              {enabled ? `✅ ${isDiet ? 'Dieta' : 'Monitoring wellness'} włączone` : `🚫 ${isDiet ? 'Dieta' : 'Monitoring wellness'} wyłączone`}
             </div>
             <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, marginTop: 2 }}>
               {enabled ? 'Zawodniczka widzi i uzupełnia formularz' : 'Arkusz ukryty — zawodniczka nie ma dostępu'}

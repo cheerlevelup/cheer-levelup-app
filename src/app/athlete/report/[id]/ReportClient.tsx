@@ -250,7 +250,7 @@ export default function ReportClient({ session, athlete, setLogs, wellness, pain
 
           {/* ── WELLNESS ── */}
           {wellness && (
-            <Section title="🩺 Wellness przed treningiem">
+            <Section title="🩺 Gotowość do treningu">
               <div style={{ background: C.white, borderRadius: 12, border: `1.5px solid ${C.grayLight}`, overflow: 'hidden' }}>
                 {[
                   ['🌙 Sen', wellness.sleep_hours != null ? `${wellness.sleep_hours} h` : null],

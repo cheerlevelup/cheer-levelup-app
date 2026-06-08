@@ -869,7 +869,7 @@ export default function WellnessClient({ athlete, existingWellness, dateIso, bac
           <div style={{ maxWidth: 620, margin: '0 auto', display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 12, alignItems: 'center', marginBottom: '0.85rem' }}>
             <button onClick={() => router.push(back)} style={{ border: `1.5px solid ${C.grayLight}`, background: C.white, color: C.navy, borderRadius: 10, padding: '0.65rem 0.8rem', fontWeight: 800 }}>{backTo ? '← Historia' : 'Powrót'}</button>
             <div style={{ textAlign: 'center' }}>
-              <div style={{ color: C.navy, fontWeight: 900, fontSize: '1.12rem' }}>Dzienny wellness</div>
+              <div style={{ color: C.navy, fontWeight: 900, fontSize: '1.12rem' }}>Monitoring wellness</div>
               <div style={{ color: C.gray, fontSize: '0.74rem', fontWeight: 700, marginTop: 2 }}>{formatLongDate(dateIso)}</div>
             </div>
             <div style={{ width: 48, height: 48, borderRadius: 13, background: saved ? C.green : C.gold, color: saved ? C.white : C.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: mono, fontWeight: 900 }}>{progress}/6</div>

@@ -569,7 +569,7 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
           {/* ── WELLNESS PRZED TRENINGIEM ── */}
           <Card>
             <SectionHeader>
-              🩺 Wellness przed treningiem
+              🩺 Gotowość do treningu
               <button onClick={() => router.push(wellnessUrl)}
                 style={{ marginLeft: 'auto', padding: '2px 10px', background: C.navyLight, color: C.gold, border: 'none', borderRadius: 6, fontFamily: mono, fontSize: '0.58rem', fontWeight: 700, cursor: 'pointer' }}>
                 {wellness ? '✏️ edytuj' : '+ uzupełnij'}

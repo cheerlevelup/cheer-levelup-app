@@ -197,7 +197,7 @@ function buildEmailHtml(data: {
 
     wellnessHtml = `
       <div style="background:#f9f8f5;border-radius:8px;padding:16px;margin-bottom:24px">
-        <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:12px;font-weight:600">🩺 Wellness przed treningiem</div>
+        <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:12px;font-weight:600">🩺 Gotowość do treningu</div>
         <table style="width:100%;border-collapse:collapse">${wRowsHtml}</table>
         ${actHtml}${painDHtml}${suppHtml}${concernsHtml}
       </div>`

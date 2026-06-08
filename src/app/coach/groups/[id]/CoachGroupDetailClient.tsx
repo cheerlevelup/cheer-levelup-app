@@ -312,7 +312,7 @@ function SessionReportModal({ session, athleteId, athleteName, dayName, onClose 
               {/* ── 1. WELLNESS PRZED TRENINGIEM ── */}
               <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 12, overflow: 'hidden' }}>
                 <div style={{ padding: '0.65rem 1rem', background: '#0D2D1A', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontFamily: mono, fontSize: '0.62rem', color: '#86EFAC', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>🩺 Wellness przed treningiem</span>
+                  <span style={{ fontFamily: mono, fontSize: '0.62rem', color: '#86EFAC', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>🩺 Gotowość do treningu</span>
                   {!wellness && <span style={{ fontFamily: mono, fontSize: '0.58rem', color: '#4ADE80', fontStyle: 'italic' }}>brak wpisu na ten dzień</span>}
                 </div>
                 <div style={{ padding: '0.75rem 1rem' }}>

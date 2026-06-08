@@ -1149,7 +1149,7 @@ function PostWorkoutSection({ sessionId, athleteId, wellnessFilled, onFinish, in
       {/* Walidacja */}
       {showValidation && (() => {
         const missing = []
-        if (!wellnessFilled) missing.push('Wellness przed treningiem')
+        if (!wellnessFilled) missing.push('Gotowość do treningu')
         if (!feeling) missing.push('Samopoczucie po treningu')
         return missing.length > 0 ? (
           <div style={{ padding: '0.875rem', background: '#FEF2F2', border: `1.5px solid #FCA5A5`, borderRadius: 10, marginBottom: 10 }}>
@@ -1524,7 +1524,7 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
             <button onClick={() => setWellnessOpen(!wellnessOpen)} style={{ width: '100%', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer', fontFamily: sans }}>
               <span style={{ fontSize: '1.2rem' }}>☀️</span>
               <div style={{ textAlign: 'left' }}>
-                <div style={{ fontWeight: 700, fontSize: '0.9rem', color: C.navy }}>Wellness przed treningiem</div>
+                <div style={{ fontWeight: 700, fontSize: '0.9rem', color: C.navy }}>Gotowość do treningu</div>
                 <div style={{ fontSize: '0.75rem', color: C.gray }}>{wellnessSaved ? '✓ Zapisano' : 'Jak się dziś czujesz?'}</div>
               </div>
               <span style={{ marginLeft: 'auto', color: C.gray, fontSize: '0.75rem', transform: wellnessOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
