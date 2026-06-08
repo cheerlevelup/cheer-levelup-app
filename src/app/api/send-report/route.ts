@@ -329,16 +329,18 @@ export async function POST(req: NextRequest) {
 
     if (!session) return NextResponse.json({ error: 'Sesja nie znaleziona' }, { status: 404 })
 
-    // 2. Pobierz zawodniczkę (z user_id do pobrania emaila)
+    // 2. Pobierz zawodniczkę
     const { data: athlete } = await supabase
       .from('athletes')
       .select('full_name, user_id')
       .eq('id', athleteId)
       .single()
 
-    // Pobierz email zawodniczki przez admin API
-    let athleteEmail: string | null = null
-    if (athlete?.user_id) {
+    // Email zawodniczki: najpierw z zalogowanej sesji (najbardziej niezawodne),
+    // fallback do admin API jeśli dostępne
+    let athleteEmail: string | null = user.email || null
+
+    if (!athleteEmail && athlete?.user_id) {
       try {
         const admin = getAdminClient()
         if (admin) {
@@ -409,7 +411,7 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'Cheer LevelUP <onboarding@resend.dev>',
+        from: 'Cheer LevelUP <noreply@cheerlevelup.pl>',
         to: athleteEmail && athleteEmail !== 'cheerlevelup@gmail.com'
           ? ['cheerlevelup@gmail.com', athleteEmail]
           : ['cheerlevelup@gmail.com'],

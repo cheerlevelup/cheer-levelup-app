@@ -1832,11 +1832,19 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
       completed: true,
       date_completed: new Date().toISOString(),
     }).eq('id', session.id)
-    await fetch('/api/send-report', {
+
+    const res = await fetch('/api/send-report', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionId: session.id, athleteId: athlete.id }),
-    }).catch(() => {})
+    }).catch(e => { console.error('send-report fetch error:', e); return null })
+
+    if (res && !res.ok) {
+      const err = await res.json().catch(() => ({}))
+      console.error('send-report error:', err)
+      // Mimo błędu wysyłki — przechodzimy do raportu, sesja jest oznaczona jako zakończona
+    }
+
     router.push(`/athlete/report/${session.id}`)
   }
 
