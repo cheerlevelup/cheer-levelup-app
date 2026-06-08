@@ -124,7 +124,7 @@ export default function PlanWellnessConfig({ planId, onClose }: Props) {
         <div style={{ background: C.navy, padding: '1rem 1.25rem', flexShrink: 0 }}>
           <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Konfiguracja planu</div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 style={{ color: C.white, fontWeight: 800, fontSize: '1.1rem' }}>Parametry wellness</h2>
+            <h2 style={{ color: C.white, fontWeight: 800, fontSize: '1.1rem' }}>🩺 Gotowość do treningu — wybierz pola</h2>
             <button onClick={onClose} style={{ border: 'none', background: 'transparent', color: C.gray, fontSize: '1.2rem', cursor: 'pointer', lineHeight: 1 }}>✕</button>
           </div>
           <p style={{ color: C.gray, fontSize: '0.78rem', marginTop: 4 }}>

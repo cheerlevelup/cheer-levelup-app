@@ -66,7 +66,7 @@ export default async function TrainingPage({ searchParams }: Props) {
   const { data: wellnessConfig } = planId
     ? await supabase
         .from('plan_wellness_config')
-        .select('pre, post')
+        .select('pre_params, post_params')
         .eq('plan_id', planId)
         .maybeSingle()
     : { data: null }
@@ -77,7 +77,7 @@ export default async function TrainingPage({ searchParams }: Props) {
       trainingView={{ ...trainingView, session }}
       existingSetLogs={existingSetLogs || []}
       existingWellness={wellness || null}
-      wellnessPreFields={wellnessConfig?.pre || null}
+      wellnessPreFields={(wellnessConfig as any)?.pre_params || null}
     />
   )
 }
