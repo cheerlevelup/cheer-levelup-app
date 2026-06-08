@@ -181,8 +181,8 @@ function MissingOrDoneSetTile({ label, weight, reps, missing, done, isSaved, isA
 }
 
 // ─── EDYTOWALNY PANEL WELLNESS ────────────────────────────────────────────────
-function WellnessEditPanel({ wellness, athleteId, sessionDate, onSaved }: {
-  wellness: any; athleteId: number; sessionDate: string; onSaved: (w: any) => void
+function WellnessEditPanel({ wellness, athleteId, sessionDate, sessionId, onSaved }: {
+  wellness: any; athleteId: number; sessionDate: string; sessionId?: number; onSaved: (w: any) => void
 }) {
   const supabase = createClient()
 
@@ -211,6 +211,7 @@ function WellnessEditPanel({ wellness, athleteId, sessionDate, onSaved }: {
     const payload = {
       athlete_id: athleteId,
       date: sessionDate,
+      ...(sessionId ? { workout_session_id: sessionId } : {}),
       sleep_hours: sleepHours,
       sleep_quality: sleepQ,
       readiness,
@@ -421,7 +422,9 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
     ? new Date(session.date_completed).toISOString().split('T')[0]
     : new Date().toISOString().split('T')[0]
 
-  const wellnessUrl = `/athlete/wellness?date=${sessionDate}&backTo=/athlete/history/${session.id}`
+  // Inline edycja gotowości do treningu (nie przekierowuje do pełnej strony wellness)
+  const [editingWellness, setEditingWellness] = useState(false)
+  const [localWellness, setLocalWellness] = useState(wellness)
 
   // Edycja serii
   const [editingLogId, setEditingLogId] = useState<number | null>(null)
@@ -570,13 +573,25 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
           <Card>
             <SectionHeader>
               🩺 Gotowość do treningu
-              <button onClick={() => router.push(wellnessUrl)}
-                style={{ marginLeft: 'auto', padding: '2px 10px', background: C.navyLight, color: C.gold, border: 'none', borderRadius: 6, fontFamily: mono, fontSize: '0.58rem', fontWeight: 700, cursor: 'pointer' }}>
-                {wellness ? '✏️ edytuj' : '+ uzupełnij'}
-              </button>
+              {!editingWellness && (
+                <button onClick={() => setEditingWellness(true)}
+                  style={{ marginLeft: 'auto', padding: '2px 10px', background: C.navyLight, color: C.gold, border: 'none', borderRadius: 6, fontFamily: mono, fontSize: '0.58rem', fontWeight: 700, cursor: 'pointer' }}>
+                  {localWellness ? '✏️ edytuj' : '+ uzupełnij'}
+                </button>
+              )}
             </SectionHeader>
 
-            {wellness ? (
+            {editingWellness && (
+              <WellnessEditPanel
+                wellness={localWellness}
+                athleteId={athlete.id}
+                sessionDate={sessionDate}
+                sessionId={session.id}
+                onSaved={saved => { setLocalWellness(saved); setEditingWellness(false) }}
+              />
+            )}
+
+            {!editingWellness && (localWellness ? (
               <div style={{ padding: '1rem 1.25rem' }}>
                 {wellness.sleep_hours != null && (
                   <div style={{ marginBottom: '0.75rem' }}>
@@ -653,14 +668,14 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
               <div style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: 12 }}>
                 <span style={{ fontSize: '1.5rem' }}>📋</span>
                 <div>
-                  <div style={{ fontWeight: 700, color: C.navy, fontSize: '0.88rem', marginBottom: 3 }}>Brak wpisu wellness</div>
+                  <div style={{ fontWeight: 700, color: C.navy, fontSize: '0.88rem', marginBottom: 3 }}>Brak wpisu gotowości</div>
                   <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, lineHeight: 1.4 }}>
-                    Wellness nie był wypełniony w dniu tego treningu.<br />
-                    Kliknij <strong style={{ color: C.gold }}>✏️ edytuj</strong> aby uzupełnić.
+                    Gotowość do treningu nie była wypełniona.<br />
+                    Kliknij <strong style={{ color: C.gold }}>+ uzupełnij</strong> powyżej.
                   </div>
                 </div>
               </div>
-            )}
+            ))}
           </Card>
 
           {/* ── SERIE Z ĆWICZENIAMI ── */}
