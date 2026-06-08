@@ -1501,20 +1501,26 @@ function CoachClosingCard({ closing, trainerName }: { closing: string; trainerNa
 
 // ─── FINISH MODAL ─────────────────────────────────────────────────────────────
 
-function FinishModal({ sessionId, athleteId, wellnessFilled, doneSets, totalSets, onClose, onFinish }: {
-  sessionId: number; athleteId: number; wellnessFilled: boolean
+function FinishModal({ doneSets, totalSets, wellnessFilled, feedbackFilled, onClose, onFinish }: {
   doneSets: number; totalSets: number
+  wellnessFilled: boolean; feedbackFilled: boolean
   onClose: () => void; onFinish: () => void
 }) {
-  const sendRef = React.useRef<(() => void) | null>(null)
+  const [sending, setSending] = useState(false)
+
+  async function handleSend() {
+    setSending(true)
+    await onFinish()
+  }
+
+  const Chip = ({ ok, label }: { ok: boolean; label: string }) => (
+    <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 8, padding: '0.4rem 0.75rem', fontFamily: mono, fontSize: '0.72rem', color: ok ? C.green : C.gray, fontWeight: 700 }}>
+      {ok ? `✓ ${label}` : `○ ${label}`}
+    </div>
+  )
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 100,
-      background: C.offWhite, fontFamily: sans,
-      display: 'flex', flexDirection: 'column',
-    }}>
-      {/* Nagłówek */}
+    <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: C.offWhite, fontFamily: sans, display: 'flex', flexDirection: 'column' }}>
       <div style={{ background: C.navy, padding: '1rem 1.25rem', flexShrink: 0 }}>
         <div style={{ maxWidth: 560, margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
@@ -1533,35 +1539,19 @@ function FinishModal({ sessionId, athleteId, wellnessFilled, doneSets, totalSets
             <div style={{ fontSize: '0.82rem', color: '#C8B96A', lineHeight: 1.5 }}>
               Upewnij się że serie, ciężary i notatki są poprawne. Po wysłaniu nie można edytować treningu.
             </div>
-            <div style={{ display: 'flex', gap: 10, marginTop: '0.75rem' }}>
+            <div style={{ display: 'flex', gap: 8, marginTop: '0.75rem', flexWrap: 'wrap' }}>
               <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 8, padding: '0.4rem 0.75rem', fontFamily: mono, fontSize: '0.72rem', color: doneSets >= totalSets ? C.green : C.gold, fontWeight: 700 }}>
                 {doneSets}/{totalSets} serii
               </div>
-              <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 8, padding: '0.4rem 0.75rem', fontFamily: mono, fontSize: '0.72rem', color: wellnessFilled ? C.green : C.gray, fontWeight: 700 }}>
-                {wellnessFilled ? '✓ Wellness' : '○ Wellness'}
-              </div>
+              <Chip ok={wellnessFilled} label="Gotowość przed treningiem" />
+              <Chip ok={feedbackFilled} label="Feedback po treningu" />
             </div>
           </div>
         </div>
       </div>
 
-      {/* Formularz — scrollowalny */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
-        <div style={{ maxWidth: 560, margin: '0 auto', paddingBottom: '1rem' }}>
-          {sessionId > 0 && (
-            <PostWorkoutSection
-              sessionId={sessionId}
-              athleteId={athleteId}
-              wellnessFilled={wellnessFilled}
-              onFinish={onFinish}
-              inModal
-              sendRef={sendRef}
-            />
-          )}
-        </div>
-      </div>
+      <div style={{ flex: 1 }} />
 
-      {/* Przyciski — na samym dole, zawsze widoczne */}
       <div style={{ flexShrink: 0, background: C.white, borderTop: `1.5px solid ${C.grayLight}`, padding: '0.875rem 1rem' }}>
         <div style={{ maxWidth: 560, margin: '0 auto', display: 'flex', gap: 8 }}>
           <button
@@ -1570,9 +1560,10 @@ function FinishModal({ sessionId, athleteId, wellnessFilled, doneSets, totalSets
             🖨️ Drukuj
           </button>
           <button
-            onClick={() => sendRef.current?.()}
-            style={{ flex: 2, padding: '0.875rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 12, fontFamily: sans, fontWeight: 800, fontSize: '0.88rem', cursor: 'pointer' }}>
-            ✅ Wyślij raport do trenera
+            onClick={handleSend}
+            disabled={sending}
+            style={{ flex: 2, padding: '0.875rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 12, fontFamily: sans, fontWeight: 800, fontSize: '0.88rem', cursor: 'pointer', opacity: sending ? 0.7 : 1 }}>
+            {sending ? 'Wysyłam...' : '✅ Wyślij raport do trenera'}
           </button>
         </div>
       </div>
@@ -1590,9 +1581,10 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
   const [wellnessOpen, setWellnessOpen] = useState(!existingWellness)
   const [localWellness, setLocalWellness] = useState<any>(existingWellness)
   const [wellnessKey, setWellnessKey] = useState(0)
-  const [postOpen, setPostOpen] = useState(false)      // sekcja feedback na stronie
-  const [postFeedbackSaved, setPostFeedbackSaved] = useState(false) // czy feedback zapisany
-  const [finishOpen, setFinishOpen] = useState(false)  // modal zakończenia
+  const [postOpen, setPostOpen] = useState(false)
+  const [postFeedbackSaved, setPostFeedbackSaved] = useState(false)
+  const [finishOpen, setFinishOpen] = useState(false)
+  const [finishBlockMsg, setFinishBlockMsg] = useState<string | null>(null)
   const [savedLocal, setSavedLocal] = useState(false)
   const [legendOpen, setLegendOpen] = useState(false)
 
@@ -1609,6 +1601,32 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
   async function saveLocal() {
     setSavedLocal(true)
     setTimeout(() => setSavedLocal(false), 3000)
+  }
+
+  function tryOpenFinish() {
+    const missing: string[] = []
+    if (!wellnessSaved) missing.push('Gotowość przed treningiem')
+    if (!postFeedbackSaved) missing.push('Feedback po treningu')
+    if (missing.length > 0) {
+      setFinishBlockMsg(`Uzupełnij przed zakończeniem:\n• ${missing.join('\n• ')}`)
+      setTimeout(() => setFinishBlockMsg(null), 5000)
+      return
+    }
+    setFinishOpen(true)
+  }
+
+  async function finishSession() {
+    if (!session) return
+    await supabase.from('workout_sessions').update({
+      completed: true,
+      date_completed: new Date().toISOString(),
+    }).eq('id', session.id)
+    await fetch('/api/send-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: session.id, athleteId: athlete.id }),
+    }).catch(() => {})
+    router.push(`/athlete/report/${session.id}`)
   }
 
   // Grupuj ćwiczenia po blokach
@@ -1793,13 +1811,12 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
         {/* ── MODAL zakończenia ── */}
         {finishOpen && session && (
           <FinishModal
-            sessionId={session.id}
-            athleteId={athlete.id}
-            wellnessFilled={wellnessSaved}
             doneSets={doneSetsCount}
             totalSets={totalSets}
+            wellnessFilled={wellnessSaved}
+            feedbackFilled={postFeedbackSaved}
             onClose={() => setFinishOpen(false)}
-            onFinish={() => router.push(`/athlete/report/${session.id}`)}
+            onFinish={finishSession}
           />
         )}
 
@@ -1822,11 +1839,18 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
             </button>
 
             {/* Zakończ i wyślij raport */}
-            <button onClick={() => setFinishOpen(true)}
-              style={{ flex: 2, padding: '0.75rem 0.5rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 12, fontFamily: sans, fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer', textAlign: 'center', lineHeight: 1.3 }}>
-              🏁 Zakończ<br />
-              <span style={{ fontSize: '0.62rem', fontWeight: 500, color: '#8A9BB0' }}>wyślij raport do trenera</span>
-            </button>
+            <div style={{ flex: 2, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <button onClick={tryOpenFinish}
+                style={{ width: '100%', padding: '0.75rem 0.5rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 12, fontFamily: sans, fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer', textAlign: 'center', lineHeight: 1.3 }}>
+                🏁 Zakończ<br />
+                <span style={{ fontSize: '0.62rem', fontWeight: 500, color: '#8A9BB0' }}>wyślij raport do trenera</span>
+              </button>
+              {finishBlockMsg && (
+                <div style={{ background: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 10, padding: '0.5rem 0.75rem', fontSize: '0.72rem', color: C.red, fontWeight: 600, whiteSpace: 'pre-line', lineHeight: 1.5 }}>
+                  ⚠️ {finishBlockMsg}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
