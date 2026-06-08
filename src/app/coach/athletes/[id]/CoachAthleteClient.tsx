@@ -266,6 +266,174 @@ interface Props {
   painLogs: any[]
   groupModuleConfigs: any[]
   athleteModuleConfigs: any[]
+  allGroups: any[]
+  allPlans: any[]
+}
+
+// ── Modal — zmiana grupy ───────────────────────────────────────────────────────
+function MoveToGroupModal({ athlete, allGroups, onClose, onMoved }: {
+  athlete: any; allGroups: any[]; onClose: () => void; onMoved: (newGroup: any) => void
+}) {
+  const supabase = createClient()
+  const [targetGroupId, setTargetGroupId] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleMove() {
+    if (!targetGroupId) return
+    setSaving(true); setError('')
+    const groupId = parseInt(targetGroupId)
+    const { error: err } = await supabase
+      .from('athletes')
+      .update({ group_id: groupId })
+      .eq('id', athlete.id)
+    if (err) { setError(err.message); setSaving(false); return }
+    // Plan NIE jest ruszany — zostaje przypisany do zawodniczki
+    const newGroup = allGroups.find(g => g.id === groupId)
+    onMoved(newGroup)
+    onClose()
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(13,27,42,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: sans }}>
+      <div style={{ width: '100%', maxWidth: 440, background: C.white, borderRadius: 18, overflow: 'hidden', border: `1.5px solid ${C.grayLight}` }}>
+        <div style={{ background: C.navy, padding: '1rem 1.25rem' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Zarządzanie zawodniczką</div>
+          <div style={{ fontWeight: 800, fontSize: '1.15rem', color: C.white }}>Przenieś do innej grupy</div>
+          <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: 4 }}>Plan treningowy pozostanie bez zmian.</div>
+        </div>
+        <div style={{ padding: '1.25rem' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Wybierz grupę docelową</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: '1rem' }}>
+            {allGroups.filter(g => g.id !== athlete.group_id).map(g => (
+              <button key={g.id} onClick={() => setTargetGroupId(String(g.id))}
+                style={{ padding: '0.75rem 1rem', borderRadius: 10, border: `1.5px solid ${targetGroupId === String(g.id) ? C.gold : C.grayLight}`, background: targetGroupId === String(g.id) ? C.navy : C.offWhite, color: targetGroupId === String(g.id) ? C.gold : C.navy, fontWeight: 700, textAlign: 'left', cursor: 'pointer', fontFamily: sans }}>
+                {g.name}
+                {g.training_level && <span style={{ fontFamily: mono, fontSize: '0.65rem', color: targetGroupId === String(g.id) ? C.gray : C.gray, marginLeft: 8 }}>{g.training_level}</span>}
+              </button>
+            ))}
+            {allGroups.filter(g => g.id !== athlete.group_id).length === 0 && (
+              <div style={{ color: C.gray, fontSize: '0.84rem', fontStyle: 'italic' }}>Brak innych grup.</div>
+            )}
+          </div>
+          {error && <div style={{ color: C.red, fontSize: '0.82rem', marginBottom: '0.75rem' }}>Błąd: {error}</div>}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={onClose} style={{ padding: '0.75rem 1rem', borderRadius: 10, border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.gray, fontWeight: 700, cursor: 'pointer', fontFamily: sans }}>Anuluj</button>
+            <button onClick={handleMove} disabled={!targetGroupId || saving}
+              style={{ flex: 1, padding: '0.75rem', borderRadius: 10, border: 'none', background: !targetGroupId ? C.grayLight : C.navy, color: !targetGroupId ? C.gray : C.gold, fontWeight: 800, cursor: 'pointer', fontFamily: sans }}>
+              {saving ? 'Przenoszę...' : 'Przenieś'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Modal — zmiana planu ───────────────────────────────────────────────────────
+function ChangePlanModal({ athlete, currentAssignment, allPlans, onClose, onChanged }: {
+  athlete: any; currentAssignment: any; allPlans: any[]; onClose: () => void; onChanged: (newAssignment: any) => void
+}) {
+  const supabase = createClient()
+  const [selectedPlanId, setSelectedPlanId] = useState('')
+  const [orderMode, setOrderMode] = useState<'sequential' | 'dated'>('sequential')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const activePlans = allPlans.filter(p => !p.is_archived)
+  const archivedPlans = allPlans.filter(p => p.is_archived)
+
+  async function handleChange() {
+    if (!selectedPlanId) return
+    setSaving(true); setError('')
+    try {
+      // Dezaktywuj obecny plan
+      if (currentAssignment) {
+        await supabase.from('athlete_workout_assignments')
+          .update({ is_active: false })
+          .eq('id', currentAssignment.id)
+      }
+      // Utwórz nowe przypisanie
+      const { data: newAssignment, error: insertErr } = await supabase
+        .from('athlete_workout_assignments')
+        .insert({
+          athlete_id: athlete.id,
+          plan_id: parseInt(selectedPlanId),
+          is_active: true,
+          order_mode: orderMode,
+          start_date: new Date().toISOString().split('T')[0],
+        })
+        .select('*, plan:workout_plans(*)')
+        .single()
+      if (insertErr) throw insertErr
+      onChanged(newAssignment)
+      onClose()
+    } catch (err: any) {
+      setError(err.message || 'Nie udało się zmienić planu')
+    }
+    setSaving(false)
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(13,27,42,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: sans }}>
+      <div style={{ width: '100%', maxWidth: 480, background: C.white, borderRadius: 18, overflow: 'hidden', border: `1.5px solid ${C.grayLight}`, maxHeight: '90vh', overflowY: 'auto' }}>
+        <div style={{ background: C.navy, padding: '1rem 1.25rem' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Zmiana planu</div>
+          <div style={{ fontWeight: 800, fontSize: '1.15rem', color: C.white }}>Przypisz nowy plan treningowy</div>
+          {currentAssignment && <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: 4 }}>Obecny plan: {currentAssignment.plan?.name} zostanie zdezaktywowany.</div>}
+        </div>
+        <div style={{ padding: '1.25rem' }}>
+          {activePlans.length > 0 && (
+            <div style={{ marginBottom: '1rem' }}>
+              <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Aktywne plany</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {activePlans.map(p => (
+                  <button key={p.id} onClick={() => setSelectedPlanId(String(p.id))}
+                    style={{ padding: '0.75rem 1rem', borderRadius: 10, border: `1.5px solid ${selectedPlanId === String(p.id) ? C.gold : C.grayLight}`, background: selectedPlanId === String(p.id) ? C.navy : C.offWhite, color: selectedPlanId === String(p.id) ? C.gold : C.navy, fontWeight: 700, textAlign: 'left', cursor: 'pointer', fontFamily: sans }}>
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {archivedPlans.length > 0 && (
+            <div style={{ marginBottom: '1rem' }}>
+              <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Archiwalne</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {archivedPlans.map(p => (
+                  <button key={p.id} onClick={() => setSelectedPlanId(String(p.id))}
+                    style={{ padding: '0.75rem 1rem', borderRadius: 10, border: `1.5px solid ${selectedPlanId === String(p.id) ? C.gold : C.grayLight}`, background: selectedPlanId === String(p.id) ? C.navy : '#FAFAFA', color: selectedPlanId === String(p.id) ? C.gold : C.gray, fontWeight: 600, textAlign: 'left', cursor: 'pointer', fontFamily: sans, opacity: 0.85 }}>
+                    📦 {p.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div style={{ marginBottom: '1rem' }}>
+            <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Tryb realizacji</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+              {(['sequential', 'dated'] as const).map(mode => (
+                <button key={mode} onClick={() => setOrderMode(mode)}
+                  style={{ padding: '0.65rem', borderRadius: 9, border: `1.5px solid ${orderMode === mode ? C.gold : C.grayLight}`, background: orderMode === mode ? C.navy : C.offWhite, color: orderMode === mode ? C.gold : C.navy, fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', fontFamily: sans }}>
+                  {mode === 'sequential' ? '📋 Sekwencyjny' : '📅 Datowany'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {error && <div style={{ color: C.red, fontSize: '0.82rem', marginBottom: '0.75rem' }}>Błąd: {error}</div>}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={onClose} style={{ padding: '0.75rem 1rem', borderRadius: 10, border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.gray, fontWeight: 700, cursor: 'pointer', fontFamily: sans }}>Anuluj</button>
+            <button onClick={handleChange} disabled={!selectedPlanId || saving}
+              style={{ flex: 1, padding: '0.75rem', borderRadius: 10, border: 'none', background: !selectedPlanId ? C.grayLight : C.navy, color: !selectedPlanId ? C.gray : C.gold, fontWeight: 800, cursor: 'pointer', fontFamily: sans }}>
+              {saving ? 'Zapisuję...' : 'Przypisz plan'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // Session feedback detail modal for athlete profile — ładuje dane dynamicznie
@@ -412,10 +580,14 @@ function SessionFeedbackModal({ session, onClose }: { session: any; onClose: () 
 
 type MainTab = 'overview' | 'wellness' | 'diet'
 
-export default function CoachAthleteClient({ athlete, assignment, pastAssignments, sessions, feedbacks, wellnessLogs, wellnessList, dietLogs, painLogs, groupModuleConfigs, athleteModuleConfigs }: Props) {
+export default function CoachAthleteClient({ athlete, assignment, pastAssignments, sessions, feedbacks, wellnessLogs, wellnessList, dietLogs, painLogs, groupModuleConfigs, athleteModuleConfigs, allGroups, allPlans }: Props) {
   const router = useRouter()
   const supabase = createClient()
   const [planTab, setPlanTab] = useState<'active' | 'history'>('active')
+  const [movingGroup, setMovingGroup] = useState(false)
+  const [changingPlan, setChangingPlan] = useState(false)
+  const [localAthlete, setLocalAthlete] = useState(athlete)
+  const [localAssignment, setLocalAssignment] = useState(assignment)
   const [selectedWellness, setSelectedWellness] = useState<{ wellness: any; dateLabel: string } | null>(null)
   const [mainTab, setMainTab] = useState<MainTab>('overview')
   const [moduleConfig, setModuleConfig] = useState<'wellness' | 'diet' | null>(null)
@@ -701,14 +873,39 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
           {/* ── Overview tab ── */}
           {mainTab === 'overview' && <>
 
+          {/* Modals */}
+          {movingGroup && (
+            <MoveToGroupModal
+              athlete={localAthlete}
+              allGroups={allGroups}
+              onClose={() => setMovingGroup(false)}
+              onMoved={newGroup => setLocalAthlete((prev: any) => ({ ...prev, group_id: newGroup?.id, group: newGroup }))}
+            />
+          )}
+          {changingPlan && (
+            <ChangePlanModal
+              athlete={localAthlete}
+              currentAssignment={localAssignment}
+              allPlans={allPlans}
+              onClose={() => setChangingPlan(false)}
+              onChanged={newAssignment => setLocalAssignment(newAssignment)}
+            />
+          )}
+
           {/* Profil */}
           <Card style={{ marginBottom: '1rem' }}>
             <div style={{ padding: '1.25rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
               <div>
                 <SectionHeader title="Profil" />
-                <div style={{ fontWeight: 800, fontSize: '1.05rem', color: C.navy, marginBottom: 5 }}>{athlete.full_name}</div>
-                {athlete.group?.name && <div style={{ fontFamily: mono, fontSize: '0.72rem', color: C.gray, marginBottom: 2 }}>Grupa: {athlete.group.name}</div>}
-                {athlete.birth_year && <div style={{ fontFamily: mono, fontSize: '0.72rem', color: C.gray }}>ur. {athlete.birth_year}</div>}
+                <div style={{ fontWeight: 800, fontSize: '1.05rem', color: C.navy, marginBottom: 5 }}>{localAthlete.full_name}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                  {localAthlete.group?.name && <div style={{ fontFamily: mono, fontSize: '0.72rem', color: C.gray }}>📁 {localAthlete.group.name}</div>}
+                  <button onClick={() => setMovingGroup(true)}
+                    style={{ padding: '2px 8px', border: `1px solid ${C.grayLight}`, background: C.offWhite, color: C.gray, borderRadius: 6, fontFamily: mono, fontSize: '0.6rem', fontWeight: 700, cursor: 'pointer' }}>
+                    Zmień
+                  </button>
+                </div>
+                {localAthlete.birth_year && <div style={{ fontFamily: mono, fontSize: '0.72rem', color: C.gray }}>ur. {localAthlete.birth_year}</div>}
               </div>
 
               {/* Plany — zakładki Aktywny / Historia */}
@@ -723,21 +920,31 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
                 </div>
 
                 {planTab === 'active' ? (
-                  assignment ? (
+                  localAssignment ? (
                     <>
-                      <div style={{ fontWeight: 800, fontSize: '1rem', color: C.navy, marginBottom: 4 }}>{assignment.plan?.name}</div>
+                      <div style={{ fontWeight: 800, fontSize: '1rem', color: C.navy, marginBottom: 4 }}>{localAssignment.plan?.name}</div>
                       <div style={{ fontFamily: mono, fontSize: '0.7rem', color: C.gray, marginBottom: 10 }}>
-                        {assignment.order_mode === 'sequential' ? 'Sekwencyjny' : 'Datowany'} · od {new Date(assignment.start_date).toLocaleDateString('pl-PL')}
+                        {localAssignment.order_mode === 'sequential' ? 'Sekwencyjny' : 'Datowany'} · od {new Date(localAssignment.start_date).toLocaleDateString('pl-PL')}
                       </div>
-                      <button
-                        onClick={() => router.push(`/coach/athletes/${athlete.id}/training`)}
-                        style={{ padding: '0.5rem 0.875rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 8, fontWeight: 800, fontSize: '0.78rem' }}
-                      >
-                        ✎ Modyfikuj ćwiczenia →
-                      </button>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <button onClick={() => router.push(`/coach/athletes/${localAthlete.id}/training`)}
+                          style={{ padding: '0.5rem 0.875rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 8, fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer' }}>
+                          ✎ Modyfikuj ćwiczenia →
+                        </button>
+                        <button onClick={() => setChangingPlan(true)}
+                          style={{ padding: '0.5rem 0.875rem', background: C.offWhite, color: C.navy, border: `1.5px solid ${C.grayLight}`, borderRadius: 8, fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer' }}>
+                          🔄 Zmień plan
+                        </button>
+                      </div>
                     </>
                   ) : (
-                    <div style={{ color: C.gray, fontSize: '0.86rem', fontStyle: 'italic' }}>Brak aktywnego planu</div>
+                    <div>
+                      <div style={{ color: C.gray, fontSize: '0.86rem', fontStyle: 'italic', marginBottom: 10 }}>Brak aktywnego planu</div>
+                      <button onClick={() => setChangingPlan(true)}
+                        style={{ padding: '0.5rem 0.875rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 8, fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer' }}>
+                        + Przypisz plan
+                      </button>
+                    </div>
                   )
                 ) : (
                   pastAssignments.length === 0 ? (

@@ -1638,6 +1638,20 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
   const [dietPeriod, setDietPeriod] = useState(14)
   const [trainingPeriod, setTrainingPeriod] = useState(30)
   const [localAthletes, setLocalAthletes] = useState<any[]>(athletes)
+  const [editingGroup, setEditingGroup] = useState(false)
+  const [localGroup, setLocalGroup] = useState(group)
+  const [groupSaving, setGroupSaving] = useState(false)
+  const [groupSaved, setGroupSaved] = useState(false)
+
+  async function saveGroup() {
+    setGroupSaving(true)
+    const { error } = await supabase.from('groups').update({
+      name: localGroup.name?.trim() || group.name,
+      training_level: localGroup.training_level?.trim() || null,
+    }).eq('id', group.id)
+    setGroupSaving(false)
+    if (!error) { setGroupSaved(true); setTimeout(() => setGroupSaved(false), 2500); setEditingGroup(false) }
+  }
   const [quickReportAthlete, setQuickReportAthlete] = useState<any | null>(null)
   const [sessionReport, setSessionReport] = useState<{ session: any; athleteId: number; athleteName: string; dayName: string } | null>(null)
   const [planExData, setPlanExData] = useState<{ blocks: any[]; overrides: Record<number, Record<number, any>>; actual: Record<number, Record<number, ActualEntry>> } | null>(null)
@@ -1975,9 +1989,45 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
               <button onClick={() => router.push('/coach')} style={{ border: 'none', background: C.navyLight, color: C.gray, borderRadius: 10, padding: '0.55rem 0.75rem', fontFamily: mono, fontSize: '0.68rem', fontWeight: 700 }}>← Panel</button>
               <div style={{ flex: 1 }}>
                 <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 2 }}>Grupa · {athletes.length} zawodniczek</div>
-                <h1 style={{ color: C.white, fontSize: '1.25rem', fontWeight: 800 }}>{group.name}</h1>
-                <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray, marginTop: 3 }}>
+
+                {editingGroup ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 4 }}>
+                    <input
+                      value={localGroup.name || ''}
+                      onChange={e => setLocalGroup((g: any) => ({ ...g, name: e.target.value }))}
+                      placeholder="Nazwa grupy"
+                      style={{ background: 'rgba(255,255,255,0.1)', border: `1px solid ${C.navyBorder}`, borderRadius: 8, color: C.white, padding: '0.45rem 0.75rem', fontFamily: sans, fontSize: '1rem', fontWeight: 800, outline: 'none', width: '100%', maxWidth: 320 }}
+                    />
+                    <input
+                      value={localGroup.training_level || ''}
+                      onChange={e => setLocalGroup((g: any) => ({ ...g, training_level: e.target.value }))}
+                      placeholder="Poziom treningu (np. zaawansowany)"
+                      style={{ background: 'rgba(255,255,255,0.07)', border: `1px solid ${C.navyBorder}`, borderRadius: 8, color: C.white, padding: '0.35rem 0.75rem', fontFamily: mono, fontSize: '0.72rem', outline: 'none', width: '100%', maxWidth: 320 }}
+                    />
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={saveGroup} disabled={groupSaving}
+                        style={{ padding: '0.4rem 0.875rem', background: groupSaved ? C.green : C.gold, color: C.navy, border: 'none', borderRadius: 8, fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer', fontFamily: sans }}>
+                        {groupSaving ? '...' : groupSaved ? '✓ Zapisano' : 'Zapisz'}
+                      </button>
+                      <button onClick={() => { setEditingGroup(false); setLocalGroup(group) }}
+                        style={{ padding: '0.4rem 0.75rem', background: 'transparent', color: C.gray, border: `1px solid ${C.navyBorder}`, borderRadius: 8, fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer', fontFamily: sans }}>
+                        Anuluj
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                    <h1 style={{ color: C.white, fontSize: '1.25rem', fontWeight: 800 }}>{localGroup.name}</h1>
+                    <button onClick={() => setEditingGroup(true)}
+                      style={{ padding: '3px 10px', background: C.navyLight, color: C.gray, border: `1px solid ${C.navyBorder}`, borderRadius: 7, fontFamily: mono, fontSize: '0.6rem', fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+                      ✎ Edytuj
+                    </button>
+                  </div>
+                )}
+
+                <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray, marginTop: 2 }}>
                   Trener motoryczny: <span style={{ color: C.white, fontWeight: 700 }}>{group.trainer_name || 'Urszula Papka'}</span>
+                  {localGroup.training_level && <span style={{ marginLeft: 10, color: C.gold }}>· {localGroup.training_level}</span>}
                   {currentPlan && <span style={{ marginLeft: 12, color: C.gold }}>📋 {currentPlan.name}</span>}
                   {assignedMsg && <span style={{ marginLeft: 12, color: C.green }}>✓ {assignedMsg}</span>}
                 </div>
