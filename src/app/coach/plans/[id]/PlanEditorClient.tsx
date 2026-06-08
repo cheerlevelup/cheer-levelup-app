@@ -128,9 +128,9 @@ function labelStyle(): CSSProperties {
   }
 }
 
-function Card({ children, style }: { children: React.ReactNode; style?: CSSProperties }) {
+function Card({ children, style, className }: { children: React.ReactNode; style?: CSSProperties; className?: string }) {
   return (
-    <div style={{
+    <div className={className} style={{
       background: C.white,
       border: `1.5px solid ${C.grayLight}`,
       borderRadius: 14,
@@ -311,7 +311,7 @@ function ExerciseModal({
           <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>{isNew ? 'Dodaj do bloku' : 'Ustaw parametry'}</h2>
         </div>
 
-        <div style={{ padding: '1rem 1.25rem 1.25rem' }}>
+        <div className="exercise-modal-inner" style={{ padding: '1rem 1.25rem 1.25rem' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: '1rem' }}>
             <button
               onClick={() => setUseCustomName(false)}
@@ -344,7 +344,7 @@ function ExerciseModal({
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: '1rem' }}>
+          <div className="exercise-params-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: '1rem' }}>
             <div>
               <label style={labelStyle()}>Serie</label>
               <input type="number" value={sets} onChange={e => setSets(e.target.value)} style={inputStyle({ fontFamily: mono, textAlign: 'center' })} />
@@ -405,13 +405,13 @@ function ExerciseModal({
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {warmupSets.map((set, index) => (
-                  <div key={index} style={{ display: 'grid', gridTemplateColumns: '48px 1fr 1fr 1.4fr 38px', gap: 7, alignItems: 'center' }}>
+                  <div className="warmup-set-row" key={index} style={{ display: 'grid', gridTemplateColumns: '48px 1fr 1fr 1.4fr 38px', gap: 7, alignItems: 'center' }}>
                     <div style={{ height: 40, borderRadius: 9, background: C.navy, color: C.gold, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: mono, fontWeight: 800, fontSize: '0.72rem' }}>
                       R{index + 1}
                     </div>
                     <input value={set.reps || ''} onChange={e => updateWarmupSet(index, 'reps', e.target.value)} placeholder="powt." style={inputStyle({ minHeight: 40, fontFamily: mono, textAlign: 'center' })} />
                     <input value={set.weight_kg || ''} onChange={e => updateWarmupSet(index, 'weight_kg', e.target.value)} placeholder="kg" style={inputStyle({ minHeight: 40, fontFamily: mono, textAlign: 'center' })} />
-                    <input value={set.note || ''} onChange={e => updateWarmupSet(index, 'note', e.target.value)} placeholder="komentarz" style={inputStyle({ minHeight: 40 })} />
+                    <input className="warmup-set-note" value={set.note || ''} onChange={e => updateWarmupSet(index, 'note', e.target.value)} placeholder="komentarz" style={inputStyle({ minHeight: 40 })} />
                     <button onClick={() => removeWarmupSet(index)} style={{ height: 40, border: `1.5px solid ${C.grayLight}`, background: C.white, color: C.gray, borderRadius: 9, fontWeight: 800 }}>
                       x
                     </button>
@@ -995,6 +995,83 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: ${C.offWhite}; }
         button, input, select, textarea { font-family: inherit; }
+
+        @media (max-width: 768px) {
+          .plan-header-grid {
+            grid-template-columns: 1fr !important;
+            gap: 10px !important;
+          }
+          .plan-header-right {
+            width: 100% !important;
+            align-items: flex-start !important;
+          }
+          .plan-header-actions {
+            flex-wrap: wrap !important;
+            gap: 6px !important;
+            width: 100% !important;
+          }
+          .plan-header-actions button {
+            font-size: 0.72rem !important;
+            padding: 0.55rem 0.65rem !important;
+          }
+          .plan-header-status {
+            text-align: left !important;
+          }
+          .plan-notes-row {
+            flex-direction: column !important;
+            gap: 6px !important;
+          }
+          .plan-body-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .plan-sidebar-card {
+            position: static !important;
+          }
+          .plan-sidebar-days {
+            display: flex !important;
+            flex-wrap: nowrap !important;
+            overflow-x: auto !important;
+            gap: 6px !important;
+            padding-bottom: 4px !important;
+          }
+          .plan-sidebar-week {
+            min-width: 0 !important;
+          }
+          .plan-sidebar-day-row {
+            min-width: 120px !important;
+            flex-shrink: 0 !important;
+          }
+          .exercise-params-grid {
+            grid-template-columns: repeat(3, 1fr) !important;
+          }
+          .exercise-modal-inner {
+            padding: 0.85rem !important;
+          }
+          .warmup-set-row {
+            grid-template-columns: 40px 1fr 1fr 34px !important;
+          }
+          .warmup-set-note { display: none !important; }
+          .block-header-row {
+            flex-wrap: wrap !important;
+            gap: 6px !important;
+          }
+          .day-header-row {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            gap: 8px !important;
+          }
+          .block-header-row {
+            flex-wrap: wrap !important;
+          }
+          .view-toggle-wrap {
+            flex-wrap: wrap !important;
+          }
+          .plan-sidebar-days {
+            -webkit-overflow-scrolling: touch !important;
+            scrollbar-width: none !important;
+          }
+          .plan-sidebar-days::-webkit-scrollbar { display: none; }
+        }
       `}</style>
 
       {globalError && (
@@ -1030,7 +1107,7 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
 
       <div style={{ minHeight: '100vh', background: C.offWhite, fontFamily: sans, color: C.navy }}>
         <header style={{ background: C.navy, padding: '1rem 1.25rem 1.25rem', position: 'sticky', top: 0, zIndex: 10 }}>
-          <div style={{ maxWidth: 1180, margin: '0 auto', display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr) auto', gap: 12, alignItems: 'center' }}>
+          <div className="plan-header-grid" style={{ maxWidth: 1180, margin: '0 auto', display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr) auto', gap: 12, alignItems: 'center' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <label style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block' }}>Edytor planu</label>
               <input
@@ -1039,7 +1116,7 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
                 onBlur={savePlanName}
                 style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', color: C.white, fontWeight: 800, fontSize: '1.35rem' }}
               />
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+              <div className="plan-notes-row" style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
                 <textarea
                   value={planNotes}
                   onChange={e => setPlanNotes(e.target.value)}
@@ -1053,8 +1130,8 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
                 </button>
               </div>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div className="plan-header-right" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
+              <div className="plan-header-actions view-toggle-wrap" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <div style={{ display: 'flex', background: C.navyLight, borderRadius: 9, border: `1.5px solid ${C.navyBorder}`, overflow: 'hidden' }}>
                   <button onClick={() => setViewMode('blocks')} style={{ padding: '0.5rem 0.75rem', border: 'none', background: viewMode === 'blocks' ? C.gold : 'transparent', color: viewMode === 'blocks' ? C.navy : C.gray, fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer' }}>⊞ Bloki</button>
                   <button onClick={() => setViewMode('table')} style={{ padding: '0.5rem 0.75rem', border: 'none', background: viewMode === 'table' ? C.gold : 'transparent', color: viewMode === 'table' ? C.navy : C.gray, fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer' }}>⊟ Tabelka</button>
@@ -1076,14 +1153,14 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
                   {savingPlan ? 'Zapisuje...' : 'Zapisz plan'}
                 </button>
               </div>
-              <div style={{ fontFamily: mono, fontSize: '0.62rem', color: planSaveMessage === 'Plan zapisany' ? C.green : planSaveMessage ? C.red : savingName ? C.gold : C.gray, minWidth: 126, textAlign: 'right' }}>
+              <div className="plan-header-status" style={{ fontFamily: mono, fontSize: '0.62rem', color: planSaveMessage === 'Plan zapisany' ? C.green : planSaveMessage ? C.red : savingName ? C.gold : C.gray, minWidth: 126, textAlign: 'right' }}>
                 {planSaveMessage || (savingName ? 'zapisuje nazwe...' : 'gotowy do zapisu')}
               </div>
             </div>
           </div>
         </header>
 
-        <div style={{ maxWidth: viewMode === 'table' ? 1600 : 1180, margin: '0 auto', display: 'grid', gridTemplateColumns: viewMode === 'table' ? '1fr' : '280px minmax(0, 1fr)', gap: 16, padding: '1rem' }}>
+        <div className="plan-body-grid" style={{ maxWidth: viewMode === 'table' ? 1600 : 1180, margin: '0 auto', display: 'grid', gridTemplateColumns: viewMode === 'table' ? '1fr' : '280px minmax(0, 1fr)', gap: 16, padding: '1rem' }}>
           {viewMode === 'table' && (
             <PlanTableView
               plan={plan}
@@ -1099,18 +1176,18 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
           )}
           {viewMode === 'blocks' && <>
           <aside>
-            <Card style={{ position: 'sticky', top: 102 }}>
+            <Card style={{ position: 'sticky', top: 102 }} className="plan-sidebar-card">
               <div style={{ padding: '1rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.875rem' }}>
                   <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Struktura</div>
                   <button onClick={addWeek} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 9, padding: '0.45rem 0.6rem', fontSize: '0.72rem', fontWeight: 800 }}>+ tydz.</button>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div className="plan-sidebar-days" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {localWeeks.map(week => {
                     const weekDays = localDays.filter(day => day.week_id === week.id).sort((a, b) => a.day_order - b.day_order)
                     return (
-                      <div key={week.id}>
+                      <div className="plan-sidebar-week" key={week.id}>
                         <div style={{ fontFamily: mono, fontSize: '0.66rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>
                           Tydzien {week.week_number}
                         </div>
@@ -1118,7 +1195,7 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
                           {weekDays.map(day => {
                             const isActive = selectedDayId === day.id
                             return (
-                              <div key={day.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 6, alignItems: 'stretch' }}>
+                              <div className="plan-sidebar-day-row" key={day.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 6, alignItems: 'stretch' }}>
                                 <button onClick={() => setSelectedDayId(day.id)} style={{ width: '100%', border: `1.5px solid ${isActive ? C.gold : C.grayLight}`, background: isActive ? C.navy : C.offWhite, color: isActive ? C.gold : C.navy, borderRadius: 10, padding: '0.65rem 0.75rem', textAlign: 'left' }}>
                                   <div style={{ fontWeight: 800, fontSize: '0.86rem' }}>{day.day_name}</div>
                                   <div style={{ fontFamily: mono, color: isActive ? C.gray : C.gray, fontSize: '0.62rem', marginTop: 2 }}>
@@ -1155,7 +1232,7 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
             ) : (
               <>
                 <Card style={{ marginBottom: '1rem' }}>
-                  <div style={{ padding: '1rem', display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, alignItems: 'center' }}>
+                  <div className="day-header-row" style={{ padding: '1rem', display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, alignItems: 'center' }}>
                     <div>
                       <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 5 }}>
                         Tydzien {currentWeek?.week_number || '-'}
@@ -1178,7 +1255,7 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
                 {currentDayBlocks.map(block => (
                   <Card key={block.id} style={{ marginBottom: '1rem', overflow: 'visible' }}>
                     {/* Block header */}
-                    <div style={{ padding: '0.75rem 1rem', borderBottom: `1.5px solid ${C.grayLight}`, display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div className="block-header-row" style={{ padding: '0.75rem 1rem', borderBottom: `1.5px solid ${C.grayLight}`, display: 'flex', alignItems: 'center', gap: 10 }}>
                       <input
                         value={block.block_name}
                         onChange={event => setLocalBlocks(prev => prev.map(item => item.id === block.id ? { ...item, block_name: event.target.value } : item))}
