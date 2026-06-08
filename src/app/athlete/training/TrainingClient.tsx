@@ -694,9 +694,10 @@ function WellnessExpanded({ sessionId, athleteId, existingWellness, preFields, o
 
 // ─── EXERCISE CARD ────────────────────────────────────────────────────────────
 
-function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, prevWeight }: {
+function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, prevWeight, blockLetter }: {
   exercise: TrainingExercise; sessionId: number; athleteId: number
   setLogs: SetLog[]; onSetsChange: (delta: number) => void; prevWeight?: number | null
+  blockLetter?: string
 }) {
   const supabase = createClient()
   const [expanded, setExpanded] = useState(false)
@@ -774,7 +775,7 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
         {/* Nagłówek */}
         <div onClick={() => setExpanded(!expanded)} style={{ width: '100%', padding: '1rem', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', textAlign: 'left' }}>
           <div style={{ width: 36, height: 36, borderRadius: 9, background: C.navyLight, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <span style={{ fontWeight: 800, fontSize: '0.7rem', color: C.gold, fontFamily: mono }}>{exercise.exercise_order ? `${String.fromCharCode(64 + Math.ceil(exercise.exercise_order / 10))}${exercise.exercise_order}` : '—'}</span>
+            <span style={{ fontWeight: 800, fontSize: '0.7rem', color: C.gold, fontFamily: mono }}>{blockLetter && exercise.exercise_order ? `${blockLetter}${exercise.exercise_order}` : exercise.exercise_order || '—'}</span>
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
@@ -1431,7 +1432,8 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
   const [setLogs, setSetLogs] = useState<SetLog[]>(() => dedupeSetLogs(existingSetLogs))
   const [wellnessSaved, setWellnessSaved] = useState(!!existingWellness)
   const [wellnessOpen, setWellnessOpen] = useState(!existingWellness)
-  const [postOpen, setPostOpen] = useState(false)
+  const [postOpen, setPostOpen] = useState(false)      // sekcja feedback na stronie
+  const [finishOpen, setFinishOpen] = useState(false)  // modal zakończenia
   const [savedLocal, setSavedLocal] = useState(false)
   const [legendOpen, setLegendOpen] = useState(false)
 
@@ -1576,10 +1578,26 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
                   setLogs={setLogs}
                   onSetsChange={handleSetsChange}
                   prevWeight={null}
+                  blockLetter={block.block_name?.match(/[A-Z]/)?.[0] || ''}
                 />
               ))}
             </div>
           ))}
+
+          {/* Feedback po treningu — wypełnij zanim klikniesz Zakończ */}
+          <div style={{ background: C.white, borderRadius: 14, marginTop: '1rem', border: `1.5px solid ${C.grayLight}`, overflow: 'hidden', boxShadow: postOpen ? '0 4px 20px rgba(13,27,42,0.08)' : 'none' }}>
+            <button onClick={() => setPostOpen(v => !v)} style={{ width: '100%', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer', fontFamily: sans }}>
+              <span style={{ fontSize: '1.2rem' }}>📝</span>
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.9rem', color: C.navy }}>Feedback po treningu</div>
+                <div style={{ fontSize: '0.75rem', color: C.gray }}>RPE, samopoczucie, uwagi dla trenera</div>
+              </div>
+              <span style={{ marginLeft: 'auto', color: C.gray, fontSize: '0.75rem', transform: postOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
+            </button>
+            {postOpen && session && (
+              <PostWorkoutSection sessionId={session.id} athleteId={athlete.id} wellnessFilled={wellnessSaved} onFinish={() => {}} inModal={false} sendRef={undefined} />
+            )}
+          </div>
 
           {/* Notatka pod całym treningiem */}
           {(day as any).coach_closing && (
@@ -1592,14 +1610,14 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
         </div>
 
         {/* ── MODAL zakończenia ── */}
-        {postOpen && session && (
+        {finishOpen && session && (
           <FinishModal
             sessionId={session.id}
             athleteId={athlete.id}
             wellnessFilled={wellnessSaved}
             doneSets={doneSets}
             totalSets={totalSets}
-            onClose={() => setPostOpen(false)}
+            onClose={() => setFinishOpen(false)}
             onFinish={() => router.push(`/athlete/report/${session.id}`)}
           />
         )}
@@ -1623,7 +1641,7 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
             </button>
 
             {/* Zakończ i wyślij raport */}
-            <button onClick={() => setPostOpen(true)}
+            <button onClick={() => setFinishOpen(true)}
               style={{ flex: 2, padding: '0.75rem 0.5rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 12, fontFamily: sans, fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer', textAlign: 'center', lineHeight: 1.3 }}>
               🏁 Zakończ<br />
               <span style={{ fontSize: '0.62rem', fontWeight: 500, color: '#8A9BB0' }}>wyślij raport do trenera</span>
