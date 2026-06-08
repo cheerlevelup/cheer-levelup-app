@@ -654,7 +654,7 @@ const DEFAULT_PRE_FIELDS = ['sleep_hours', 'sleep_quality', 'energy', 'stress', 
 
 function WellnessExpanded({ sessionId, athleteId, existingWellness, preFields, onSaved }: {
   sessionId: number; athleteId: number; existingWellness: WellnessLog | null
-  preFields?: string[] | null; onSaved: () => void
+  preFields?: string[] | null; onSaved: (saved: any) => void
 }) {
   const supabase = createClient()
 
@@ -684,16 +684,16 @@ function WellnessExpanded({ sessionId, athleteId, existingWellness, preFields, o
       ...vals,
       concerns,
     }
-    const { error } = existingWellness
-      ? await supabase.from('wellness_logs').update(payload).eq('id', existingWellness.id)
-      : await supabase.from('wellness_logs').insert(payload)
+    const { data: savedData, error } = existingWellness
+      ? await supabase.from('wellness_logs').update(payload).eq('id', existingWellness.id).select().single()
+      : await supabase.from('wellness_logs').insert(payload).select().single()
 
     if (error) {
       setSaveError(`Błąd zapisu: ${error.message}`)
       return
     }
     setSaved(true)
-    onSaved()
+    onSaved(savedData || { ...payload, id: existingWellness?.id })
   }
 
   return (
@@ -1465,6 +1465,8 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
   const [setLogs, setSetLogs] = useState<SetLog[]>(() => dedupeSetLogs(existingSetLogs))
   const [wellnessSaved, setWellnessSaved] = useState(!!existingWellness)
   const [wellnessOpen, setWellnessOpen] = useState(!existingWellness)
+  const [localWellness, setLocalWellness] = useState<any>(existingWellness)
+  const [wellnessKey, setWellnessKey] = useState(0)
   const [postOpen, setPostOpen] = useState(false)      // sekcja feedback na stronie
   const [finishOpen, setFinishOpen] = useState(false)  // modal zakończenia
   const [savedLocal, setSavedLocal] = useState(false)
@@ -1588,7 +1590,19 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
               <span style={{ marginLeft: 'auto', color: C.gray, fontSize: '0.75rem', transform: wellnessOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
             </button>
             {wellnessOpen && session && (
-              <WellnessExpanded sessionId={session.id} athleteId={athlete.id} existingWellness={existingWellness} preFields={wellnessPreFields} onSaved={() => { setWellnessSaved(true); setWellnessOpen(false) }} />
+              <WellnessExpanded
+                key={wellnessKey}
+                sessionId={session.id}
+                athleteId={athlete.id}
+                existingWellness={localWellness}
+                preFields={wellnessPreFields}
+                onSaved={(saved) => {
+                  setLocalWellness(saved)
+                  setWellnessKey(k => k + 1)
+                  setWellnessSaved(true)
+                  setWellnessOpen(false)
+                }}
+              />
             )}
           </div>
 
