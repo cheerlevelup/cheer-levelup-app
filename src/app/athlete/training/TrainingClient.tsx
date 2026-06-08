@@ -1040,7 +1040,7 @@ function ReportSentScreen({ rpe, feeling, whatWell, pain, notes, onBack }: {
 
 // ─── POST WORKOUT ─────────────────────────────────────────────────────────────
 
-function PostWorkoutSection({ sessionId, athleteId, wellnessFilled, onFinish }: { sessionId: number; athleteId: number; wellnessFilled: boolean; onFinish: () => void }) {
+function PostWorkoutSection({ sessionId, athleteId, wellnessFilled, onFinish, inModal }: { sessionId: number; athleteId: number; wellnessFilled: boolean; onFinish: () => void; inModal?: boolean }) {
   const supabase = createClient()
   const router = useRouter()
   const [rpe, setRpe] = useState(6)
@@ -1151,20 +1151,32 @@ function PostWorkoutSection({ sessionId, athleteId, wellnessFilled, onFinish }: 
         ) : null
       })()}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <button
-          onClick={() => {
-            if (!feeling || !wellnessFilled) { setShowValidation(true); return }
-            finish(true)
-          }}
-          disabled={saving}
-          style={{ width: '100%', padding: '0.875rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 10, fontFamily: sans, fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer' }}>
-          {saving ? 'Wysyłam raport...' : 'Zakończ i wyślij raport do trenera 🏁'}
-        </button>
-        <button onClick={() => finish(false)} disabled={saving}
-          style={{ width: '100%', padding: '0.75rem', background: 'transparent', color: C.gray, border: `1.5px solid ${C.grayLight}`, borderRadius: 10, fontFamily: sans, fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer' }}>
-          Zapisz bez wysyłania raportu
-        </button>
+      {/* Przyciski na dole modala */}
+      <div style={{
+        position: inModal ? 'sticky' : 'static',
+        bottom: 0,
+        background: C.white,
+        padding: inModal ? '1rem' : '0',
+        marginTop: inModal ? 0 : '0.5rem',
+        borderTop: inModal ? `1.5px solid ${C.grayLight}` : 'none',
+        display: 'flex', flexDirection: 'column', gap: 8,
+      }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={() => window.print()}
+            style={{ flex: 1, padding: '0.875rem 0.5rem', background: C.offWhite, color: C.navy, border: `1.5px solid ${C.grayLight}`, borderRadius: 12, fontFamily: sans, fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer' }}>
+            🖨️ Drukuj
+          </button>
+          <button
+            onClick={() => {
+              if (!feeling || !wellnessFilled) { setShowValidation(true); return }
+              finish(true)
+            }}
+            disabled={saving}
+            style={{ flex: 2, padding: '0.875rem', background: saving ? C.grayLight : C.navy, color: saving ? C.gray : C.gold, border: 'none', borderRadius: 12, fontFamily: sans, fontWeight: 800, fontSize: '0.88rem', cursor: 'pointer' }}>
+            {saving ? 'Wysyłam...' : '✅ Wyślij raport do trenera'}
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -1310,6 +1322,71 @@ function CoachClosingCard({ closing, trainerName }: { closing: string; trainerNa
             >
               {expanded ? '↑ Zwiń' : '↓ Czytaj dalej'}
             </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── FINISH MODAL ─────────────────────────────────────────────────────────────
+
+function FinishModal({ sessionId, athleteId, wellnessFilled, doneSets, totalSets, onClose, onFinish }: {
+  sessionId: number; athleteId: number; wellnessFilled: boolean
+  doneSets: number; totalSets: number
+  onClose: () => void; onFinish: () => void
+}) {
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 100,
+      background: C.offWhite, fontFamily: sans,
+      display: 'flex', flexDirection: 'column', overflowY: 'auto',
+    }}>
+      {/* Nagłówek modala */}
+      <div style={{ background: C.navy, padding: '1rem 1.25rem', flexShrink: 0 }}>
+        <div style={{ maxWidth: 560, margin: '0 auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+            <button onClick={onClose}
+              style={{ border: `1.5px solid ${C.navyBorder}`, background: C.navyLight, color: C.white, borderRadius: 10, padding: '0.5rem 0.875rem', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', fontFamily: sans }}>
+              ← Wróć do treningu
+            </button>
+            <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+              Zakończenie
+            </div>
+          </div>
+
+          {/* Baner ostrzegawczy */}
+          <div style={{ background: 'rgba(245,200,66,0.12)', border: `1.5px solid ${C.gold}`, borderRadius: 12, padding: '0.875rem 1rem' }}>
+            <div style={{ fontWeight: 800, fontSize: '1rem', color: C.gold, marginBottom: 4 }}>
+              ⚠️ Sprawdź czy wszystko się zgadza
+            </div>
+            <div style={{ fontSize: '0.82rem', color: '#C8B96A', lineHeight: 1.5 }}>
+              Upewnij się że serie, ciężary i notatki są poprawne zanim wyślesz raport.
+              Po wysłaniu nie można edytować treningu.
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: '0.75rem' }}>
+              <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 8, padding: '0.4rem 0.75rem', fontFamily: mono, fontSize: '0.72rem', color: doneSets >= totalSets ? C.green : C.gold, fontWeight: 700 }}>
+                {doneSets}/{totalSets} serii
+              </div>
+              <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 8, padding: '0.4rem 0.75rem', fontFamily: mono, fontSize: '0.72rem', color: wellnessFilled ? C.green : C.gray, fontWeight: 700 }}>
+                {wellnessFilled ? '✓ Wellness' : '○ Wellness'}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Treść — formularz podsumowania */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
+        <div style={{ maxWidth: 560, margin: '0 auto' }}>
+          {sessionId > 0 && (
+            <PostWorkoutSection
+              sessionId={sessionId}
+              athleteId={athleteId}
+              wellnessFilled={wellnessFilled}
+              onFinish={onFinish}
+              inModal
+            />
           )}
         </div>
       </div>
@@ -1468,45 +1545,52 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
             </div>
           ))}
 
-          {/* Podsumowanie */}
-          <div style={{ background: '#fff', borderRadius: 14, marginTop: '1rem', border: `1.5px solid ${C.grayLight}`, overflow: 'hidden', boxShadow: postOpen ? '0 4px 20px rgba(13,27,42,0.08)' : 'none' }}>
-            <button onClick={() => setPostOpen(!postOpen)} style={{ width: '100%', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer', fontFamily: sans }}>
-              <span style={{ fontSize: '1.2rem' }}>🏁</span>
-              <div style={{ textAlign: 'left' }}>
-                <div style={{ fontWeight: 700, fontSize: '0.9rem', color: C.navy }}>Podsumowanie treningu</div>
-                <div style={{ fontSize: '0.75rem', color: C.gray }}>RPE, samopoczucie, raport do trenera</div>
-              </div>
-              <span style={{ marginLeft: 'auto', color: C.gray, fontSize: '0.75rem', transform: postOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
-            </button>
-            {postOpen && session && (
-              <PostWorkoutSection sessionId={session.id} athleteId={athlete.id} wellnessFilled={wellnessSaved} onFinish={() => router.push('/athlete')} />
-            )}
-          </div>
-
           {/* Notatka pod całym treningiem */}
           {(day as any).coach_closing && (
             <CoachClosingCard closing={(day as any).coach_closing} trainerName={trainerName} />
           )}
 
+          {/* Odstęp na fixed buttons */}
+          <div style={{ height: 100 }} />
         </div>
         </div>
 
+        {/* ── MODAL zakończenia ── */}
+        {postOpen && session && (
+          <FinishModal
+            sessionId={session.id}
+            athleteId={athlete.id}
+            wellnessFilled={wellnessSaved}
+            doneSets={doneSets}
+            totalSets={totalSets}
+            onClose={() => setPostOpen(false)}
+            onFinish={() => router.push(`/athlete/report/${session.id}`)}
+          />
+        )}
+
         {/* ── BOTTOM BUTTONS ── */}
-        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: '#fff', borderTop: `1.5px solid ${C.grayLight}`, padding: '0.875rem 1.25rem' }}>
-          <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: C.white, borderTop: `1.5px solid ${C.grayLight}`, padding: '0.75rem 1rem', zIndex: 20 }}>
+          <div style={{ display: 'flex', gap: 7, maxWidth: 520, margin: '0 auto' }}>
+
+            {/* Powrót — nie zapisuje */}
             <button onClick={() => router.push('/athlete')}
-              style={{ flex: 1, padding: '0.875rem 0.75rem', background: C.white, color: C.navy, border: `1.5px solid ${C.grayLight}`, borderRadius: 12, fontFamily: sans, fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer', lineHeight: 1.3, textAlign: 'center' }}>
-              Powrot do panelu
+              style={{ flex: 1, padding: '0.75rem 0.5rem', background: C.white, color: C.gray, border: `1.5px solid ${C.grayLight}`, borderRadius: 12, fontFamily: sans, fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', textAlign: 'center', lineHeight: 1.3 }}>
+              ← Powrót<br />
+              <span style={{ fontSize: '0.62rem', fontWeight: 400 }}>do panelu</span>
             </button>
+
+            {/* Zapisz — dane już auto-zapisane, wraca do panelu */}
             <button onClick={saveLocal}
-              style={{ flex: 1, padding: '0.875rem 0.75rem', background: savedLocal ? '#F0FDF4' : '#F4F6F9', color: savedLocal ? C.green : C.navy, border: savedLocal ? '1.5px solid #86EFAC' : `1.5px solid ${C.grayLight}`, borderRadius: 12, fontFamily: sans, fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', transition: 'all 0.2s', lineHeight: 1.3, textAlign: 'center' }}>
-              {savedLocal ? '✓ Zapisano' : '💾 Zapisz trening'}
-              {!savedLocal && <div style={{ fontSize: '0.68rem', fontWeight: 400, color: C.gray, marginTop: 2 }}>bez raportu</div>}
+              style={{ flex: 1.2, padding: '0.75rem 0.5rem', background: savedLocal ? '#F0FDF4' : C.offWhite, color: savedLocal ? C.green : C.navy, border: `1.5px solid ${savedLocal ? '#86EFAC' : C.grayLight}`, borderRadius: 12, fontFamily: sans, fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', textAlign: 'center', lineHeight: 1.3, transition: 'all 0.2s' }}>
+              {savedLocal ? '✓ Zapisano!' : '💾 Zapisz'}<br />
+              <span style={{ fontSize: '0.62rem', fontWeight: 400, color: savedLocal ? C.green : C.gray }}>można kontynuować</span>
             </button>
+
+            {/* Zakończ i wyślij raport */}
             <button onClick={() => setPostOpen(true)}
-              style={{ flex: 2, padding: '0.875rem 0.75rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 12, fontFamily: sans, fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', lineHeight: 1.3, textAlign: 'center' }}>
-              Zakończ trening
-              <div style={{ fontSize: '0.68rem', fontWeight: 500, color: '#8A9BB0', marginTop: 2 }}>wyślij raport do trenera</div>
+              style={{ flex: 2, padding: '0.75rem 0.5rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 12, fontFamily: sans, fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer', textAlign: 'center', lineHeight: 1.3 }}>
+              🏁 Zakończ<br />
+              <span style={{ fontSize: '0.62rem', fontWeight: 500, color: '#8A9BB0' }}>wyślij raport do trenera</span>
             </button>
           </div>
         </div>
