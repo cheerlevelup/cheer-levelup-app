@@ -1294,36 +1294,19 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
                       style={{ width: '100%', border: `1.5px solid #F5C84260`, borderRadius: 10, background: C.white, color: C.navy, padding: '0.625rem 0.75rem', fontFamily: sans, fontSize: '0.86rem', resize: 'vertical', outline: 'none', lineHeight: 1.5 }}
                     />
                   </div>
-                  {/* Notatka końcowa trenera */}
-                  <div style={{ borderTop: `1.5px solid ${C.grayLight}`, padding: '0.875rem 1rem', background: '#F0FDF4' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                      <span style={{ fontSize: '1rem' }}>🏁</span>
-                      <span style={{ fontFamily: mono, fontSize: '0.62rem', color: '#166534', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>
-                        Słowo od trenera po ćwiczeniach — przed wypełnieniem raportu
-                      </span>
-                    </div>
-                    <textarea
-                      value={currentDay.coach_outro || ''}
-                      onChange={event => setLocalDays(prev => prev.map(day => day.id === selectedDayId ? { ...day, coach_outro: event.target.value } : day))}
-                      onBlur={event => saveCoachOutro(selectedDayId, event.target.value)}
-                      placeholder="Gratulacje, refleksja, co było dziś celem... Zawodniczki zobaczą to przed wypełnieniem raportu."
-                      rows={3}
-                      style={{ width: '100%', border: `1.5px solid #22C55E40`, borderRadius: 10, background: C.white, color: C.navy, padding: '0.625rem 0.75rem', fontFamily: sans, fontSize: '0.86rem', resize: 'vertical', outline: 'none', lineHeight: 1.5 }}
-                    />
-                  </div>
-                  {/* Notatka po całym treningu (pod Podsumowaniem) */}
+                  {/* Notatka po treningu */}
                   <div style={{ borderTop: `1.5px solid ${C.grayLight}`, padding: '0.875rem 1rem', background: '#EFF6FF' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                       <span style={{ fontSize: '1rem' }}>💙</span>
                       <span style={{ fontFamily: mono, fontSize: '0.62rem', color: '#1E40AF', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>
-                        Notatka pod całym treningiem — widoczna po raporcie
+                        Wiadomość po treningu — widoczna na końcu strony
                       </span>
                     </div>
                     <textarea
                       value={currentDay.coach_closing || ''}
                       onChange={event => setLocalDays(prev => prev.map(day => day.id === selectedDayId ? { ...day, coach_closing: event.target.value } : day))}
                       onBlur={event => saveCoachClosing(selectedDayId, event.target.value)}
-                      placeholder="Co dalej, recovery, dieta, sen, kolejny trening... Zawodniczki zobaczą to na absolutnym końcu strony treningu."
+                      placeholder="Gratulacje, recovery, co dalej, kolejny trening... Zawodniczki zobaczą to na samym końcu, po wypełnieniu raportu."
                       rows={3}
                       style={{ width: '100%', border: `1.5px solid #3B82F640`, borderRadius: 10, background: C.white, color: C.navy, padding: '0.625rem 0.75rem', fontFamily: sans, fontSize: '0.86rem', resize: 'vertical', outline: 'none', lineHeight: 1.5 }}
                     />
