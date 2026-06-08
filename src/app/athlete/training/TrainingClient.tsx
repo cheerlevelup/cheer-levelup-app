@@ -794,9 +794,20 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
         {expanded && (
           <div style={{ padding: '0 1rem 1rem' }}>
             {(effectiveTempoNote || exercise.coach_comment) && (
-              <p style={{ fontSize: '0.83rem', color: C.gray, marginBottom: '0.875rem', lineHeight: 1.55, paddingTop: '0.5rem', borderTop: '1px solid #F0F4F8' }}>
-                💬 {effectiveTempoNote || exercise.coach_comment}
-              </p>
+              <div style={{
+                margin: '0.5rem 0 1rem',
+                padding: '0.75rem 0.875rem',
+                background: 'linear-gradient(135deg, #FFFBEB 0%, #FFF8E1 100%)',
+                borderLeft: `3px solid ${C.gold}`,
+                borderRadius: '0 10px 10px 0',
+              }}>
+                <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#92660A', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 5 }}>
+                  💬 Wskazówka trenera
+                </div>
+                <p style={{ fontSize: '0.86rem', color: C.navy, lineHeight: 1.6, margin: 0, fontWeight: 500 }}>
+                  {effectiveTempoNote || exercise.coach_comment}
+                </p>
+              </div>
             )}
 
             <div style={{ fontSize: '0.68rem', fontWeight: 700, color: C.gray, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.5rem', fontFamily: mono }}>Serie</div>
