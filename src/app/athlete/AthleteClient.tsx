@@ -163,10 +163,10 @@ export default function AthleteClient({ athlete, nextTraining, history, todayWel
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontFamily: mono, fontSize: '0.6rem', color: wellnessDone ? '#16A34A' : C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 3, fontWeight: 700 }}>
-                  Wellness · {formatDate(todayWellness.dateIso)}
+                  Monitoring wellness · {formatDate(todayWellness.dateIso)}
                 </div>
                 <div style={{ fontWeight: 800, fontSize: '1rem', color: wellnessDone ? '#15803D' : C.navy }}>
-                  {wellnessDone ? 'Wypełniony i wysłany ✓' : 'Uzupełnij przed treningiem'}
+                  {wellnessDone ? 'Wypełniony ✓' : 'Dzienny monitoring wellness'}
                 </div>
                 {!wellnessDone && (
                   <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: 2 }}>
