@@ -1014,20 +1014,10 @@ function PostWorkoutSection({ sessionId, athleteId, wellnessFilled, onFinish }: 
     }
 
     setSaving(false)
-    setSent(true)
-    setTimeout(() => router.push('/athlete'), 2000)
+    router.push(`/athlete/report/${sessionId}`)
   }
 
-  if (sent) return (
-    <ReportSentScreen
-      rpe={rpe}
-      feeling={feeling}
-      whatWell={whatWell}
-      pain={pain}
-      notes={notes}
-      onBack={() => router.push('/athlete')}
-    />
-  )
+  if (sent) return null
 
   return (
     <div style={{ padding: '0 1rem 1rem', fontFamily: sans }}>
