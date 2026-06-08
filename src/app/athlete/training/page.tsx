@@ -61,12 +61,23 @@ export default async function TrainingPage({ searchParams }: Props) {
     .eq('workout_session_id', session.id)
     .maybeSingle()
 
+  // Pobierz konfigurację wellness dla tego planu
+  const planId = trainingView.plan?.id
+  const { data: wellnessConfig } = planId
+    ? await supabase
+        .from('plan_wellness_config')
+        .select('pre, post')
+        .eq('plan_id', planId)
+        .maybeSingle()
+    : { data: null }
+
   return (
     <TrainingClient
       athlete={athlete}
       trainingView={{ ...trainingView, session }}
       existingSetLogs={existingSetLogs || []}
       existingWellness={wellness || null}
+      wellnessPreFields={wellnessConfig?.pre || null}
     />
   )
 }

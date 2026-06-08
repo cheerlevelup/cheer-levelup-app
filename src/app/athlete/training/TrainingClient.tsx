@@ -44,6 +44,7 @@ interface Props {
   trainingView: TrainingView
   existingSetLogs: SetLog[]
   existingWellness: WellnessLog | null
+  wellnessPreFields: string[] | null
 }
 
 interface WellnessLog {
@@ -600,27 +601,44 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
 
 // ─── WELLNESS EXPANDED ────────────────────────────────────────────────────────
 
-function WellnessExpanded({ sessionId, athleteId, existingWellness, onSaved }: {
-  sessionId: number; athleteId: number; existingWellness: WellnessLog | null; onSaved: () => void
+// Mapa wszystkich możliwych pól wellness — ID z plan_wellness_config → konfiguracja slidera
+const WELLNESS_FIELD_MAP: Record<string, { key: string; label: string; min: number; max: number; step: number; unit: string; defaultVal: number }> = {
+  sleep_hours:    { key: 'sleep_hours',      label: 'Godziny snu',         min: 3,  max: 12,  step: 0.5, unit: 'h',    defaultVal: 7 },
+  sleep_quality:  { key: 'sleep_quality',    label: 'Jakość snu',          min: 1,  max: 10,  step: 1,   unit: '/10',  defaultVal: 7 },
+  energy:         { key: 'energy',           label: 'Energia',             min: 1,  max: 10,  step: 1,   unit: '/10',  defaultVal: 7 },
+  stress:         { key: 'stress',           label: 'Stres',               min: 1,  max: 10,  step: 1,   unit: '/10',  defaultVal: 3 },
+  mood:           { key: 'mood',             label: 'Nastrój',             min: 1,  max: 10,  step: 1,   unit: '/10',  defaultVal: 7 },
+  readiness:      { key: 'readiness',        label: 'Gotowość',            min: 1,  max: 10,  step: 1,   unit: '/10',  defaultVal: 7 },
+  muscle_soreness:{ key: 'muscle_sorness',   label: 'Zakwasy',             min: 0,  max: 10,  step: 1,   unit: '/10',  defaultVal: 0 },
+  body_weight:    { key: 'body_weight_kg',   label: 'Masa ciała',          min: 30, max: 150, step: 0.1, unit: 'kg',   defaultVal: 60 },
+  hydration:      { key: 'hydration_glasses',label: 'Nawodnienie',         min: 0,  max: 20,  step: 1,   unit: 'szkl.',defaultVal: 8 },
+  resting_hr:     { key: 'resting_hr',       label: 'Tętno spoczynkowe',   min: 40, max: 120, step: 1,   unit: 'bpm',  defaultVal: 60 },
+  motivation_pre: { key: 'motivation_pre',   label: 'Motywacja przed',     min: 1,  max: 10,  step: 1,   unit: '/10',  defaultVal: 7 },
+  sitting_hours:  { key: 'sitting_hours',    label: 'Godziny siedzenia',   min: 0,  max: 16,  step: 0.5, unit: 'h',    defaultVal: 4 },
+  recovery_score: { key: 'recovery_score',   label: 'Regeneracja',         min: 1,  max: 10,  step: 1,   unit: '/10',  defaultVal: 7 },
+}
+
+// Domyślna lista pól gdy brak konfiguracji planu
+const DEFAULT_PRE_FIELDS = ['sleep_hours', 'sleep_quality', 'energy', 'stress', 'mood', 'muscle_soreness', 'readiness']
+
+function WellnessExpanded({ sessionId, athleteId, existingWellness, preFields, onSaved }: {
+  sessionId: number; athleteId: number; existingWellness: WellnessLog | null
+  preFields?: string[] | null; onSaved: () => void
 }) {
   const supabase = createClient()
-  const fields = [
-    { key: 'sleep_hours', label: 'Sen', min: 3, max: 12, step: 0.5, unit: 'h' },
-    { key: 'sleep_quality', label: 'Jakość snu', min: 1, max: 5, step: 1, unit: '/5' },
-    { key: 'energy', label: 'Energia', min: 1, max: 5, step: 1, unit: '/5' },
-    { key: 'stress', label: 'Stres', min: 1, max: 5, step: 1, unit: '/5' },
-    { key: 'mood', label: 'Nastrój', min: 1, max: 5, step: 1, unit: '/5' },
-    { key: 'muscle_sorness', label: 'Zakwasy', min: 1, max: 5, step: 1, unit: '/5' },
-    { key: 'readiness', label: 'Gotowość', min: 1, max: 5, step: 1, unit: '/5' },
-  ]
-  const [vals, setVals] = useState<Record<string, number>>({
-    sleep_hours: existingWellness?.sleep_hours || 7,
-    sleep_quality: existingWellness?.sleep_quality || 3,
-    energy: existingWellness?.energy || 3,
-    stress: existingWellness?.stress || 2,
-    mood: existingWellness?.mood || 3,
-    muscle_sorness: existingWellness?.muscle_sorness || 1,
-    readiness: existingWellness?.readiness || 3,
+
+  // Użyj skonfigurowanych pól lub domyślnych
+  const activeFieldIds = (preFields && preFields.length > 0) ? preFields : DEFAULT_PRE_FIELDS
+  const fields = activeFieldIds
+    .map(id => WELLNESS_FIELD_MAP[id])
+    .filter(Boolean)
+
+  const [vals, setVals] = useState<Record<string, number>>(() => {
+    const init: Record<string, number> = {}
+    for (const f of fields) {
+      init[f.key] = (existingWellness as any)?.[f.key] ?? f.defaultVal
+    }
+    return init
   })
   const [concerns, setConcerns] = useState(existingWellness?.concerns || '')
   const [saved, setSaved] = useState(!!existingWellness)
@@ -1410,7 +1428,7 @@ function FinishModal({ sessionId, athleteId, wellnessFilled, doneSets, totalSets
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
-export default function TrainingClient({ athlete, trainingView, existingSetLogs, existingWellness }: Props) {
+export default function TrainingClient({ athlete, trainingView, existingSetLogs, existingWellness, wellnessPreFields }: Props) {
   const router = useRouter()
   const { session, day, blocks, plan, week } = trainingView
   const [setLogs, setSetLogs] = useState<SetLog[]>(() => dedupeSetLogs(existingSetLogs))
@@ -1539,7 +1557,7 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
               <span style={{ marginLeft: 'auto', color: C.gray, fontSize: '0.75rem', transform: wellnessOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
             </button>
             {wellnessOpen && session && (
-              <WellnessExpanded sessionId={session.id} athleteId={athlete.id} existingWellness={existingWellness} onSaved={() => { setWellnessSaved(true); setWellnessOpen(false) }} />
+              <WellnessExpanded sessionId={session.id} athleteId={athlete.id} existingWellness={existingWellness} preFields={wellnessPreFields} onSaved={() => { setWellnessSaved(true); setWellnessOpen(false) }} />
             )}
           </div>
 
