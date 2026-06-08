@@ -207,13 +207,13 @@ export default function ReportClient({ session, athlete, setLogs, wellness, pain
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: 5 }}>
                             {mainLogs.map((l: any) => (
                               <div key={l.id} style={{
-                                background: l.completed ? (allDone ? '#F0FDF4' : C.offWhite) : '#FEF2F2',
+                                background: l.completed ? '#F0FDF4' : '#FEF2F2',
                                 borderRadius: 8, padding: '0.5rem',
-                                border: `1px solid ${l.completed ? (allDone ? '#BBF7D0' : C.grayLight) : '#FECACA'}`,
+                                border: `1px solid ${l.completed ? '#86EFAC' : '#FECACA'}`,
                                 textAlign: 'center',
                               }}>
-                                <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, marginBottom: 2 }}>S{l.set_number}</div>
-                                <div style={{ fontWeight: 800, fontSize: '0.88rem', color: l.completed ? C.navy : C.red }}>
+                                <div style={{ fontFamily: mono, fontSize: '0.58rem', color: l.completed ? C.green : C.red, marginBottom: 2 }}>S{l.set_number}</div>
+                                <div style={{ fontWeight: 800, fontSize: '0.88rem', color: C.navy }}>
                                   {l.weight ? `${l.weight} kg` : '—'}
                                 </div>
                                 <div style={{ fontSize: '0.68rem', color: C.gray }}>
