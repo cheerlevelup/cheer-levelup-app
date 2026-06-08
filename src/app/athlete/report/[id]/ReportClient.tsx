@@ -29,6 +29,26 @@ const FEELING_LABELS: Record<string, string> = {
   srednie: '😐 Średnio', zmeczona: '😓 Zmęczona', slabo: '😞 Słabo',
 }
 
+function painLocation(p: any) {
+  return (p?.pain_location || p?.location || '').trim()
+}
+
+function painNote(p: any) {
+  return p?.pain_comment || p?.description || ''
+}
+
+function dedupePainLogs(logs: any[] = []) {
+  const byLocation = new Map<string, any>()
+  for (const log of logs) {
+    const key = painLocation(log).toLowerCase() || `pain-${log.id}`
+    const current = byLocation.get(key)
+    const currentTime = current?.created_at ? new Date(current.created_at).getTime() : 0
+    const nextTime = log?.created_at ? new Date(log.created_at).getTime() : 0
+    if (!current || nextTime >= currentTime) byLocation.set(key, log)
+  }
+  return Array.from(byLocation.values())
+}
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: '1.25rem' }}>
@@ -64,6 +84,7 @@ export default function ReportClient({ session, athlete, setLogs, wellness, pain
   const whatWentWell = feedback?.what_went_well ?? ''
   const painComment = feedback?.pain_after_comment ?? ''
   const generalNotes = feedback?.general_notes ?? ''
+  const visiblePainLogs = dedupePainLogs(painLogs || [])
 
   const sessionDate = new Date(session.date_completed || session.date_started || Date.now())
     .toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
@@ -277,16 +298,16 @@ export default function ReportClient({ session, athlete, setLogs, wellness, pain
           )}
 
           {/* ── BÓL ── */}
-          {painLogs && painLogs.length > 0 && (
+          {visiblePainLogs.length > 0 && (
             <Section title="🩹 Zgłoszony ból">
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {painLogs.map((p: any) => (
+                {visiblePainLogs.map((p: any) => (
                   <div key={p.id} style={{ background: '#FEF2F2', border: `1.5px solid #FECACA`, borderRadius: 12, padding: '0.75rem 1rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 700, fontSize: '0.88rem', color: C.navy }}>{p.pain_location || 'Brak lokalizacji'}</span>
+                      <span style={{ fontWeight: 700, fontSize: '0.88rem', color: C.navy }}>{painLocation(p) || 'Brak lokalizacji'}</span>
                       <span style={{ fontFamily: mono, fontWeight: 800, color: C.red }}>VAS {p.vas_score}/10</span>
                     </div>
-                    {p.pain_comment && <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: 4 }}>{p.pain_comment}</div>}
+                    {painNote(p) && <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: 4 }}>{painNote(p)}</div>}
                   </div>
                 ))}
               </div>

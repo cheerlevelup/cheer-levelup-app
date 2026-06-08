@@ -41,6 +41,26 @@ function wScaleColor(v: number, max: number, inverse: boolean) {
 function wComment(v: number, arr: string[]) { return arr[Math.max(0, Math.min(arr.length - 1, Math.round(v)))] }
 function readinessEmoji(v: number) { return v <= 1 ? '😴' : v <= 3 ? '😪' : v <= 5 ? '😐' : v <= 8 ? '😊' : '⚡' }
 
+function painLocation(p: any) {
+  return (p?.pain_location || p?.location || '').trim()
+}
+
+function painLogNote(p: any) {
+  return p?.pain_comment || p?.description || ''
+}
+
+function dedupePainLogs(logs: any[] = []) {
+  const byLocation = new Map<string, any>()
+  for (const log of logs) {
+    const key = painLocation(log).toLowerCase() || `pain-${log.id}`
+    const current = byLocation.get(key)
+    const currentTime = current?.created_at ? new Date(current.created_at).getTime() : 0
+    const nextTime = log?.created_at ? new Date(log.created_at).getTime() : 0
+    if (!current || nextTime >= currentTime) byLocation.set(key, log)
+  }
+  return Array.from(byLocation.values())
+}
+
 function WBar({ label, value, max, comments, inverse }: { label: string; value: number | null | undefined; max: number; comments?: string[]; inverse?: boolean }) {
   if (value == null) return null
   const pct = Math.min(100, Math.max(0, (value / max) * 100))
@@ -283,24 +303,29 @@ function ExercisePainPanel({ exerciseName, sessionId, athleteId, existingPains, 
   const [painNote, setPainNote] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [pains, setPains] = useState(existingPains)
+  const [pains, setPains] = useState(() => dedupePainLogs(existingPains))
 
   async function savePain() {
     if (vas === 0 && !painNote.trim()) return
     setSaving(true)
-    const { data } = await supabase.from('pain_logs').insert({
+    const payload = {
       workout_session_id: sessionId,
       vas_score: vas,
       pain_comment: painNote.trim() || null,
       pain_location: exerciseName,
       pain_reported: true,
-    }).select().single()
-    if (data) setPains(prev => [...prev, data])
+    }
+    const latestPain = pains[0]
+    const { data } = latestPain?.id
+      ? await supabase.from('pain_logs').update(payload).eq('id', latestPain.id).select().single()
+      : await supabase.from('pain_logs').insert(payload).select().single()
+    if (data) setPains([data])
     setVas(0); setPainNote(''); setSaved(true); setSaving(false)
     setTimeout(() => setSaved(false), 2000)
   }
 
-  const hasPain = pains.length > 0
+  const visiblePains = dedupePainLogs(pains)
+  const hasPain = visiblePains.length > 0
 
   return (
     <div style={{ marginTop: 8 }}>
@@ -309,7 +334,7 @@ function ExercisePainPanel({ exerciseName, sessionId, athleteId, existingPains, 
         <span style={{ fontSize: '1rem' }}>🩹</span>
         <span style={{ fontWeight: 600, fontSize: '0.84rem', color: C.navy }}>
           Ból / dyskomfort
-          {hasPain && <span style={{ marginLeft: 6, fontFamily: mono, fontSize: '0.62rem', color: C.red, fontWeight: 800 }}>VAS {Math.max(...pains.map((p: any) => p.vas_score || 0))}</span>}
+          {hasPain && <span style={{ marginLeft: 6, fontFamily: mono, fontSize: '0.62rem', color: C.red, fontWeight: 800 }}>VAS {Math.max(...visiblePains.map((p: any) => p.vas_score || 0))}</span>}
         </span>
         <span style={{ marginLeft: 'auto', fontSize: '0.7rem', color: C.gray }}>{open ? '▲' : '▼'}</span>
       </button>
@@ -317,13 +342,13 @@ function ExercisePainPanel({ exerciseName, sessionId, athleteId, existingPains, 
       {open && (
         <div style={{ marginTop: 6, padding: '0.875rem', background: '#FAFBFC', borderRadius: 10, border: `1.5px solid ${C.grayLight}` }}>
           {/* Istniejące bóle */}
-          {pains.map((p: any) => (
+          {visiblePains.map((p: any) => (
             <div key={p.id} style={{ marginBottom: 8, padding: '0.625rem 0.75rem', background: '#FEF2F2', border: `1px solid #FCA5A5`, borderRadius: 8 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: p.description ? 4 : 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: painLogNote(p) ? 4 : 0 }}>
                 <span style={{ fontFamily: mono, fontSize: '0.7rem', fontWeight: 700, color: vasColor(p.vas_score || 0) }}>VAS {p.vas_score}/10 · {vasLabel(p.vas_score || 0)}</span>
                 <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray }}>{new Date(p.created_at).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}</span>
               </div>
-              {p.description && <div style={{ fontSize: '0.78rem', color: C.gray }}>{p.description}</div>}
+              {painLogNote(p) && <div style={{ fontSize: '0.78rem', color: C.gray }}>{painLogNote(p)}</div>}
             </div>
           ))}
 
@@ -455,8 +480,8 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
 
   // Ból per ćwiczenie (po location = nazwa ćwiczenia)
   const painByExercise: Record<string, any[]> = {}
-  for (const p of (painLogs || [])) {
-    const loc = p.location || ''
+  for (const p of dedupePainLogs(painLogs || [])) {
+    const loc = painLocation(p)
     if (!painByExercise[loc]) painByExercise[loc] = []
     painByExercise[loc].push(p)
   }
@@ -848,13 +873,14 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
 
           {/* ── BÓL OGÓLNY (bez przypisania do ćwiczenia) ── */}
           {(() => {
-            const generalPains = (painLogs || []).filter((p: any) => {
+            const generalPains = dedupePainLogs(painLogs || []).filter((p: any) => {
               // Bóle nie przypisane do ćwiczenia (location null lub 'Ogólny')
               const allExNames = blockOrder.flatMap(b => b.exIds.map(id => {
                 const ex = exerciseMap[id]
                 return ex?.exercise?.name?.replace(/-/g,' ') || ex?.exercise_code || ''
               }))
-              return !p.location || (!allExNames.includes(p.location) && p.location !== '')
+              const loc = painLocation(p)
+              return !loc || (!allExNames.includes(loc) && loc !== '')
             })
             if (!generalPains.length) return null
             return (
@@ -864,10 +890,10 @@ export default function HistoryDetailClient({ athlete, session, setLogs, wellnes
                   {generalPains.map((p: any) => (
                     <div key={p.id} style={{ padding: '0.75rem', background: '#FEF2F2', border: `1.5px solid #FCA5A5`, borderRadius: 10 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontWeight: 700, color: C.navy, fontSize: '0.88rem' }}>{p.location || 'Nieznana lokalizacja'}</span>
+                        <span style={{ fontWeight: 700, color: C.navy, fontSize: '0.88rem' }}>{painLocation(p) || 'Nieznana lokalizacja'}</span>
                         <span style={{ fontFamily: mono, fontWeight: 800, color: vasColor(p.vas_score || 0) }}>VAS {p.vas_score}/10</span>
                       </div>
-                      {p.description && <div style={{ fontSize: '0.82rem', color: C.gray, marginTop: 4 }}>{p.description}</div>}
+                      {painLogNote(p) && <div style={{ fontSize: '0.82rem', color: C.gray, marginTop: 4 }}>{painLogNote(p)}</div>}
                     </div>
                   ))}
                 </div>

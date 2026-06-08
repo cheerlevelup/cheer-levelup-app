@@ -868,8 +868,19 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
       pain_location: exerciseName,
       pain_reported: true,
     }
-    const { data, error } = existingPainId
-      ? await supabase.from('pain_logs').update(payload).eq('id', existingPainId).select('id').single()
+    let painId = existingPainId
+    if (!painId) {
+      const { data: existing } = await supabase.from('pain_logs')
+        .select('id')
+        .eq('workout_session_id', sessionId)
+        .eq('pain_location', exerciseName)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      painId = existing?.id ?? null
+    }
+    const { data, error } = painId
+      ? await supabase.from('pain_logs').update(payload).eq('id', painId).select('id').single()
       : await supabase.from('pain_logs').insert(payload).select('id').single()
     if (error) { setPainError(error.message); return }
     if (data?.id) setExistingPainId(data.id)

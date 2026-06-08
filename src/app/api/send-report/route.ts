@@ -36,6 +36,26 @@ function rpeColor(rpe: number): string {
   return '#EF4444'
 }
 
+function painLocation(p: any): string {
+  return (p?.pain_location || p?.location || '').trim()
+}
+
+function painNote(p: any): string {
+  return p?.pain_comment || p?.description || ''
+}
+
+function dedupePainLogs(logs: any[] = []): any[] {
+  const byLocation = new Map<string, any>()
+  for (const log of logs) {
+    const key = painLocation(log).toLowerCase() || `pain-${log.id}`
+    const current = byLocation.get(key)
+    const currentTime = current?.created_at ? new Date(current.created_at).getTime() : 0
+    const nextTime = log?.created_at ? new Date(log.created_at).getTime() : 0
+    if (!current || nextTime >= currentTime) byLocation.set(key, log)
+  }
+  return Array.from(byLocation.values())
+}
+
 function buildEmailHtml(data: {
   athleteName: string
   dayName: string
@@ -59,6 +79,7 @@ function buildEmailHtml(data: {
 
   const date = new Date().toLocaleDateString('pl-PL', { day: 'numeric', month: 'long', year: 'numeric' })
   const rpeBg = rpeColor(rpe)
+  const visiblePainLogs = dedupePainLogs(painLogs || [])
 
   // Mapa nazw ćwiczeń
   const exerciseNameMap: Record<number, string> = {}
@@ -205,15 +226,15 @@ function buildEmailHtml(data: {
 
   // Pain logs HTML
   let painHtml = ''
-  if (painLogs && painLogs.length > 0) {
+  if (visiblePainLogs.length > 0) {
     painHtml = `
       <div style="background:#fff8f0;border-left:4px solid #F5C842;padding:14px 16px;margin-bottom:24px;border-radius:0 8px 8px 0">
         <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:10px;font-weight:600">⚠️ Zgłoszony ból</div>
-        ${painLogs.map((p: any) => `
+        ${visiblePainLogs.map((p: any) => `
           <div style="margin-bottom:10px;padding:8px;background:#fff;border-radius:6px">
-            <span style="font-weight:700;font-size:14px;color:#111">${p.pain_location || 'Brak lokalizacji'}</span>
+            <span style="font-weight:700;font-size:14px;color:#111">${painLocation(p) || 'Brak lokalizacji'}</span>
             <span style="color:#ef4444;font-size:13px;font-weight:700"> VAS ${p.vas_score}/10</span>
-            ${p.pain_comment ? `<div style="font-size:12px;color:#666;margin-top:3px">${p.pain_comment}</div>` : ''}
+            ${painNote(p) ? `<div style="font-size:12px;color:#666;margin-top:3px">${painNote(p)}</div>` : ''}
           </div>`).join('')}
       </div>`
   }
