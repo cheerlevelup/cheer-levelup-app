@@ -1479,14 +1479,21 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: '0.875rem', position: 'relative' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: '0.875rem' }}>
             <div style={{ background: C.gold, borderRadius: 20, padding: '4px 12px', flexShrink: 0 }}>
               <span style={{ fontWeight: 800, fontSize: '0.72rem', color: C.navy, letterSpacing: '0.06em', fontFamily: mono }}>
-                {plan?.name?.split('—')[0]?.trim() || 'PLAN'} · TYD {week?.week_number || '1'}
+                TYD {week?.week_number || '1'}
               </span>
             </div>
-            <span style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', fontSize: '0.78rem', fontWeight: 700, color: C.white, textAlign: 'center', width: `min(60vw, ${contentMaxWidth}px)` }}>{plan?.name || day.day_name}</span>
-            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: C.white, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {day.day_name}
+              </div>
+              <div style={{ fontSize: '0.65rem', color: C.gray, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {plan?.name}
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
               <span style={{ fontSize: '0.72rem', color: C.gray }}>{new Date().toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' })}</span>
               <button onClick={() => setLegendOpen(true)}
                 style={{ width: 28, height: 28, borderRadius: '50%', background: C.navyLight, border: `1.5px solid ${C.navyBorder}`, color: C.gold, fontWeight: 900, fontFamily: mono, fontSize: '0.72rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
