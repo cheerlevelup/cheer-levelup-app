@@ -30,26 +30,18 @@ const PRE_CATALOG: Param[] = [
 ]
 
 const POST_CATALOG: Param[] = [
-  { id: 'activity_type', label: 'Typ aktywności',         desc: 'Rest / trening / inne',                emoji: '🏃' },
-  { id: 'motivation',    label: 'Motywacja',              desc: 'Chęć do treningu przed',               emoji: '🎯' },
-  { id: 'rpe',           label: 'RPE (intensywność)',     desc: 'Skala wysiłku 1–10',                   emoji: '📊' },
-  { id: 'feeling_after', label: 'Samopoczucie po',        desc: 'Jak się czuje po treningu',            emoji: '🤩' },
-  { id: 'goal',          label: 'Realizacja celu',        desc: 'Czy wykonała plan',                    emoji: '✅' },
-  { id: 'recovery_score',label: 'Regeneracja',            desc: 'Ocena regeneracji 1–10',               emoji: '🔋' },
-  { id: 'pain_during',   label: 'Ból podczas treningu',   desc: 'Skala 0–10',                           emoji: '🩹' },
-  { id: 'menstrual_pain',label: 'Ból menstruacyjny',      desc: 'Skala 0–10',                           emoji: '🌹' },
-  { id: 'headache',      label: 'Ból głowy',              desc: 'Skala 0–10',                           emoji: '🤕' },
-  { id: 'stomachache',   label: 'Dolegliwości żołądkowe', desc: 'Skala 0–10',                           emoji: '😣' },
-  { id: 'joint_stiffness',label: 'Sztywność stawów',      desc: 'Odczuwalna sztywność',                 emoji: '🦴' },
-  { id: 'anxiety',       label: 'Lęk / niepokój',         desc: 'Poziom 0–10',                          emoji: '😰' },
-  { id: 'mental_overload',label: 'Przeciążenie mentalne', desc: 'Poziom 0–10',                          emoji: '🧩' },
-  { id: 'supplements',   label: 'Suplementy',             desc: 'Co i ile wzięła',                      emoji: '💊' },
-  { id: 'notes',         label: 'Notatki / uwagi',        desc: 'Wolny tekst',                          emoji: '📝' },
+  { id: 'rpe',           label: 'RPE — ciężkość treningu', desc: 'Skala wysiłku 1–10',                 emoji: '📊' },
+  { id: 'feeling_after', label: 'Samopoczucie po treningu',desc: 'Jak się czuje po treningu',          emoji: '🤩' },
+  { id: 'what_went_well',label: 'Co poszło dobrze',        desc: 'Pozytywny feedback',                 emoji: '✅' },
+  { id: 'pain_comment',  label: 'Ból / dyskomfort',        desc: 'Opis bólu po treningu',              emoji: '🩹' },
+  { id: 'general_notes', label: 'Uwagi dla trenera',       desc: 'Pytania, komentarze',                emoji: '💬' },
+  { id: 'goal',          label: 'Realizacja planu',        desc: 'Czy wykonała założony plan',         emoji: '🎯' },
+  { id: 'recovery_score',label: 'Regeneracja',             desc: 'Ocena regeneracji 1–10',             emoji: '🔋' },
 ]
 
 const QUICK_PRESETS = [
   { label: 'Minimalne',    pre: ['sleep_hours', 'energy', 'readiness'], post: ['rpe', 'feeling_after'] },
-  { label: 'Standardowe', pre: ['sleep_hours', 'sleep_quality', 'energy', 'stress', 'readiness', 'muscle_soreness'], post: ['motivation', 'rpe', 'feeling_after', 'goal', 'recovery_score', 'notes'] },
+  { label: 'Standardowe', pre: ['sleep_hours', 'sleep_quality', 'energy', 'stress', 'readiness', 'muscle_soreness'], post: ['rpe', 'feeling_after', 'what_went_well', 'pain_comment', 'general_notes'] },
   { label: 'Rozszerzone', pre: PRE_CATALOG.map(p => p.id), post: POST_CATALOG.map(p => p.id) },
   { label: 'Wyczyść',     pre: [], post: [] },
 ]
@@ -121,7 +113,7 @@ export default function PlanWellnessConfig({ planId, onClose }: Props) {
         <div style={{ background: C.navy, padding: '1rem 1.25rem', flexShrink: 0 }}>
           <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Konfiguracja planu</div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 style={{ color: C.white, fontWeight: 800, fontSize: '1.1rem' }}>🩺 Gotowość do treningu — wybierz pola</h2>
+            <h2 style={{ color: C.white, fontWeight: 800, fontSize: '1.1rem' }}>📋 Feedback treningowy — wybierz pola</h2>
             <button onClick={onClose} style={{ border: 'none', background: 'transparent', color: C.gray, fontSize: '1.2rem', cursor: 'pointer', lineHeight: 1 }}>✕</button>
           </div>
           <p style={{ color: C.gray, fontSize: '0.78rem', marginTop: 4 }}>
@@ -157,7 +149,7 @@ export default function PlanWellnessConfig({ planId, onClose }: Props) {
               borderBottom: tab === t ? `2px solid ${C.gold}` : '2px solid transparent',
               cursor: 'pointer',
             }}>
-              {t === 'pre' ? `🌅 Przed treningiem (${pre.length})` : `🏁 Po treningu (${post.length})`}
+              {t === 'pre' ? `🩺 Gotowość do treningu (${pre.length})` : `🏁 Feedback po treningu (${post.length})`}
             </button>
           ))}
         </div>
