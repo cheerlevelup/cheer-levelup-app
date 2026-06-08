@@ -39,11 +39,22 @@ CREATE POLICY "athlete_manage_wellness" ON wellness_logs
   WITH CHECK(athlete_id = (SELECT id FROM athletes WHERE user_id = auth.uid()));
 
 -- Ból / pain logs
+-- UWAGA: jeśli pain_logs nie ma kolumny athlete_id, użyj wersji przez workout_session_id:
 DROP POLICY IF EXISTS "athlete_manage_pain" ON pain_logs;
 CREATE POLICY "athlete_manage_pain" ON pain_logs
   FOR ALL TO authenticated
-  USING     (athlete_id = (SELECT id FROM athletes WHERE user_id = auth.uid()))
-  WITH CHECK(athlete_id = (SELECT id FROM athletes WHERE user_id = auth.uid()));
+  USING (
+    workout_session_id IN (
+      SELECT id FROM workout_sessions
+      WHERE athlete_id = (SELECT id FROM athletes WHERE user_id = auth.uid())
+    )
+  )
+  WITH CHECK (
+    workout_session_id IN (
+      SELECT id FROM workout_sessions
+      WHERE athlete_id = (SELECT id FROM athletes WHERE user_id = auth.uid())
+    )
+  );
 
 -- Feedback po treningu (RPE, samopoczucie, notatki)
 DROP POLICY IF EXISTS "athlete_manage_feedback" ON post_session_feedback;
