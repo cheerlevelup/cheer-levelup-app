@@ -25,10 +25,7 @@ const PRE_CATALOG: Param[] = [
   { id: 'readiness',     label: 'Gotowość do treningu',   desc: 'Skala 1–10',                           emoji: '💪' },
   { id: 'muscle_soreness', label: 'Zakwasy',              desc: 'Ból mięśni po poprzednim treningu',    emoji: '🔥' },
   { id: 'body_weight',   label: 'Masa ciała',             desc: 'Waga w kg',                            emoji: '⚖️' },
-  { id: 'hydration',     label: 'Nawodnienie',            desc: 'Szklanki wody',                        emoji: '💧' },
-  { id: 'resting_hr',    label: 'Tętno spoczynkowe',      desc: 'HR w spoczynku (bpm)',                 emoji: '❤️' },
   { id: 'cycle',         label: 'Faza cyklu',             desc: 'Faza menstruacyjna',                   emoji: '🌸' },
-  { id: 'sitting_hours', label: 'Godziny siedzenia',      desc: 'Czas siedzący tego dnia',              emoji: '🪑' },
   { id: 'motivation_pre', label: 'Motywacja przed',       desc: 'Chęć do treningu przed wejściem',      emoji: '🎯' },
 ]
 
