@@ -1182,10 +1182,12 @@ function ReportSentScreen({ rpe, feeling, whatWell, pain, notes, onBack }: {
 
 // ─── POST WORKOUT ─────────────────────────────────────────────────────────────
 
+interface FeedbackSnapshot { rpe: number; feeling: string; whatWell: string; pain: string; notes: string }
+
 function PostWorkoutSection({ sessionId, athleteId, wellnessFilled, onFinish, inModal, sendRef, onSaved }: {
   sessionId: number; athleteId: number; wellnessFilled: boolean; onFinish: () => void
   inModal?: boolean; sendRef?: React.MutableRefObject<(() => void) | null>
-  onSaved?: () => void
+  onSaved?: (data: FeedbackSnapshot) => void
 }) {
   const supabase = createClient()
   const router = useRouter()
@@ -1244,7 +1246,7 @@ function PostWorkoutSection({ sessionId, athleteId, wellnessFilled, onFinish, in
     }
     setSavingFeedback(false)
     setFeedbackSaved(true)
-    onSaved?.()
+    onSaved?.({ rpe, feeling, whatWell, pain, notes })
   }
 
   // Udostępnij funkcję wysyłki dla FinishModal (przez ref)
@@ -1522,9 +1524,18 @@ function CoachClosingCard({ closing, trainerName }: { closing: string; trainerNa
 
 // ─── FINISH MODAL ─────────────────────────────────────────────────────────────
 
-function FinishModal({ doneSets, totalSets, wellnessFilled, feedbackFilled, onClose, onFinish }: {
+const FEELING_EMOJI: Record<string, string> = {
+  swietnie: '🤩', dobrze: '😊', srednie: '😐', zmeczona: '😓', slabo: '😞',
+}
+const FEELING_LABEL: Record<string, string> = {
+  swietnie: 'Świetnie', dobrze: 'Dobrze', srednie: 'Średnio', zmeczona: 'Zmęczona', slabo: 'Słabo',
+}
+
+function FinishModal({ doneSets, totalSets, wellnessFilled, feedbackFilled, wellnessData, feedbackData, preFields, onClose, onFinish }: {
   doneSets: number; totalSets: number
   wellnessFilled: boolean; feedbackFilled: boolean
+  wellnessData: any; feedbackData: FeedbackSnapshot | null
+  preFields: string[] | null
   onClose: () => void; onFinish: () => void
 }) {
   const [sending, setSending] = useState(false)
@@ -1540,8 +1551,17 @@ function FinishModal({ doneSets, totalSets, wellnessFilled, feedbackFilled, onCl
     </div>
   )
 
+  // Wellness — pokaż tylko aktywne pola z wartościami
+  const activeFieldIds = (preFields && preFields.length > 0) ? preFields : DEFAULT_PRE_FIELDS
+  const wellnessSummaryFields = activeFieldIds
+    .map(id => WELLNESS_FIELD_MAP[id])
+    .filter(Boolean)
+    .filter(f => wellnessData?.[f.key] != null)
+    .slice(0, 5)
+
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: C.offWhite, fontFamily: sans, display: 'flex', flexDirection: 'column' }}>
+      {/* Nagłówek */}
       <div style={{ background: C.navy, padding: '1rem 1.25rem', flexShrink: 0 }}>
         <div style={{ maxWidth: 560, margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
@@ -1571,8 +1591,68 @@ function FinishModal({ doneSets, totalSets, wellnessFilled, feedbackFilled, onCl
         </div>
       </div>
 
-      <div style={{ flex: 1 }} />
+      {/* Podgląd danych */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
+        <div style={{ maxWidth: 560, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
 
+          {/* Wellness summary */}
+          {wellnessFilled && wellnessData && wellnessSummaryFields.length > 0 && (
+            <div style={{ background: C.white, borderRadius: 12, padding: '0.875rem', border: `1.5px solid ${C.grayLight}` }}>
+              <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: '0.625rem' }}>
+                🩺 Gotowość przed treningiem
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {wellnessSummaryFields.map(f => {
+                  const val = wellnessData[f.key]
+                  return (
+                    <div key={f.key} style={{ background: C.offWhite, borderRadius: 8, padding: '0.3rem 0.625rem', display: 'flex', gap: 5, alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.72rem', color: C.gray }}>{f.label}:</span>
+                      <span style={{ fontFamily: mono, fontSize: '0.78rem', fontWeight: 800, color: C.navy }}>{val}{f.unit}</span>
+                    </div>
+                  )
+                })}
+                {wellnessData.concerns && (
+                  <div style={{ width: '100%', marginTop: 4, fontSize: '0.78rem', color: C.navy, background: C.offWhite, borderRadius: 8, padding: '0.3rem 0.625rem' }}>
+                    💬 {wellnessData.concerns}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Feedback summary */}
+          {feedbackFilled && feedbackData && (
+            <div style={{ background: C.white, borderRadius: 12, padding: '0.875rem', border: `1.5px solid ${C.grayLight}` }}>
+              <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: '0.625rem' }}>
+                📝 Feedback po treningu
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: feedbackData.whatWell || feedbackData.pain || feedbackData.notes ? '0.5rem' : 0 }}>
+                <div style={{ background: C.offWhite, borderRadius: 8, padding: '0.3rem 0.625rem', display: 'flex', gap: 5, alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.72rem', color: C.gray }}>RPE:</span>
+                  <span style={{ fontFamily: mono, fontSize: '0.78rem', fontWeight: 800, color: C.gold }}>{feedbackData.rpe}/10</span>
+                </div>
+                {feedbackData.feeling && (
+                  <div style={{ background: C.offWhite, borderRadius: 8, padding: '0.3rem 0.625rem', display: 'flex', gap: 4, alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.9rem' }}>{FEELING_EMOJI[feedbackData.feeling] || ''}</span>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: C.navy }}>{FEELING_LABEL[feedbackData.feeling] || feedbackData.feeling}</span>
+                  </div>
+                )}
+              </div>
+              {[
+                { icon: '✅', val: feedbackData.whatWell },
+                { icon: '🩹', val: feedbackData.pain },
+                { icon: '💬', val: feedbackData.notes },
+              ].filter(f => f.val).map((f, i) => (
+                <div key={i} style={{ fontSize: '0.78rem', color: C.navy, background: C.offWhite, borderRadius: 8, padding: '0.3rem 0.625rem', marginTop: 4 }}>
+                  {f.icon} {f.val}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Przyciski */}
       <div style={{ flexShrink: 0, background: C.white, borderTop: `1.5px solid ${C.grayLight}`, padding: '0.875rem 1rem' }}>
         <div style={{ maxWidth: 560, margin: '0 auto', display: 'flex', gap: 8 }}>
           <button
@@ -1604,6 +1684,7 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
   const [wellnessKey, setWellnessKey] = useState(0)
   const [postOpen, setPostOpen] = useState(false)
   const [postFeedbackSaved, setPostFeedbackSaved] = useState(false)
+  const [savedFeedbackData, setSavedFeedbackData] = useState<FeedbackSnapshot | null>(null)
   const [finishOpen, setFinishOpen] = useState(false)
   const [finishBlockMsg, setFinishBlockMsg] = useState<string | null>(null)
   const [savedLocal, setSavedLocal] = useState(false)
@@ -1811,8 +1892,9 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
                 onFinish={() => {}}
                 inModal={false}
                 sendRef={undefined}
-                onSaved={() => {
+                onSaved={(data) => {
                   setPostFeedbackSaved(true)
+                  setSavedFeedbackData(data)
                   setPostOpen(false)
                 }}
               />
@@ -1836,6 +1918,9 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
             totalSets={totalSets}
             wellnessFilled={wellnessSaved}
             feedbackFilled={postFeedbackSaved}
+            wellnessData={localWellness}
+            feedbackData={savedFeedbackData}
+            preFields={wellnessPreFields}
             onClose={() => setFinishOpen(false)}
             onFinish={finishSession}
           />
