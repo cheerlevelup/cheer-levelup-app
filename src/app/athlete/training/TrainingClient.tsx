@@ -1796,7 +1796,7 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
             sessionId={session.id}
             athleteId={athlete.id}
             wellnessFilled={wellnessSaved}
-            doneSets={doneSets}
+            doneSets={doneSetsCount}
             totalSets={totalSets}
             onClose={() => setFinishOpen(false)}
             onFinish={() => router.push(`/athlete/report/${session.id}`)}
