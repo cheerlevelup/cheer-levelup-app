@@ -1542,14 +1542,24 @@ const FEELING_LABEL: Record<string, string> = {
   swietnie: 'Świetnie', dobrze: 'Dobrze', srednie: 'Średnio', zmeczona: 'Zmęczona', slabo: 'Słabo',
 }
 
-function FinishModal({ doneSets, totalSets, wellnessFilled, feedbackFilled, wellnessData, feedbackData, preFields, onClose, onFinish }: {
+function FinishModal({ doneSets, totalSets, wellnessFilled, feedbackFilled, wellnessData, feedbackData, preFields, blockGroups, setLogs, sessionId, onClose, onFinish }: {
   doneSets: number; totalSets: number
   wellnessFilled: boolean; feedbackFilled: boolean
   wellnessData: any; feedbackData: FeedbackSnapshot | null
   preFields: string[] | null
+  blockGroups: any[]; setLogs: SetLog[]; sessionId: number
   onClose: () => void; onFinish: () => void
 }) {
+  const supabase = createClient()
   const [sending, setSending] = useState(false)
+  const [painLogs, setPainLogs] = useState<any[]>([])
+
+  useEffect(() => {
+    if (!sessionId) return
+    supabase.from('pain_logs').select('*').eq('workout_session_id', sessionId).then(({ data }) => {
+      if (data) setPainLogs(data.filter(p => p.vas_score > 0 || p.pain_comment))
+    })
+  }, [sessionId])
 
   async function handleSend() {
     setSending(true)
@@ -1660,6 +1670,64 @@ function FinishModal({ doneSets, totalSets, wellnessFilled, feedbackFilled, well
               ))}
             </div>
           )}
+
+          {/* Bloki treningowe */}
+          {blockGroups.map((block, bi) => {
+            const exercises: TrainingExercise[] = block.exercises || []
+            return (
+              <div key={block.id ?? bi} style={{ background: C.white, borderRadius: 12, border: `1.5px solid ${C.grayLight}`, overflow: 'hidden' }}>
+                {/* Nagłówek bloku */}
+                <div style={{ background: C.navy, padding: '0.5rem 0.875rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontWeight: 800, fontSize: '0.75rem', color: C.gold, letterSpacing: '0.06em' }}>{block.block_name}</span>
+                </div>
+                {exercises.map((ex, ei) => {
+                  const sets = setLogs.filter(l => l.block_exercise_id === ex.id && !l.is_warmup)
+                    .sort((a, b) => a.set_number - b.set_number)
+                  const effectiveSets = ex.override?.sets_override || ex.sets
+                  const pain = painLogs.find(p => p.pain_location?.toLowerCase().includes(
+                    (ex.exercise?.name || ex.exercise_code || '').toLowerCase().slice(0, 10)
+                  ))
+                  return (
+                    <div key={ex.id ?? ei} style={{ padding: '0.625rem 0.875rem', borderTop: ei > 0 ? `1px solid ${C.grayLight}` : 'none' }}>
+                      {/* Nazwa ćwiczenia */}
+                      <div style={{ fontWeight: 700, fontSize: '0.82rem', color: C.navy, marginBottom: '0.4rem' }}>
+                        {ex.exercise?.name || ex.exercise_code}
+                        {ex.override?.sets_override && (
+                          <span style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray, marginLeft: 6 }}>
+                            {ex.override.sets_override}×{ex.override.reps_override || ex.reps}
+                          </span>
+                        )}
+                      </div>
+                      {/* Serie */}
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                        {Array.from({ length: effectiveSets }, (_, i) => {
+                          const log = sets.find(s => s.set_number === i + 1)
+                          const done = log?.completed
+                          const w = log?.weight
+                          return (
+                            <div key={i} style={{
+                              padding: '0.2rem 0.5rem', borderRadius: 6, fontFamily: mono, fontSize: '0.72rem', fontWeight: 700,
+                              background: done ? '#F0FDF4' : C.offWhite,
+                              color: done ? '#166534' : C.gray,
+                              border: `1px solid ${done ? '#86EFAC' : C.grayLight}`,
+                            }}>
+                              S{i + 1} {done ? (w ? `${w}kg` : '✓') : '—'}
+                            </div>
+                          )
+                        })}
+                      </div>
+                      {/* Ból dla tego ćwiczenia */}
+                      {pain && (
+                        <div style={{ marginTop: 5, fontSize: '0.72rem', color: '#B45309', background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 6, padding: '0.2rem 0.5rem', display: 'inline-block' }}>
+                          🩹 VAS {pain.vas_score}/10{pain.pain_comment ? ` · ${pain.pain_comment}` : ''}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
         </div>
       </div>
 
@@ -1932,6 +2000,9 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
             wellnessData={localWellness}
             feedbackData={savedFeedbackData}
             preFields={wellnessPreFields}
+            blockGroups={blockGroups}
+            setLogs={setLogs}
+            sessionId={session.id}
             onClose={() => setFinishOpen(false)}
             onFinish={finishSession}
           />
