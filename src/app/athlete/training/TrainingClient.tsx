@@ -525,11 +525,11 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
   const [actualReps, setActualReps] = useState(existingLog?.reps_completed?.toString() || '')
   const [done, setDone] = useState(!!existingLog?.completed)
 
-  async function saveSet(nextDone = done) {
+  async function saveSet(nextDone = done, currentWeight = weight) {
     const payload = {
       workout_session_id: sessionId, block_exercise_id: blockExerciseId,
       athlete_id: athleteId, set_number: setNum,
-      weight: weight ? parseFloat(weight.replace(',', '.')) : null,
+      weight: currentWeight ? parseFloat(currentWeight.replace(',', '.')) : null,
       reps_completed: actualReps ? parseInt(actualReps) : null,
       is_warmup: false, completed: nextDone,
     }
@@ -549,6 +549,23 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
     setDone(newDone)
     onComplete(newDone)
     await saveSet(newDone)
+  }
+
+  function handleWeightChange(val: string) {
+    const cleaned = val.replace(',', '.')
+    setWeight(cleaned)
+    const hasWeight = cleaned.trim() !== ''
+    if (hasWeight && !done) {
+      setDone(true)
+      onComplete(true)
+      saveSet(true, cleaned)
+    } else if (!hasWeight && done) {
+      setDone(false)
+      onComplete(false)
+      saveSet(false, cleaned)
+    } else {
+      saveSet(done, cleaned)
+    }
   }
 
   // Sprawdź czy reps to długi opis (>12 znaków) — wtedy układ 2-rzędowy
@@ -582,7 +599,7 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
           <>
             <div style={{ width: 72 }}>
               <input inputMode="decimal" placeholder="kg" value={weight}
-                onChange={e => setWeight(e.target.value.replace(',', '.'))} onBlur={() => saveSet()}
+                onChange={e => handleWeightChange(e.target.value)}
                 style={{ width: '100%', padding: '0.4rem 0.5rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.9rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center' }} />
             </div>
             {isAmrap && (
@@ -602,7 +619,7 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <div style={{ flex: 1 }}>
             <input inputMode="decimal" placeholder="wpisz ciężar (kg)" value={weight}
-              onChange={e => setWeight(e.target.value.replace(',', '.'))} onBlur={() => saveSet()}
+              onChange={e => handleWeightChange(e.target.value)}
               style={{ width: '100%', padding: '0.55rem 0.75rem', border: `1.5px solid ${done ? '#86EFAC' : '#E0E8F0'}`, borderRadius: 8, fontFamily: sans, fontSize: '1rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center', fontWeight: 700 }} />
             {prevWeight && !weight && (
               <div style={{ fontSize: '0.6rem', color: C.gray, textAlign: 'center', marginTop: 2 }}>poprzednio: {prevWeight} kg</div>
@@ -858,10 +875,10 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
               <span style={{ fontWeight: 700, fontSize: '0.95rem', color: C.navy }}>{exerciseName}</span>
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-              {(effectiveTempo || effectiveTempoNote) && (
+              {effectiveTempo && (
                 <button onClick={e => { e.stopPropagation(); setTempoOpen(true) }}
                   style={{ padding: '2px 8px', background: C.navyLight, borderRadius: 6, border: 'none', cursor: 'pointer', fontFamily: mono, fontWeight: 700, fontSize: '0.68rem', color: C.gold }}>
-                  ⏱ {effectiveTempo || 'wolno'}
+                  ⏱ {effectiveTempo}
                 </button>
               )}
               <span style={{ padding: '2px 8px', background: C.grayLight, borderRadius: 6, fontSize: '0.7rem', color: C.gray, fontWeight: 500 }}>
@@ -1582,11 +1599,11 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
   const supabase = createClient()
 
   const totalSets = blocks.reduce((sum, b) => sum + (b.exercises || []).reduce((s: number, e: WorkoutBlockExercise) => s + (e.override?.sets_override || e.sets), 0), 0)
-  const doneSets = setLogs.filter(l => l.completed && !l.is_warmup).length
-  const progress = totalSets > 0 ? Math.round((doneSets / totalSets) * 100) : 0
+  const [doneSetsCount, setDoneSetsCount] = useState(() => dedupeSetLogs(existingSetLogs).filter(l => l.completed && !l.is_warmup).length)
+  const progress = totalSets > 0 ? Math.round((doneSetsCount / totalSets) * 100) : 0
 
   const handleSetsChange = useCallback((delta: number) => {
-    // Odświeżamy licznik przez re-fetch lub lokalnie
+    setDoneSetsCount(prev => Math.max(0, prev + delta))
   }, [])
 
   async function saveLocal() {
@@ -1668,7 +1685,7 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
               <span style={{ fontSize: '0.68rem', color: C.gray, fontFamily: mono, letterSpacing: '0.04em' }}>Postęp treningu</span>
               <span style={{ fontSize: '0.72rem', fontWeight: 700, color: progress === 100 ? C.green : C.gold, fontFamily: mono }}>
-                {doneSets}/{totalSets} serii · {progress}%
+                {doneSetsCount}/{totalSets} serii · {progress}%
               </span>
             </div>
             <div style={{ height: 6, background: C.navyBorder, borderRadius: 3, overflow: 'hidden' }}>
