@@ -51,11 +51,19 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
     .eq('workout_session_id', sessionId)
     .maybeSingle()
 
-  // Pain logs — po workout_session_id (tabela nie ma athlete_id)
-  const { data: painLogs } = await supabase
+  // Pain logs — deduplikacja po pain_location (bierz najnowszy wpis na lokalizację)
+  const { data: rawPainLogs } = await supabase
     .from('pain_logs')
     .select('*')
     .eq('workout_session_id', sessionId)
+    .order('created_at', { ascending: false })
+
+  const painLogsMap = new Map<string, any>()
+  for (const p of rawPainLogs || []) {
+    const key = (p.pain_location || '').toLowerCase().trim()
+    if (!painLogsMap.has(key)) painLogsMap.set(key, p)
+  }
+  const painLogs = Array.from(painLogsMap.values())
 
   // Feedback
   const { data: feedback } = await supabase
@@ -66,14 +74,22 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
     .limit(1)
     .maybeSingle()
 
+  // Wellness preFields — z plan_wellness_config (te same co w formularzu treningu)
+  const planId = (session as any)?.workout_day?.week?.plan?.id
+  const { data: wellnessConfig } = planId
+    ? await supabase.from('plan_wellness_config').select('pre_params').eq('plan_id', planId).maybeSingle()
+    : { data: null }
+  const wellnessPreFields: string[] | null = (wellnessConfig as any)?.pre_params || null
+
   return (
     <ReportClient
       session={session}
       athlete={athlete}
       setLogs={setLogs || []}
       wellness={wellness || null}
-      painLogs={painLogs || []}
+      painLogs={painLogs}
       feedback={feedback || null}
+      wellnessPreFields={wellnessPreFields}
     />
   )
 }

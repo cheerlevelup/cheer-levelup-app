@@ -69,8 +69,24 @@ function Chip({ label, value, color = C.navy }: { label: string; value: string |
   )
 }
 
-export default function ReportClient({ session, athlete, setLogs, wellness, painLogs, feedback }: {
+// Mapowanie fieldId → klucz w tabeli + etykieta do wyświetlenia
+const WELLNESS_REPORT_FIELDS: Record<string, { key: string; label: string; unit: string }> = {
+  sleep_hours:    { key: 'sleep_hours',    label: '🌙 Sen',          unit: ' h' },
+  sleep_quality:  { key: 'sleep_quality',  label: '💤 Jakość snu',   unit: '/10' },
+  energy:         { key: 'energy',         label: '⚡ Energia',       unit: '/10' },
+  stress:         { key: 'stress',         label: '🧠 Stres',         unit: '/10' },
+  mood:           { key: 'mood',           label: '😊 Nastrój',       unit: '/10' },
+  muscle_soreness:{ key: 'muscle_sorness', label: '🔥 Zakwasy',       unit: '/10' },
+  readiness:      { key: 'readiness',      label: '😊 Wypoczęcie',    unit: '/10' },
+  body_weight:    { key: 'body_weight_kg', label: '⚖️ Masa ciała',   unit: ' kg' },
+  resting_hr:     { key: 'resting_hr',     label: '❤️ Tętno spocz.', unit: ' bpm' },
+  motivation:     { key: 'motivation',     label: '🎯 Motywacja',     unit: '/10' },
+}
+const DEFAULT_WELLNESS_FIELDS = ['sleep_hours', 'sleep_quality', 'energy', 'stress', 'mood', 'muscle_soreness', 'readiness']
+
+export default function ReportClient({ session, athlete, setLogs, wellness, painLogs, feedback, wellnessPreFields }: {
   session: any; athlete: any; setLogs: any[]; wellness: any; painLogs: any[]; feedback: any
+  wellnessPreFields?: string[] | null
 }) {
   const router = useRouter()
 
@@ -270,32 +286,34 @@ export default function ReportClient({ session, athlete, setLogs, wellness, pain
           </Section>
 
           {/* ── WELLNESS ── */}
-          {wellness && (
-            <Section title="🩺 Gotowość do treningu">
-              <div style={{ background: C.white, borderRadius: 12, border: `1.5px solid ${C.grayLight}`, overflow: 'hidden' }}>
-                {[
-                  ['🌙 Sen', wellness.sleep_hours != null ? `${wellness.sleep_hours} h` : null],
-                  ['💤 Jakość snu', wellness.sleep_quality != null ? `${wellness.sleep_quality}/10` : null],
-                  ['😊 Wypoczęcie', wellness.readiness != null ? `${wellness.readiness}/10` : null],
-                  ['⚡ Energia', wellness.energy != null ? `${wellness.energy}/10` : null],
-                  ['🧠 Stres', wellness.stress != null ? `${wellness.stress}/10` : null],
-                  ['🔥 Zakwasy', wellness.muscle_sorness != null ? `${wellness.muscle_sorness}/10` : null],
-                  ['⚖️ Masa ciała', wellness.body_weight_kg != null ? `${wellness.body_weight_kg} kg` : null],
-                  ['❤️ Tętno spocz.', wellness.resting_hr != null ? `${wellness.resting_hr} bpm` : null],
-                ].filter(([, v]) => v != null).map(([label, value], i, arr) => (
-                  <div key={label as string} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.6rem 1rem', borderBottom: i < arr.length - 1 ? `1px solid ${C.grayLight}` : 'none' }}>
-                    <span style={{ fontSize: '0.84rem', color: C.navy }}>{label}</span>
-                    <span style={{ fontFamily: mono, fontWeight: 800, fontSize: '0.88rem', color: C.navy }}>{value}</span>
-                  </div>
-                ))}
-                {wellness.concerns && (
-                  <div style={{ padding: '0.75rem 1rem', background: '#FFFBEB', borderTop: `1px solid ${C.grayLight}`, fontSize: '0.82rem', color: '#92400E' }}>
-                    💬 {wellness.concerns}
-                  </div>
-                )}
-              </div>
-            </Section>
-          )}
+          {wellness && (() => {
+            const activeIds = wellnessPreFields && wellnessPreFields.length > 0
+              ? wellnessPreFields
+              : DEFAULT_WELLNESS_FIELDS
+            const rows = activeIds
+              .map(id => WELLNESS_REPORT_FIELDS[id])
+              .filter(Boolean)
+              .map(f => ({ label: f.label, value: wellness[f.key] != null ? `${wellness[f.key]}${f.unit}` : null }))
+              .filter(r => r.value != null)
+            if (rows.length === 0 && !wellness.concerns) return null
+            return (
+              <Section title="🩺 Gotowość do treningu">
+                <div style={{ background: C.white, borderRadius: 12, border: `1.5px solid ${C.grayLight}`, overflow: 'hidden' }}>
+                  {rows.map(({ label, value }, i) => (
+                    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.6rem 1rem', borderBottom: i < rows.length - 1 || wellness.concerns ? `1px solid ${C.grayLight}` : 'none' }}>
+                      <span style={{ fontSize: '0.84rem', color: C.navy }}>{label}</span>
+                      <span style={{ fontFamily: mono, fontWeight: 800, fontSize: '0.88rem', color: C.navy }}>{value}</span>
+                    </div>
+                  ))}
+                  {wellness.concerns && (
+                    <div style={{ padding: '0.75rem 1rem', background: '#FFFBEB', fontSize: '0.82rem', color: '#92400E' }}>
+                      💬 {wellness.concerns}
+                    </div>
+                  )}
+                </div>
+              </Section>
+            )
+          })()}
 
           {/* ── BÓL ── */}
           {visiblePainLogs.length > 0 && (
