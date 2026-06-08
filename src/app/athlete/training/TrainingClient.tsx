@@ -799,6 +799,23 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
   const [vas, setVas] = useState(0)
   const [painNote, setPainNote] = useState('')
   const [painSaved, setPainSaved] = useState(false)
+  const [existingPainId, setExistingPainId] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!sessionId || !exercise.id) return
+    supabase.from('pain_logs').select('id,vas_score,pain_comment')
+      .eq('workout_session_id', sessionId)
+      .ilike('pain_location', `%${formatExerciseName(exercise.exercise?.name || exercise.exercise_code || '')}%`)
+      .order('created_at', { ascending: false }).limit(1).maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setExistingPainId(data.id)
+          setVas(data.vas_score ?? 0)
+          setPainNote(data.pain_comment ?? '')
+          setPainSaved(true)
+        }
+      })
+  }, [sessionId, exercise.id])
   const [exerciseNote, setExerciseNote] = useState(() => {
     // Wczytaj notatkę z pierwszej serii (zapisanej wcześniej)
     const firstLog = setLogs.filter(l => l.block_exercise_id === exercise.id && !l.is_warmup)
@@ -844,14 +861,18 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
 
   async function savePain() {
     setPainError('')
-    const { error } = await supabase.from('pain_logs').insert({
+    const payload = {
       workout_session_id: sessionId,
       vas_score: vas,
       pain_comment: painNote || null,
       pain_location: exerciseName,
       pain_reported: true,
-    })
+    }
+    const { data, error } = existingPainId
+      ? await supabase.from('pain_logs').update(payload).eq('id', existingPainId).select('id').single()
+      : await supabase.from('pain_logs').insert(payload).select('id').single()
     if (error) { setPainError(error.message); return }
+    if (data?.id) setExistingPainId(data.id)
     setPainSaved(true)
   }
 
