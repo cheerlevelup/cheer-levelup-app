@@ -1648,23 +1648,18 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
   async function saveGroup() {
     setGroupSaving(true)
     setGroupError('')
-    const res = await fetch('/api/coach', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'update_group',
-        groupId: group.id,
+    const { data, error } = await supabase
+      .from('groups')
+      .update({
         name: localGroup.name?.trim() || group.name,
         training_level: localGroup.training_level?.trim() || null,
-      }),
-    })
-    const json = await res.json()
+      })
+      .eq('id', group.id)
+      .select()
+      .single()
     setGroupSaving(false)
-    if (!res.ok || json.error) {
-      setGroupError(json.error || 'Nie udało się zapisać')
-      return
-    }
-    setLocalGroup(json.group)
+    if (error) { setGroupError(error.message); return }
+    if (data) setLocalGroup(data)
     setGroupSaved(true)
     setTimeout(() => setGroupSaved(false), 2500)
     setEditingGroup(false)
