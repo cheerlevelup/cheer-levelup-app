@@ -53,13 +53,11 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
     .eq('date', sessionDate)
     .maybeSingle()
 
-  // Pain logs
+  // Pain logs — po workout_session_id (tabela nie ma athlete_id)
   const { data: painLogs } = await supabase
     .from('pain_logs')
     .select('*')
-    .eq('athlete_id', athlete.id)
-    .gte('created_at', new Date(new Date(sessionDate).getTime() - 2 * 60 * 60 * 1000).toISOString())
-    .lte('created_at', new Date(new Date(sessionDate).getTime() + 24 * 60 * 60 * 1000).toISOString())
+    .eq('workout_session_id', sessionId)
 
   // Feedback
   const { data: feedback } = await supabase

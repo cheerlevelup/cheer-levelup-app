@@ -211,9 +211,9 @@ function buildEmailHtml(data: {
         <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:10px;font-weight:600">⚠️ Zgłoszony ból</div>
         ${painLogs.map((p: any) => `
           <div style="margin-bottom:10px;padding:8px;background:#fff;border-radius:6px">
-            <span style="font-weight:700;font-size:14px;color:#111">${p.location || 'Brak lokalizacji'}</span>
+            <span style="font-weight:700;font-size:14px;color:#111">${p.pain_location || 'Brak lokalizacji'}</span>
             <span style="color:#ef4444;font-size:13px;font-weight:700"> VAS ${p.vas_score}/10</span>
-            ${p.description ? `<div style="font-size:12px;color:#666;margin-top:3px">${p.description}</div>` : ''}
+            ${p.pain_comment ? `<div style="font-size:12px;color:#666;margin-top:3px">${p.pain_comment}</div>` : ''}
           </div>`).join('')}
       </div>`
   }
@@ -355,12 +355,11 @@ export async function POST(req: NextRequest) {
       .eq('date', today)
       .maybeSingle()
 
-    // 6. Pobierz pain_logs
+    // 6. Pobierz pain_logs po session_id (tabela nie ma athlete_id)
     const { data: painLogs } = await supabase
       .from('pain_logs')
       .select('*')
-      .eq('athlete_id', athleteId)
-      .gte('created_at', new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString())
+      .eq('workout_session_id', sessionId)
 
     const day = session.workout_day
     const plan = day?.week?.plan

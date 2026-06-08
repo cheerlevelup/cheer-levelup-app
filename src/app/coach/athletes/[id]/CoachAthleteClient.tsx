@@ -1130,8 +1130,8 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
                   {painLogs.slice(0, 5).map((p: any) => (
                     <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem', background: C.offWhite, borderRadius: 10, border: `1.5px solid ${C.grayLight}` }}>
                       <div>
-                        <div style={{ fontWeight: 700, fontSize: '0.88rem', color: C.navy }}>{p.location || '—'}</div>
-                        {p.description && <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: 2 }}>{p.description}</div>}
+                        <div style={{ fontWeight: 700, fontSize: '0.88rem', color: C.navy }}>{p.pain_location || '—'}</div>
+                        {p.pain_comment && <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: 2 }}>{p.pain_comment}</div>}
                         <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, marginTop: 3 }}>{new Date(p.created_at).toLocaleDateString('pl-PL')}</div>
                       </div>
                       <div style={{ fontFamily: mono, fontSize: '0.88rem', fontWeight: 800, color: p.vas_score >= 7 ? C.red : p.vas_score >= 4 ? C.orange : C.green, background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 8, padding: '4px 10px', flexShrink: 0 }}>

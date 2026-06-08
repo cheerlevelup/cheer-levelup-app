@@ -283,10 +283,10 @@ export default function ReportClient({ session, athlete, setLogs, wellness, pain
                 {painLogs.map((p: any) => (
                   <div key={p.id} style={{ background: '#FEF2F2', border: `1.5px solid #FECACA`, borderRadius: 12, padding: '0.75rem 1rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 700, fontSize: '0.88rem', color: C.navy }}>{p.location || 'Brak lokalizacji'}</span>
+                      <span style={{ fontWeight: 700, fontSize: '0.88rem', color: C.navy }}>{p.pain_location || 'Brak lokalizacji'}</span>
                       <span style={{ fontFamily: mono, fontWeight: 800, color: C.red }}>VAS {p.vas_score}/10</span>
                     </div>
-                    {p.description && <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: 4 }}>{p.description}</div>}
+                    {p.pain_comment && <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: 4 }}>{p.pain_comment}</div>}
                   </div>
                 ))}
               </div>

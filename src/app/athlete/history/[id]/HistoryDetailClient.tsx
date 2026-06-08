@@ -288,9 +288,11 @@ function ExercisePainPanel({ exerciseName, sessionId, athleteId, existingPains, 
     if (vas === 0 && !painNote.trim()) return
     setSaving(true)
     const { data } = await supabase.from('pain_logs').insert({
-      workout_session_id: sessionId, athlete_id: athleteId,
-      vas_score: vas, description: painNote.trim() || null,
-      location: exerciseName,
+      workout_session_id: sessionId,
+      vas_score: vas,
+      pain_comment: painNote.trim() || null,
+      pain_location: exerciseName,
+      pain_reported: true,
     }).select().single()
     if (data) setPains(prev => [...prev, data])
     setVas(0); setPainNote(''); setSaved(true); setSaving(false)

@@ -74,13 +74,13 @@ export default async function CoachAthletePage({ params }: Props) {
     .gte('date', daysAgo28.toISOString().split('T')[0])
     .order('date', { ascending: false })
 
-  // Pain logs
-  const { data: painLogs } = await supabase
-    .from('pain_logs')
-    .select('*')
-    .eq('athlete_id', athleteId)
-    .order('created_at', { ascending: false })
-    .limit(10)
+  // Pain logs — przez sesje zawodniczki (tabela nie ma athlete_id)
+  const athleteSessionIds = (sessions || []).map((s: any) => s.id).slice(0, 20)
+  const { data: painLogs } = athleteSessionIds.length > 0
+    ? await supabase.from('pain_logs').select('*')
+        .in('workout_session_id', athleteSessionIds)
+        .order('created_at', { ascending: false }).limit(10)
+    : { data: [] }
 
   const { data: groupModuleConfigs } = athlete.group_id
     ? await supabase

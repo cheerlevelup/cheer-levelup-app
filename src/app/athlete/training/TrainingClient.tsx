@@ -726,9 +726,11 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
   async function savePain() {
     setPainError('')
     const { error } = await supabase.from('pain_logs').insert({
-      workout_session_id: sessionId, athlete_id: athleteId,
-      vas_score: vas, description: painNote,
-      location: exerciseName,
+      workout_session_id: sessionId,
+      vas_score: vas,
+      pain_comment: painNote || null,
+      pain_location: exerciseName,
+      pain_reported: true,
     })
     if (error) { setPainError(error.message); return }
     setPainSaved(true)
