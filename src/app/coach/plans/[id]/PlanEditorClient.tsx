@@ -1164,7 +1164,7 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
                   <button onClick={() => setViewMode('table')} style={{ padding: '0.5rem 0.75rem', border: 'none', background: viewMode === 'table' ? C.gold : 'transparent', color: viewMode === 'table' ? C.navy : C.gray, fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer' }}>⊟ Tabelka</button>
                 </div>
                 <button onClick={() => setShowWellness(true)} title="Skonfiguruj pola gotowości do treningu" style={{ border: `1.5px solid ${C.gold}`, background: C.gold, color: C.navy, borderRadius: 9, padding: '0.5rem 0.75rem', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer' }}>
-                  🩺 Gotowość do treningu
+                  📋 Feedback treningowy
                 </button>
                 <button
                   onClick={() => router.push('/coach/plans')}
