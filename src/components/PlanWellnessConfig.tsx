@@ -36,7 +36,6 @@ const POST_CATALOG: Param[] = [
   { id: 'pain_comment',  label: 'Ból / dyskomfort',        desc: 'Opis bólu po treningu',              emoji: '🩹' },
   { id: 'general_notes', label: 'Uwagi dla trenera',       desc: 'Pytania, komentarze',                emoji: '💬' },
   { id: 'goal',          label: 'Realizacja planu',        desc: 'Czy wykonała założony plan',         emoji: '🎯' },
-  { id: 'recovery_score',label: 'Regeneracja',             desc: 'Ocena regeneracji 1–10',             emoji: '🔋' },
 ]
 
 const QUICK_PRESETS = [
