@@ -613,12 +613,26 @@ function WellnessExpanded({ sessionId, athleteId, existingWellness, onSaved }: {
   const [concerns, setConcerns] = useState(existingWellness?.concerns || '')
   const [saved, setSaved] = useState(!!existingWellness)
 
+  const [saveError, setSaveError] = useState('')
+
   async function save() {
-    const payload = { athlete_id: athleteId, workout_session_id: sessionId, session_id: sessionId, ...vals, concerns }
-    if (existingWellness) {
-      await supabase.from('wellness_logs').update(payload).eq('id', existingWellness.id)
-    } else {
-      await supabase.from('wellness_logs').insert(payload)
+    setSaveError('')
+    const today = new Date().toISOString().split('T')[0]
+    const payload = {
+      athlete_id: athleteId,
+      workout_session_id: sessionId,
+      session_id: sessionId,
+      date: today,
+      ...vals,
+      concerns,
+    }
+    const { error } = existingWellness
+      ? await supabase.from('wellness_logs').update(payload).eq('id', existingWellness.id)
+      : await supabase.from('wellness_logs').insert(payload)
+
+    if (error) {
+      setSaveError(`Błąd zapisu: ${error.message}`)
+      return
     }
     setSaved(true)
     onSaved()
@@ -639,6 +653,11 @@ function WellnessExpanded({ sessionId, athleteId, existingWellness, onSaved }: {
       ))}
       <textarea placeholder="Uwagi dla trenera..." value={concerns} onChange={e => setConcerns(e.target.value)} rows={2}
         style={{ width: '100%', padding: '0.625rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.85rem', color: C.navy, resize: 'none', outline: 'none', marginBottom: 8, boxSizing: 'border-box' }} />
+      {saveError && (
+        <div style={{ color: C.red, fontSize: '0.78rem', fontWeight: 600, marginBottom: 6, padding: '0.5rem', background: '#FEF2F2', borderRadius: 8 }}>
+          ❌ {saveError}
+        </div>
+      )}
       <button onClick={save} style={{ width: '100%', padding: '0.75rem', background: saved ? C.green : C.navy, color: saved ? '#fff' : C.gold, border: 'none', borderRadius: 10, fontFamily: sans, fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer' }}>
         {saved ? '✓ Zapisano' : 'Zapisz wellness'}
       </button>
@@ -702,12 +721,16 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
   const isAmrap = typeof effectiveReps === 'string' && effectiveReps.toUpperCase() === 'AMRAP'
   const exerciseName = getEffectiveName()
 
+  const [painError, setPainError] = useState('')
+
   async function savePain() {
-    await supabase.from('pain_logs').insert({
+    setPainError('')
+    const { error } = await supabase.from('pain_logs').insert({
       workout_session_id: sessionId, athlete_id: athleteId,
       vas_score: vas, description: painNote,
       location: exerciseName,
     })
+    if (error) { setPainError(error.message); return }
     setPainSaved(true)
   }
 
@@ -853,6 +876,7 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
                 </div>
                 <textarea placeholder="Gdzie boli? Opis odczuć..." value={painNote} onChange={e => setPainNote(e.target.value)} rows={2}
                   style={{ width: '100%', padding: '0.625rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.85rem', color: C.navy, resize: 'none', outline: 'none', background: '#fff', boxSizing: 'border-box' }} />
+                {painError && <div style={{ color: C.red, fontSize: '0.75rem', marginTop: 4 }}>❌ {painError}</div>}
                 {(vas > 0 || painNote) && (
                   <button onClick={savePain} style={{ marginTop: 8, width: '100%', padding: '0.625rem', background: painSaved ? C.green : C.navy, color: painSaved ? '#fff' : C.gold, border: 'none', borderRadius: 8, fontFamily: sans, fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}>
                     {painSaved ? '✓ Zapisano' : 'Zapisz odczucia'}
