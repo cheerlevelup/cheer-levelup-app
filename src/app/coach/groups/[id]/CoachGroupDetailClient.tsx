@@ -1643,14 +1643,31 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
   const [groupSaving, setGroupSaving] = useState(false)
   const [groupSaved, setGroupSaved] = useState(false)
 
+  const [groupError, setGroupError] = useState('')
+
   async function saveGroup() {
     setGroupSaving(true)
-    const { error } = await supabase.from('groups').update({
-      name: localGroup.name?.trim() || group.name,
-      training_level: localGroup.training_level?.trim() || null,
-    }).eq('id', group.id)
+    setGroupError('')
+    const res = await fetch('/api/coach', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'update_group',
+        groupId: group.id,
+        name: localGroup.name?.trim() || group.name,
+        training_level: localGroup.training_level?.trim() || null,
+      }),
+    })
+    const json = await res.json()
     setGroupSaving(false)
-    if (!error) { setGroupSaved(true); setTimeout(() => setGroupSaved(false), 2500); setEditingGroup(false) }
+    if (!res.ok || json.error) {
+      setGroupError(json.error || 'Nie udało się zapisać')
+      return
+    }
+    setLocalGroup(json.group)
+    setGroupSaved(true)
+    setTimeout(() => setGroupSaved(false), 2500)
+    setEditingGroup(false)
   }
   const [quickReportAthlete, setQuickReportAthlete] = useState<any | null>(null)
   const [sessionReport, setSessionReport] = useState<{ session: any; athleteId: number; athleteName: string; dayName: string } | null>(null)
@@ -2004,12 +2021,13 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                       placeholder="Poziom treningu (np. zaawansowany)"
                       style={{ background: 'rgba(255,255,255,0.07)', border: `1px solid ${C.navyBorder}`, borderRadius: 8, color: C.white, padding: '0.35rem 0.75rem', fontFamily: mono, fontSize: '0.72rem', outline: 'none', width: '100%', maxWidth: 320 }}
                     />
+                    {groupError && <div style={{ fontSize: '0.72rem', color: C.red, fontFamily: mono }}>❌ {groupError}</div>}
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button onClick={saveGroup} disabled={groupSaving}
                         style={{ padding: '0.4rem 0.875rem', background: groupSaved ? C.green : C.gold, color: C.navy, border: 'none', borderRadius: 8, fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer', fontFamily: sans }}>
                         {groupSaving ? '...' : groupSaved ? '✓ Zapisano' : 'Zapisz'}
                       </button>
-                      <button onClick={() => { setEditingGroup(false); setLocalGroup(group) }}
+                      <button onClick={() => { setEditingGroup(false); setLocalGroup(group); setGroupError('') }}
                         style={{ padding: '0.4rem 0.75rem', background: 'transparent', color: C.gray, border: `1px solid ${C.navyBorder}`, borderRadius: 8, fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer', fontFamily: sans }}>
                         Anuluj
                       </button>

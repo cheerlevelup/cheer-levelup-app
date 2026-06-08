@@ -274,7 +274,6 @@ interface Props {
 function MoveToGroupModal({ athlete, allGroups, onClose, onMoved }: {
   athlete: any; allGroups: any[]; onClose: () => void; onMoved: (newGroup: any) => void
 }) {
-  const supabase = createClient()
   const [targetGroupId, setTargetGroupId] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -283,14 +282,14 @@ function MoveToGroupModal({ athlete, allGroups, onClose, onMoved }: {
     if (!targetGroupId) return
     setSaving(true); setError('')
     const groupId = parseInt(targetGroupId)
-    const { error: err } = await supabase
-      .from('athletes')
-      .update({ group_id: groupId })
-      .eq('id', athlete.id)
-    if (err) { setError(err.message); setSaving(false); return }
-    // Plan NIE jest ruszany — zostaje przypisany do zawodniczki
-    const newGroup = allGroups.find(g => g.id === groupId)
-    onMoved(newGroup)
+    const res = await fetch('/api/coach', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'move_athlete_group', athleteId: athlete.id, groupId }),
+    })
+    const json = await res.json()
+    if (!res.ok || json.error) { setError(json.error || 'Nie udało się przenieść'); setSaving(false); return }
+    onMoved(json.athlete.group)
     onClose()
   }
 
@@ -334,7 +333,6 @@ function MoveToGroupModal({ athlete, allGroups, onClose, onMoved }: {
 function ChangePlanModal({ athlete, currentAssignment, allPlans, onClose, onChanged }: {
   athlete: any; currentAssignment: any; allPlans: any[]; onClose: () => void; onChanged: (newAssignment: any) => void
 }) {
-  const supabase = createClient()
   const [selectedPlanId, setSelectedPlanId] = useState('')
   const [orderMode, setOrderMode] = useState<'sequential' | 'dated'>('sequential')
   const [saving, setSaving] = useState(false)
@@ -346,32 +344,22 @@ function ChangePlanModal({ athlete, currentAssignment, allPlans, onClose, onChan
   async function handleChange() {
     if (!selectedPlanId) return
     setSaving(true); setError('')
-    try {
-      // Dezaktywuj obecny plan
-      if (currentAssignment) {
-        await supabase.from('athlete_workout_assignments')
-          .update({ is_active: false })
-          .eq('id', currentAssignment.id)
-      }
-      // Utwórz nowe przypisanie
-      const { data: newAssignment, error: insertErr } = await supabase
-        .from('athlete_workout_assignments')
-        .insert({
-          athlete_id: athlete.id,
-          plan_id: parseInt(selectedPlanId),
-          is_active: true,
-          order_mode: orderMode,
-          start_date: new Date().toISOString().split('T')[0],
-        })
-        .select('*, plan:workout_plans(*)')
-        .single()
-      if (insertErr) throw insertErr
-      onChanged(newAssignment)
-      onClose()
-    } catch (err: any) {
-      setError(err.message || 'Nie udało się zmienić planu')
-    }
+    const res = await fetch('/api/coach', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'change_plan',
+        athleteId: athlete.id,
+        planId: parseInt(selectedPlanId),
+        orderMode,
+        currentAssignmentId: currentAssignment?.id || null,
+      }),
+    })
+    const json = await res.json()
     setSaving(false)
+    if (!res.ok || json.error) { setError(json.error || 'Nie udało się zmienić planu'); return }
+    onChanged(json.assignment)
+    onClose()
   }
 
   return (
