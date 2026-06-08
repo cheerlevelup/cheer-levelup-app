@@ -652,7 +652,6 @@ function WellnessExpanded({ sessionId, athleteId, existingWellness, preFields, o
       athlete_id: athleteId,
       workout_session_id: sessionId,
       session_id: sessionId,
-      date: today,
       ...vals,
       concerns,
     }

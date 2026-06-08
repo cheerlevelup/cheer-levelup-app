@@ -346,13 +346,11 @@ export async function POST(req: NextRequest) {
       .eq('athlete_id', athleteId)
       .order('created_at', { ascending: true })
 
-    // 5. Pobierz wellness (po dacie dzisiejszego dnia lub session_id)
-    const today = new Date().toISOString().split('T')[0]
+    // 5. Pobierz wellness po session_id (tabela nie ma kolumny 'date')
     const { data: wellness } = await supabase
       .from('wellness_logs')
       .select('*')
-      .eq('athlete_id', athleteId)
-      .eq('date', today)
+      .eq('workout_session_id', sessionId)
       .maybeSingle()
 
     // 6. Pobierz pain_logs po session_id (tabela nie ma athlete_id)

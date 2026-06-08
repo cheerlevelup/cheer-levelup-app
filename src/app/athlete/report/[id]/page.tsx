@@ -44,13 +44,11 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
     .eq('athlete_id', athlete.id)
     .order('created_at', { ascending: true })
 
-  // Wellness (po dacie sesji)
-  const sessionDate = (session.date_started || session.date_completed || new Date().toISOString()).split('T')[0]
+  // Wellness po session_id (tabela nie ma kolumny 'date')
   const { data: wellness } = await supabase
     .from('wellness_logs')
     .select('*')
-    .eq('athlete_id', athlete.id)
-    .eq('date', sessionDate)
+    .eq('workout_session_id', sessionId)
     .maybeSingle()
 
   // Pain logs — po workout_session_id (tabela nie ma athlete_id)
