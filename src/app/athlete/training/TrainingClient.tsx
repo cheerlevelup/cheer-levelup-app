@@ -647,11 +647,9 @@ function WellnessExpanded({ sessionId, athleteId, existingWellness, preFields, o
 
   async function save() {
     setSaveError('')
-    const today = new Date().toISOString().split('T')[0]
     const payload = {
       athlete_id: athleteId,
       workout_session_id: sessionId,
-      session_id: sessionId,
       ...vals,
       concerns,
     }
