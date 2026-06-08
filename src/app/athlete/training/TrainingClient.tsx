@@ -1144,9 +1144,10 @@ function ReportSentScreen({ rpe, feeling, whatWell, pain, notes, onBack }: {
 
 // ─── POST WORKOUT ─────────────────────────────────────────────────────────────
 
-function PostWorkoutSection({ sessionId, athleteId, wellnessFilled, onFinish, inModal, sendRef }: {
+function PostWorkoutSection({ sessionId, athleteId, wellnessFilled, onFinish, inModal, sendRef, onSaved }: {
   sessionId: number; athleteId: number; wellnessFilled: boolean; onFinish: () => void
   inModal?: boolean; sendRef?: React.MutableRefObject<(() => void) | null>
+  onSaved?: () => void
 }) {
   const supabase = createClient()
   const router = useRouter()
@@ -1156,8 +1157,57 @@ function PostWorkoutSection({ sessionId, athleteId, wellnessFilled, onFinish, in
   const [pain, setPain] = useState('')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
+  const [savingFeedback, setSavingFeedback] = useState(false)
+  const [feedbackSaved, setFeedbackSaved] = useState(false)
+  const [existingFeedbackId, setExistingFeedbackId] = useState<number | null>(null)
   const [sent, setSent] = useState(false)
   const [showValidation, setShowValidation] = useState(false)
+
+  // Wczytaj istniejący feedback przy montowaniu
+  React.useEffect(() => {
+    supabase.from('post_session_feedback')
+      .select('*')
+      .eq('workout_session_id', sessionId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setExistingFeedbackId(data.id)
+          setRpe(data.session_rpe ?? 6)
+          setFeeling(data.feeling_after ?? '')
+          setWhatWell(data.what_went_well ?? '')
+          setPain(data.pain_after_comment ?? '')
+          setNotes(data.general_notes ?? '')
+          setFeedbackSaved(true)
+        }
+      })
+  }, [sessionId])
+
+  // Zapisz tylko feedback (bez wysyłki raportu)
+  async function saveFeedback() {
+    setSavingFeedback(true)
+    const payload = {
+      session_id: sessionId,
+      workout_session_id: sessionId,
+      athlete_id: athleteId,
+      session_rpe: rpe,
+      feeling_after: feeling,
+      what_went_well: whatWell,
+      pain_after_comment: pain,
+      general_notes: notes,
+    }
+    if (existingFeedbackId) {
+      const { data } = await supabase.from('post_session_feedback').update(payload).eq('id', existingFeedbackId).select('id').single()
+      if (data) setExistingFeedbackId(data.id)
+    } else {
+      const { data } = await supabase.from('post_session_feedback').insert(payload).select('id').single()
+      if (data) setExistingFeedbackId(data.id)
+    }
+    setSavingFeedback(false)
+    setFeedbackSaved(true)
+    onSaved?.()
+  }
 
   // Udostępnij funkcję wysyłki dla FinishModal (przez ref)
   React.useEffect(() => {
@@ -1174,8 +1224,8 @@ function PostWorkoutSection({ sessionId, athleteId, wellnessFilled, onFinish, in
     setSaving(true)
 
     try {
-      // 1. Zapisz feedback
-      await supabase.from('post_session_feedback').insert({
+      // 1. Zapisz feedback (update jeśli już istnieje, insert jeśli nie)
+      const feedbackPayload = {
         session_id: sessionId,
         workout_session_id: sessionId,
         athlete_id: athleteId,
@@ -1184,7 +1234,12 @@ function PostWorkoutSection({ sessionId, athleteId, wellnessFilled, onFinish, in
         what_went_well: whatWell,
         pain_after_comment: pain,
         general_notes: notes,
-      })
+      }
+      if (existingFeedbackId) {
+        await supabase.from('post_session_feedback').update(feedbackPayload).eq('id', existingFeedbackId)
+      } else {
+        await supabase.from('post_session_feedback').insert(feedbackPayload)
+      }
 
       // 2. Oznacz sesję jako ukończoną
       await supabase.from('workout_sessions').update({
@@ -1250,6 +1305,14 @@ function PostWorkoutSection({ sessionId, athleteId, wellnessFilled, onFinish, in
             style={{ width: '100%', padding: '0.625rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.85rem', color: C.navy, resize: 'none', outline: 'none', boxSizing: 'border-box' }} />
         </div>
       ))}
+
+      {/* Przycisk zapisu feedbacku (bez wysyłki raportu) */}
+      {!inModal && (
+        <button onClick={saveFeedback} disabled={savingFeedback}
+          style={{ width: '100%', padding: '0.75rem', marginBottom: '0.75rem', borderRadius: 10, border: 'none', background: feedbackSaved ? C.green : C.navyLight, color: feedbackSaved ? C.white : C.gold, fontFamily: sans, fontWeight: 700, fontSize: '0.88rem', cursor: 'pointer', transition: 'all 0.3s' }}>
+          {savingFeedback ? 'Zapisuję...' : feedbackSaved ? '✓ Feedback zapisany' : '💾 Zapisz feedback'}
+        </button>
+      )}
 
       {/* Walidacja */}
       {showValidation && (() => {
@@ -1511,6 +1574,7 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
   const [localWellness, setLocalWellness] = useState<any>(existingWellness)
   const [wellnessKey, setWellnessKey] = useState(0)
   const [postOpen, setPostOpen] = useState(false)      // sekcja feedback na stronie
+  const [postFeedbackSaved, setPostFeedbackSaved] = useState(false) // czy feedback zapisany
   const [finishOpen, setFinishOpen] = useState(false)  // modal zakończenia
   const [savedLocal, setSavedLocal] = useState(false)
   const [legendOpen, setLegendOpen] = useState(false)
@@ -1674,17 +1738,28 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
           ))}
 
           {/* Feedback po treningu — wypełnij zanim klikniesz Zakończ */}
-          <div style={{ background: C.white, borderRadius: 14, marginTop: '1rem', border: `1.5px solid ${C.grayLight}`, overflow: 'hidden', boxShadow: postOpen ? '0 4px 20px rgba(13,27,42,0.08)' : 'none' }}>
+          <div style={{ background: C.white, borderRadius: 14, marginTop: '1rem', border: `1.5px solid ${postFeedbackSaved ? '#86EFAC' : C.grayLight}`, overflow: 'hidden', boxShadow: postOpen ? '0 4px 20px rgba(13,27,42,0.08)' : 'none' }}>
             <button onClick={() => setPostOpen(v => !v)} style={{ width: '100%', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer', fontFamily: sans }}>
               <span style={{ fontSize: '1.2rem' }}>📝</span>
               <div style={{ textAlign: 'left' }}>
-                <div style={{ fontWeight: 700, fontSize: '0.9rem', color: C.navy }}>Feedback po treningu</div>
-                <div style={{ fontSize: '0.75rem', color: C.gray }}>RPE, samopoczucie, uwagi dla trenera</div>
+                <div style={{ fontWeight: 700, fontSize: '0.9rem', color: C.navy }}>Feedback treningowy</div>
+                <div style={{ fontSize: '0.75rem', color: postFeedbackSaved ? C.green : C.gray }}>{postFeedbackSaved ? '✓ Zapisano' : 'RPE, samopoczucie, uwagi dla trenera'}</div>
               </div>
               <span style={{ marginLeft: 'auto', color: C.gray, fontSize: '0.75rem', transform: postOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
             </button>
             {postOpen && session && (
-              <PostWorkoutSection sessionId={session.id} athleteId={athlete.id} wellnessFilled={wellnessSaved} onFinish={() => {}} inModal={false} sendRef={undefined} />
+              <PostWorkoutSection
+                sessionId={session.id}
+                athleteId={athlete.id}
+                wellnessFilled={wellnessSaved}
+                onFinish={() => {}}
+                inModal={false}
+                sendRef={undefined}
+                onSaved={() => {
+                  setPostFeedbackSaved(true)
+                  setPostOpen(false)
+                }}
+              />
             )}
           </div>
 
