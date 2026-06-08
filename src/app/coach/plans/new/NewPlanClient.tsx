@@ -14,6 +14,7 @@ const sans = "'Space Grotesk', sans-serif"
 const mono = "'Space Mono', monospace"
 
 const DAY_TEMPLATES: Record<number, string[]> = {
+  1: ['Trening 1'],
   2: ['Trening A', 'Trening B'],
   3: ['Trening A', 'Trening B', 'Trening C'],
   4: ['Trening A', 'Trening B', 'Trening C', 'Trening D'],
@@ -22,6 +23,7 @@ const DAY_TEMPLATES: Record<number, string[]> = {
 }
 
 const DAY_PRESETS: { label: string; days: string[] }[] = [
+  { label: '1 trening', days: ['Trening 1'] },
   { label: 'A / B', days: ['Trening A', 'Trening B'] },
   { label: 'A / B / C', days: ['Trening A', 'Trening B', 'Trening C'] },
   { label: 'Push / Pull / Legs', days: ['Push', 'Pull', 'Legs'] },
@@ -112,8 +114,9 @@ RIR = powtórzenia w zapasie (kliknij RIR w ćwiczeniu po wyjaśnienie)`
     const { data: weeks } = await supabase.from('workout_weeks').insert(weekRows).select()
 
     if (weeks && weeks.length > 0) {
+      const activeDayNames = dayNames.slice(0, daysPerWeek)
       const dayRows = weeks.flatMap((w: any) =>
-        dayNames.map((dn, di) => ({ week_id: w.id, day_name: dn, day_order: di + 1 }))
+        activeDayNames.map((dn, di) => ({ week_id: w.id, day_name: dn, day_order: di + 1 }))
       )
       await supabase.from('workout_days').insert(dayRows)
     }
@@ -201,7 +204,7 @@ RIR = powtórzenia w zapasie (kliknij RIR w ćwiczeniu po wyjaśnienie)`
             <div style={{ marginBottom: '1.25rem' }}>
               <label style={lbl()}>Treningi na tydzień</label>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {[2, 3, 4, 5, 6].map(n => (
+                {[1, 2, 3, 4, 5, 6].map(n => (
                   <button key={n} onClick={() => setDayCount(n)} style={{
                     width: 48, height: 44, borderRadius: 9,
                     border: `1.5px solid ${daysPerWeek === n ? C.gold : C.grayLight}`,
@@ -217,7 +220,7 @@ RIR = powtórzenia w zapasie (kliknij RIR w ćwiczeniu po wyjaśnienie)`
             <div style={{ marginBottom: '1rem' }}>
               <label style={lbl()}>Schemat nazw treningów</label>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: '0.75rem' }}>
-                {DAY_PRESETS.filter(p => p.days.length === 0 || p.days.length === daysPerWeek || p.days.length === 0).map(preset => (
+                {DAY_PRESETS.filter(p => p.days.length === 0 || p.days.length === daysPerWeek).map(preset => (
                   <button key={preset.label} onClick={() => applyPreset(preset)} style={{
                     borderRadius: 8, border: `1.5px solid ${C.grayLight}`,
                     background: C.offWhite, color: C.navy,
