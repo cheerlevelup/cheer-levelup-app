@@ -633,20 +633,20 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
 // ─── WELLNESS EXPANDED ────────────────────────────────────────────────────────
 
 // Mapa wszystkich możliwych pól wellness — ID z plan_wellness_config → konfiguracja slidera
-const WELLNESS_FIELD_MAP: Record<string, { key: string; label: string; min: number; max: number; step: number; unit: string; defaultVal: number }> = {
-  sleep_hours:    { key: 'sleep_hours',      label: 'Godziny snu',         min: 3,  max: 12,  step: 0.5, unit: 'h',    defaultVal: 7 },
-  sleep_quality:  { key: 'sleep_quality',    label: 'Jakość snu',          min: 1,  max: 10,  step: 1,   unit: '/10',  defaultVal: 7 },
-  energy:         { key: 'energy',           label: 'Energia',             min: 1,  max: 10,  step: 1,   unit: '/10',  defaultVal: 7 },
-  stress:         { key: 'stress',           label: 'Stres',               min: 1,  max: 10,  step: 1,   unit: '/10',  defaultVal: 3 },
-  mood:           { key: 'mood',             label: 'Nastrój',             min: 1,  max: 10,  step: 1,   unit: '/10',  defaultVal: 7 },
-  readiness:      { key: 'readiness',        label: 'Gotowość',            min: 1,  max: 10,  step: 1,   unit: '/10',  defaultVal: 7 },
-  muscle_soreness:{ key: 'muscle_sorness',   label: 'Zakwasy',             min: 0,  max: 10,  step: 1,   unit: '/10',  defaultVal: 0 },
-  body_weight:    { key: 'body_weight_kg',   label: 'Masa ciała',          min: 30, max: 150, step: 0.1, unit: 'kg',   defaultVal: 60 },
-  hydration:      { key: 'hydration_glasses',label: 'Nawodnienie',         min: 0,  max: 20,  step: 1,   unit: 'szkl.',defaultVal: 8 },
-  resting_hr:     { key: 'resting_hr',       label: 'Tętno spoczynkowe',   min: 40, max: 120, step: 1,   unit: 'bpm',  defaultVal: 60 },
-  motivation_pre: { key: 'motivation_pre',   label: 'Motywacja przed',     min: 1,  max: 10,  step: 1,   unit: '/10',  defaultVal: 7 },
-  sitting_hours:  { key: 'sitting_hours',    label: 'Godziny siedzenia',   min: 0,  max: 16,  step: 0.5, unit: 'h',    defaultVal: 4 },
-  recovery_score: { key: 'recovery_score',   label: 'Regeneracja',         min: 1,  max: 10,  step: 1,   unit: '/10',  defaultVal: 7 },
+const WELLNESS_FIELD_MAP: Record<string, { key: string; label: string; hint: string; min: number; max: number; step: number; unit: string; defaultVal: number }> = {
+  sleep_hours:    { key: 'sleep_hours',      label: 'Godziny snu',         hint: 'Ile godzin spałaś tej nocy?',                    min: 3,  max: 12,  step: 0.5, unit: 'h',    defaultVal: 7 },
+  sleep_quality:  { key: 'sleep_quality',    label: 'Jakość snu',          hint: 'Jak dobrze spałaś? 1 = bardzo źle, 10 = rewelacja', min: 1,  max: 10,  step: 1,   unit: '/10',  defaultVal: 7 },
+  energy:         { key: 'energy',           label: 'Energia',             hint: 'Poziom energii przed treningiem (1 = brak, 10 = pełna moc)', min: 1, max: 10, step: 1, unit: '/10', defaultVal: 7 },
+  stress:         { key: 'stress',           label: 'Stres',               hint: 'Poziom stresu/napięcia (1 = spokój, 10 = duży stres)',        min: 1, max: 10, step: 1, unit: '/10', defaultVal: 3 },
+  mood:           { key: 'mood',             label: 'Nastrój',             hint: 'Jak się czujesz psychicznie? (1 = źle, 10 = super)',          min: 1, max: 10, step: 1, unit: '/10', defaultVal: 7 },
+  readiness:      { key: 'readiness',        label: 'Gotowość',            hint: 'Gotowość do treningu — jak bardzo chcesz ćwiczyć?',           min: 1, max: 10, step: 1, unit: '/10', defaultVal: 7 },
+  muscle_soreness:{ key: 'muscle_sorness',   label: 'Zakwasy',             hint: 'Ból mięśni po poprzednim treningu (1 = brak, 10 = silny ból)',min: 0, max: 10, step: 1, unit: '/10', defaultVal: 0 },
+  body_weight:    { key: 'body_weight_kg',   label: 'Masa ciała',          hint: 'Waga poranna na czczo (kg)',                                  min: 30, max: 150, step: 0.1, unit: 'kg', defaultVal: 60 },
+  hydration:      { key: 'hydration_glasses',label: 'Nawodnienie',         hint: 'Ile szklanek wody wypiłaś od rana?',                         min: 0, max: 20, step: 1, unit: 'szkl.', defaultVal: 8 },
+  resting_hr:     { key: 'resting_hr',       label: 'Tętno spoczynkowe',   hint: 'Tętno mierzone rano przed wstaniem z łóżka (bpm)',            min: 40, max: 120, step: 1, unit: 'bpm', defaultVal: 60 },
+  motivation_pre: { key: 'motivation_pre',   label: 'Motywacja przed',     hint: 'Chęć do treningu zanim weszłaś — 1 = zerowa, 10 = ogień',    min: 1, max: 10, step: 1, unit: '/10', defaultVal: 7 },
+  sitting_hours:  { key: 'sitting_hours',    label: 'Godziny siedzenia',   hint: 'Ile godzin spędziłaś dziś w pozycji siedzącej?',             min: 0, max: 16, step: 0.5, unit: 'h', defaultVal: 4 },
+  recovery_score: { key: 'recovery_score',   label: 'Regeneracja',         hint: 'Jak dobrze czujesz się po poprzednim treningu?',             min: 1, max: 10, step: 1, unit: '/10', defaultVal: 7 },
 }
 
 // Opisy wartości dla suwaków
@@ -734,9 +734,12 @@ function WellnessExpanded({ sessionId, athleteId, existingWellness, preFields, o
         const desc = getWellnessDesc(f.key, val, f.max)
         return (
           <div key={f.key} style={{ marginBottom: '1rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
-              <span style={{ fontSize: '0.84rem', fontWeight: 700, color: C.navy }}>{f.label}</span>
-              <span style={{ fontFamily: mono, fontSize: '0.9rem', fontWeight: 800, color: sliderColor }}>{val}{f.unit}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 2 }}>
+              <div>
+                <span style={{ fontSize: '0.84rem', fontWeight: 700, color: C.navy }}>{f.label}</span>
+                {f.hint && <div style={{ fontSize: '0.68rem', color: C.gray, marginTop: 1, lineHeight: 1.3 }}>{f.hint}</div>}
+              </div>
+              <span style={{ fontFamily: mono, fontSize: '0.9rem', fontWeight: 800, color: sliderColor, flexShrink: 0, marginLeft: 8 }}>{val}{f.unit}</span>
             </div>
             <input type="range" min={f.min} max={f.max} step={f.step} value={val}
               onChange={e => setVals(v => ({ ...v, [f.key]: parseFloat(e.target.value) }))}
@@ -1622,7 +1625,7 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
           {/* Wellness */}
           <div style={{ background: '#fff', borderRadius: 14, marginBottom: '1rem', border: `1.5px solid ${C.grayLight}`, overflow: 'hidden', boxShadow: wellnessOpen ? '0 4px 20px rgba(13,27,42,0.08)' : 'none' }}>
             <button onClick={() => setWellnessOpen(!wellnessOpen)} style={{ width: '100%', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer', fontFamily: sans }}>
-              <span style={{ fontSize: '1.2rem' }}>☀️</span>
+              <span style={{ fontSize: '1.2rem' }}>🩺</span>
               <div style={{ textAlign: 'left' }}>
                 <div style={{ fontWeight: 700, fontSize: '0.9rem', color: C.navy }}>Gotowość do treningu</div>
                 <div style={{ fontSize: '0.75rem', color: C.gray }}>{wellnessSaved ? '✓ Zapisano' : 'Jak się dziś czujesz?'}</div>
