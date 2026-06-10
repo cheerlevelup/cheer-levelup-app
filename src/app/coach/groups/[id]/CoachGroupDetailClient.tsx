@@ -2291,7 +2291,7 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                       <select value={selectedPlanId ?? ''} onChange={e => setSelectedPlanId(e.target.value ? parseInt(e.target.value) : null)}
                         style={{ border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.navy, borderRadius: 8, padding: '0.45rem 0.65rem', fontFamily: mono, fontSize: '0.7rem', outline: 'none' }}>
                         <option value="">Aktualny</option>
-                        {assignments.map((a: any, i: number) => <option key={`${a.plan_id}-${i}`} value={a.plan_id}>{a.plan?.name}</option>)}
+                        {Array.from(new Map(assignments.map((a: any) => [a.plan_id, a])).values()).map((a: any) => <option key={a.plan_id} value={a.plan_id}>{a.plan?.name}</option>)}
                       </select>
                     )}
                     {currentPlan && !currentPlan.is_archived && (
