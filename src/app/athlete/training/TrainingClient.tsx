@@ -456,13 +456,15 @@ function FloatingTimer() {
 
 // ─── WARMUP SET ROW ───────────────────────────────────────────────────────────
 
-function WarmupSetRow({ warmup, setNum, existingLog, sessionId, athleteId, blockExerciseId }: {
+function WarmupSetRow({ warmup, setNum, existingLog, sessionId, athleteId, blockExerciseId, onLogSaved }: {
   warmup: TrainingWarmupSet; setNum: number
   existingLog?: SetLog; sessionId: number; athleteId: number; blockExerciseId: number
+  onLogSaved?: (log: SetLog) => void
 }) {
   const supabase = createClient()
   const [weight, setWeight] = useState(existingLog?.weight?.toString() || '')
   const [done, setDone] = useState(!!existingLog?.completed)
+  const savedIdRef = React.useRef<number | null>(existingLog?.id ?? null)
 
   async function toggle() {
     const newDone = !done
@@ -473,10 +475,15 @@ function WarmupSetRow({ warmup, setNum, existingLog, sessionId, athleteId, block
       weight: weight ? parseFloat(weight.replace(',', '.')) : null,
       reps_completed: null, is_warmup: true, completed: newDone,
     }
-    if (existingLog?.id) {
-      await supabase.from('set_logs').update(payload).eq('id', existingLog.id)
+    if (savedIdRef.current) {
+      await supabase.from('set_logs').update(payload).eq('id', savedIdRef.current)
+      onLogSaved?.({ ...payload, reps_completed: undefined, id: savedIdRef.current, created_at: new Date().toISOString() } as SetLog)
     } else {
-      await supabase.from('set_logs').insert(payload)
+      const { data } = await supabase.from('set_logs').insert(payload).select('id').single()
+      if (data?.id) {
+        savedIdRef.current = data.id
+        onLogSaved?.({ ...payload, reps_completed: undefined, id: data.id, created_at: new Date().toISOString() } as SetLog)
+      }
     }
   }
 
@@ -515,10 +522,10 @@ function WarmupSetRow({ warmup, setNum, existingLog, sessionId, athleteId, block
 
 // ─── SET ROW ──────────────────────────────────────────────────────────────────
 
-function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, athleteId, blockExerciseId, onComplete }: {
+function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, athleteId, blockExerciseId, onComplete, onLogSaved }: {
   setNum: number; reps: string | number; isAmrap: boolean; prevWeight?: number | null
   existingLog?: SetLog; sessionId: number; athleteId: number; blockExerciseId: number
-  onComplete: (done: boolean) => void
+  onComplete: (done: boolean) => void; onLogSaved?: (log: SetLog) => void
 }) {
   const supabase = createClient()
   const [weight, setWeight] = useState(existingLog?.weight?.toString() || '')
@@ -542,7 +549,8 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
     // Jeśli mamy już ID z cache — update; w przeciwnym razie szukaj lub twórz nowy
     if (savedLogIdRef.current) {
       const { error } = await supabase.from('set_logs').update(payload).eq('id', savedLogIdRef.current)
-      if (error) setSaveError(error.message)
+      if (!error) onLogSaved?.({ ...payload, id: savedLogIdRef.current, created_at: new Date().toISOString() } as SetLog)
+      else setSaveError(error.message)
       return
     }
 
@@ -556,11 +564,15 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
     if (logId) {
       savedLogIdRef.current = logId
       const { error } = await supabase.from('set_logs').update(payload).eq('id', logId)
-      if (error) setSaveError(error.message)
+      if (!error) onLogSaved?.({ ...payload, id: logId, created_at: new Date().toISOString() } as SetLog)
+      else setSaveError(error.message)
     } else {
       const { data, error } = await supabase.from('set_logs').insert(payload).select('id').single()
       if (error) setSaveError(error.message)
-      else if (data?.id) savedLogIdRef.current = data.id
+      else if (data?.id) {
+        savedLogIdRef.current = data.id
+        onLogSaved?.({ ...payload, id: data.id, created_at: new Date().toISOString() } as SetLog)
+      }
     }
   }
 
@@ -822,6 +834,21 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
 }) {
   const supabase = createClient()
   const [expanded, setExpanded] = useState(false)
+  // Lokalny stan logów — aktualizuje się po każdym zapisie, żeby przy zwijaniu/rozwijaniu karty dane nie znikały
+  const [localLogs, setLocalLogs] = useState<SetLog[]>(() => setLogs.filter(l => l.block_exercise_id === exercise.id))
+  // Synchronizuj gdy rodzic dostanie nowe logi (np. initial load)
+  const prevLogsRef = React.useRef(setLogs)
+  if (prevLogsRef.current !== setLogs) {
+    prevLogsRef.current = setLogs
+    setLocalLogs(setLogs.filter(l => l.block_exercise_id === exercise.id))
+  }
+  function handleLogSaved(log: SetLog) {
+    setLocalLogs(prev => {
+      const key = setLogKey(log)
+      const without = prev.filter(l => setLogKey(l) !== key)
+      return [...without, log]
+    })
+  }
   const [tempoOpen, setTempoOpen] = useState(false)
   const [videoOpen, setVideoOpen] = useState(false)
   const [feelingOpen, setFeelingOpen] = useState(false)
@@ -877,7 +904,7 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
     : []
   const visibleWarmupSets = warmupSets.length ? warmupSets : legacyWarmupSets
 
-  const exSetLogs = setLogs.filter(l => l.block_exercise_id === exercise.id)
+  const exSetLogs = localLogs
   // Lokalny licznik — aktualizuje się od razu po kliknięciu
   const [localCompleted, setLocalCompleted] = useState(() =>
     exSetLogs.filter(l => l.completed && !l.is_warmup).length
@@ -1007,6 +1034,7 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
                     sessionId={sessionId}
                     athleteId={athleteId}
                     blockExerciseId={exercise.id}
+                    onLogSaved={handleLogSaved}
                   />
                 ))}
               </div>
@@ -1027,6 +1055,7 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
                   setLocalCompleted(prev => Math.max(0, prev + (done ? 1 : -1)))
                   onSetsChange(done ? 1 : -1)
                 }}
+                onLogSaved={handleLogSaved}
               />
             ))}
 
