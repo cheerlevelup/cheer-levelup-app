@@ -1469,13 +1469,16 @@ function filterByDays(logs: any[], days: number, dateField = 'date') {
 type ActualSet = { num: number; weight: number | null; reps: number | null; note?: string | null }
 type ActualEntry = { sets: ActualSet[] }
 
-function PlanExerciseTable({ rows, athletes, overrides, actual, uniqueDays, painByAthleteDay }: {
+type PainEntry = { vas: number; comment: string | null }
+
+function PlanExerciseTable({ rows, athletes, overrides, actual, uniqueDays, painByAthleteDay, painByAthleteEx }: {
   rows: { exId: number; name: string; block: string; day: string; dayId: number; sets: number; reps: string; tempo: string; weight: number | null }[]
   athletes: any[]
   overrides: Record<number, Record<number, any>>
   actual: Record<number, Record<number, ActualEntry>>
   uniqueDays: { id: number; label: string }[]
   painByAthleteDay?: Record<number, Set<number>>
+  painByAthleteEx?: Record<number, Record<string, PainEntry>>
 }) {
   const [selDayId, setSelDayId] = useState(uniqueDays[0]?.id ?? 0)
   const filtered = rows.filter(r => r.dayId === selDayId)
@@ -1561,11 +1564,17 @@ function PlanExerciseTable({ rows, athletes, overrides, actual, uniqueDays, pain
                       const act = actual[row.exId]?.[a.id] ?? null
                       const hasAct = act !== null && act.sets.length > 0
 
+                      // Dopasowanie bólu po nazwie ćwiczenia
+                      const exNameKey = row.name.toLowerCase().replace(/-/g, ' ').trim()
+                      const painEntry = painByAthleteEx?.[a.id]
+                        ? Object.entries(painByAthleteEx[a.id]).find(([k]) => k.includes(exNameKey) || exNameKey.includes(k))?.[1] ?? null
+                        : null
+
                       // Kolory tła: priorytet: pominięte > faktyczne > modyfikacja > brak
                       const bgColor = skip ? '#FEF2F2' : hasAct ? '#F0FDF4' : mod ? '#1A2E4520' : undefined
 
                       return (
-                        <td key={`${row.exId}-${ci}`} style={{ padding: '0.4rem 0.6rem', textAlign: 'center', borderBottom: `1px solid ${C.grayLight}`, verticalAlign: 'middle', background: bgColor }}>
+                        <td key={`${row.exId}-${ci}`} style={{ padding: '0.4rem 0.6rem', textAlign: 'center', borderBottom: `1px solid ${C.grayLight}`, verticalAlign: 'middle', background: bgColor, position: 'relative' }}>
                           {skip ? (
                             // CZERWONY — pominięte przez trenera
                             <span style={{ fontFamily: mono, fontSize: '0.6rem', color: C.red, fontWeight: 700 }}>pominięte</span>
@@ -1612,6 +1621,14 @@ function PlanExerciseTable({ rows, athletes, overrides, actual, uniqueDays, pain
                               <span style={{ fontFamily: mono, fontSize: '0.55rem', color: C.grayLight, whiteSpace: 'nowrap' }}>
                                 {planS}×{planR || '—'}{planT ? ` ${planT}` : ''}
                               </span>
+                            </div>
+                          )}
+                          {painEntry && (
+                            <div title={`VAS ${painEntry.vas}/10${painEntry.comment ? ` · ${painEntry.comment}` : ''}`}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 3, marginTop: 3, padding: '1px 6px', background: '#FEF2F2', border: `1px solid #FCA5A5`, borderRadius: 6, cursor: 'default' }}>
+                              <span style={{ color: C.red, fontWeight: 900, fontSize: '0.62rem' }}>!</span>
+                              <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.red, fontWeight: 700 }}>VAS {painEntry.vas}</span>
+                              {painEntry.comment && <span style={{ fontFamily: mono, fontSize: '0.55rem', color: '#EF4444', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{painEntry.comment}</span>}
                             </div>
                           )}
                         </td>
@@ -1685,7 +1702,8 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
   }
   const [quickReportAthlete, setQuickReportAthlete] = useState<any | null>(null)
   const [sessionReport, setSessionReport] = useState<{ session: any; athleteId: number; athleteName: string; dayName: string } | null>(null)
-  const [planExData, setPlanExData] = useState<{ blocks: any[]; overrides: Record<number, Record<number, any>>; actual: Record<number, Record<number, ActualEntry>>; painByAthleteDay?: Record<number, Set<number>> } | null>(null)
+  type PainEntry = { vas: number; comment: string | null }
+  const [planExData, setPlanExData] = useState<{ blocks: any[]; overrides: Record<number, Record<number, any>>; actual: Record<number, Record<number, ActualEntry>>; painByAthleteDay?: Record<number, Set<number>>; painByAthleteEx?: Record<number, Record<string, PainEntry>> } | null>(null)
   const [planExLoading, setPlanExLoading] = useState(false)
 
   const defaultDietParams = ['had_breakfast', 'meal_count', 'water_ml']
@@ -1933,26 +1951,37 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
 
     // Pain logs — mapa athleteId → Set<dayId>
     const painByAthleteDay: Record<number, Set<number>> = {}
+    // athleteId → normalized exercise name → {vas, comment}
+    type PainEntry = { vas: number; comment: string | null }
+    const painByAthleteEx: Record<number, Record<string, PainEntry>> = {}
+
     if (sessionIds.length > 0) {
       const { data: painLogs } = await sb
         .from('pain_logs')
-        .select('workout_session_id, vas_score')
+        .select('workout_session_id, vas_score, pain_comment, pain_location')
         .in('workout_session_id', sessionIds)
-        .gt('vas_score', 0)
 
       const sessionDayMap: Record<number, number> = {}
       for (const s of (sessionsForPlan || [])) sessionDayMap[s.id] = s.workout_day_id
 
       for (const p of (painLogs || [])) {
+        if (!p.vas_score && !p.pain_comment) continue
         const athleteId = sessionAthleteMap[p.workout_session_id]
         const dayId = sessionDayMap[p.workout_session_id]
-        if (!athleteId || !dayId) continue
-        if (!painByAthleteDay[athleteId]) painByAthleteDay[athleteId] = new Set()
-        painByAthleteDay[athleteId].add(dayId)
+        if (!athleteId) continue
+        if (dayId) {
+          if (!painByAthleteDay[athleteId]) painByAthleteDay[athleteId] = new Set()
+          painByAthleteDay[athleteId].add(dayId)
+        }
+        if (p.pain_location) {
+          const key = p.pain_location.toLowerCase().replace(/-/g, ' ').trim()
+          if (!painByAthleteEx[athleteId]) painByAthleteEx[athleteId] = {}
+          painByAthleteEx[athleteId][key] = { vas: p.vas_score ?? 0, comment: p.pain_comment ?? null }
+        }
       }
     }
 
-    setPlanExData({ blocks: blocks || [], overrides: ovrMap, actual: actualMap, painByAthleteDay })
+    setPlanExData({ blocks: blocks || [], overrides: ovrMap, actual: actualMap, painByAthleteDay, painByAthleteEx })
     setPlanExLoading(false)
   }
 
@@ -2471,7 +2500,7 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
 
                       // Day tabs
                       const uniqueDays = activePlanDays.map((d: any, i: number) => ({ id: d.id, label: d.day_name || `T${i + 1}` }))
-                      return <PlanExerciseTable rows={rows} athletes={athletes} overrides={planExData.overrides} actual={planExData.actual || {}} uniqueDays={uniqueDays} painByAthleteDay={planExData.painByAthleteDay} />
+                      return <PlanExerciseTable rows={rows} athletes={athletes} overrides={planExData.overrides} actual={planExData.actual || {}} uniqueDays={uniqueDays} painByAthleteDay={planExData.painByAthleteDay} painByAthleteEx={planExData.painByAthleteEx} />
                     })()}
                   </Card>
                 )
