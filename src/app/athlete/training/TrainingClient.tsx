@@ -957,7 +957,7 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
         {/* Nagłówek */}
         <div onClick={() => setExpanded(!expanded)} style={{ width: '100%', padding: '1rem', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', textAlign: 'left' }}>
           <div style={{ width: 36, height: 36, borderRadius: 9, background: C.navyLight, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <span style={{ fontWeight: 800, fontSize: '0.7rem', color: C.gold, fontFamily: mono }}>{blockLetter && exercise.exercise_order ? `${blockLetter}${exercise.exercise_order}` : exercise.exercise_order || '—'}</span>
+            <span style={{ fontWeight: 800, fontSize: '0.7rem', color: C.gold, fontFamily: mono }}>{blockLetter || exercise.exercise_order || '—'}</span>
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
@@ -2007,7 +2007,7 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
                 </div>
                 <div style={{ flex: 1, height: 1, background: C.grayLight }} />
               </div>
-              {(block.exercises || []).map((exercise: TrainingExercise) => (
+              {(block.exercises || []).map((exercise: TrainingExercise, exIdx: number) => (
                 <ExerciseCard
                   key={exercise.id}
                   exercise={exercise}
@@ -2016,7 +2016,7 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
                   setLogs={setLogs}
                   onSetsChange={handleSetsChange}
                   prevWeight={null}
-                  blockLetter={block.block_name?.match(/[A-Z]/)?.[0] || ''}
+                  blockLetter={`${block.block_name?.split(/\s+/).pop() || ''}${exIdx + 1}`}
                 />
               ))}
             </div>
