@@ -36,17 +36,25 @@ export async function getNextTrainingForAthlete(
 } | null> {
   const supabase = await createClient()
 
-  const conditions = [`athlete_id.eq.${athleteId}`]
-  if (groupId) conditions.push(`group_id.eq.${groupId}`)
-
-  const { data: assignments, error: aErr } = await supabase
+  // Szukaj najpierw przypisania indywidualnego, potem grupowego
+  const { data: individualAssignments } = await supabase
     .from('athlete_workout_assignments')
     .select('*, plan:workout_plans(*)')
     .eq('is_active', true)
-    .or(conditions.join(','))
+    .eq('athlete_id', athleteId)
 
-  if (aErr || !assignments || assignments.length === 0) return null
-  const assignment = assignments[0] as AthleteWorkoutAssignment
+  let assignment: AthleteWorkoutAssignment | null = (individualAssignments || [])[0] as AthleteWorkoutAssignment || null
+
+  if (!assignment && groupId) {
+    const { data: groupAssignments } = await supabase
+      .from('athlete_workout_assignments')
+      .select('*, plan:workout_plans(*)')
+      .eq('is_active', true)
+      .eq('group_id', groupId)
+    assignment = (groupAssignments || [])[0] as AthleteWorkoutAssignment || null
+  }
+
+  if (!assignment) return null
 
   // Pobierz tygodnie dla tego planu
   const { data: weeks } = await supabase
@@ -67,12 +75,12 @@ export async function getNextTrainingForAthlete(
 
   if (dErr || !days || days.length === 0) return null
 
-  // Ukończone sesje
+  // Ukończone sesje — szukaj zarówno po assignment_id jak i po planie (NULL assignment_id)
   const { data: sessions } = await supabase
     .from('workout_sessions')
     .select('workout_day_id')
     .eq('athlete_id', athleteId)
-    .eq('assignment_id', assignment.id)
+    .in('workout_day_id', days.map((d: any) => d.id))
     .eq('completed', true)
 
   const completedDayIds = new Set((sessions || []).map((s: any) => s.workout_day_id))
@@ -94,16 +102,34 @@ export async function getOrCreateWorkoutSession(
 ): Promise<WorkoutSession | null> {
   const supabase = await createClient()
 
-  const { data: existing } = await supabase
+  // Szukaj aktywnej (niezakończonej) sesji dla tego dnia — po assignment_id lub dayId
+  const { data: rows, error: fetchErr } = await supabase
     .from('workout_sessions')
     .select('*')
     .eq('athlete_id', athleteId)
     .eq('workout_day_id', dayId)
-    .eq('assignment_id', assignmentId)
     .eq('completed', false)
-    .maybeSingle()
+    .order('created_at', { ascending: false })
 
-  if (existing) return existing as WorkoutSession
+  if (fetchErr) console.error('Error fetching session:', fetchErr)
+
+  const allRows = rows || []
+
+  // Preferuj sesję z tym samym assignment_id, fallback do dowolnej niezakończonej
+  const existing = allRows.find(r => r.assignment_id === assignmentId) || allRows[0] || null
+
+  if (existing) {
+    // Usuń duplikaty jeśli jest ich więcej niż jedna
+    const dupes = allRows.filter(r => r.id !== existing.id)
+    if (dupes.length > 0) {
+      await supabase.from('workout_sessions').delete().in('id', dupes.map(d => d.id))
+    }
+    // Upewnij się że assignment_id jest aktualny
+    if (existing.assignment_id !== assignmentId) {
+      await supabase.from('workout_sessions').update({ assignment_id: assignmentId }).eq('id', existing.id)
+    }
+    return existing as WorkoutSession
+  }
 
   const { data: created, error } = await supabase
     .from('workout_sessions')
