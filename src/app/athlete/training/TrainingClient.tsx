@@ -630,7 +630,7 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
           }}>
             {repsStr}
           </span>
-          {!isLongReps && (
+          {!isLongReps && !repsStr.includes("'") && (
             <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, fontWeight: 500 }}>powt.</span>
           )}
         </span>
