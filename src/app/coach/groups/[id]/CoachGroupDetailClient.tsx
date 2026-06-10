@@ -1463,12 +1463,13 @@ function filterByDays(logs: any[], days: number, dateField = 'date') {
 type ActualSet = { num: number; weight: number | null; reps: number | null; note?: string | null }
 type ActualEntry = { sets: ActualSet[] }
 
-function PlanExerciseTable({ rows, athletes, overrides, actual, uniqueDays }: {
+function PlanExerciseTable({ rows, athletes, overrides, actual, uniqueDays, painByAthleteDay }: {
   rows: { exId: number; name: string; block: string; day: string; dayId: number; sets: number; reps: string; tempo: string; weight: number | null }[]
   athletes: any[]
   overrides: Record<number, Record<number, any>>
   actual: Record<number, Record<number, ActualEntry>>
   uniqueDays: { id: number; label: string }[]
+  painByAthleteDay?: Record<number, Set<number>>
 }) {
   const [selDayId, setSelDayId] = useState(uniqueDays[0]?.id ?? 0)
   const filtered = rows.filter(r => r.dayId === selDayId)
@@ -1537,7 +1538,12 @@ function PlanExerciseTable({ rows, athletes, overrides, actual, uniqueDays }: {
                 return (
                   <tr key={a.id} style={{ background: rowBg }}>
                     <td style={{ padding: '0.6rem 1rem', fontWeight: 700, color: C.navy, borderBottom: `1px solid ${C.grayLight}`, fontSize: '0.88rem', whiteSpace: 'nowrap', position: 'sticky', left: 0, zIndex: 1, background: rowBg }}>
-                      {a.full_name}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {a.full_name}
+                        {painByAthleteDay?.[a.id]?.has(selDayId) && (
+                          <span title="Zawodniczka zgłosiła ból w tym treningu" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, borderRadius: '50%', background: C.red, color: C.white, fontSize: '0.6rem', fontWeight: 900, flexShrink: 0 }}>!</span>
+                        )}
+                      </div>
                     </td>
                     {filtered.map((row, ci) => {
                       const skip = isSkipped(row.exId, a.id)
@@ -1673,7 +1679,7 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
   }
   const [quickReportAthlete, setQuickReportAthlete] = useState<any | null>(null)
   const [sessionReport, setSessionReport] = useState<{ session: any; athleteId: number; athleteName: string; dayName: string } | null>(null)
-  const [planExData, setPlanExData] = useState<{ blocks: any[]; overrides: Record<number, Record<number, any>>; actual: Record<number, Record<number, ActualEntry>> } | null>(null)
+  const [planExData, setPlanExData] = useState<{ blocks: any[]; overrides: Record<number, Record<number, any>>; actual: Record<number, Record<number, ActualEntry>>; painByAthleteDay?: Record<number, Set<number>> } | null>(null)
   const [planExLoading, setPlanExLoading] = useState(false)
 
   const defaultDietParams = ['had_breakfast', 'meal_count', 'water_ml']
@@ -1919,7 +1925,28 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
       }
     }
 
-    setPlanExData({ blocks: blocks || [], overrides: ovrMap, actual: actualMap })
+    // Pain logs — mapa athleteId → Set<dayId>
+    const painByAthleteDay: Record<number, Set<number>> = {}
+    if (sessionIds.length > 0) {
+      const { data: painLogs } = await sb
+        .from('pain_logs')
+        .select('workout_session_id, vas_score')
+        .in('workout_session_id', sessionIds)
+        .gt('vas_score', 0)
+
+      const sessionDayMap: Record<number, number> = {}
+      for (const s of (sessionsForPlan || [])) sessionDayMap[s.id] = s.workout_day_id
+
+      for (const p of (painLogs || [])) {
+        const athleteId = sessionAthleteMap[p.workout_session_id]
+        const dayId = sessionDayMap[p.workout_session_id]
+        if (!athleteId || !dayId) continue
+        if (!painByAthleteDay[athleteId]) painByAthleteDay[athleteId] = new Set()
+        painByAthleteDay[athleteId].add(dayId)
+      }
+    }
+
+    setPlanExData({ blocks: blocks || [], overrides: ovrMap, actual: actualMap, painByAthleteDay })
     setPlanExLoading(false)
   }
 
@@ -2438,7 +2465,7 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
 
                       // Day tabs
                       const uniqueDays = activePlanDays.map((d: any, i: number) => ({ id: d.id, label: d.day_name || `T${i + 1}` }))
-                      return <PlanExerciseTable rows={rows} athletes={athletes} overrides={planExData.overrides} actual={planExData.actual || {}} uniqueDays={uniqueDays} />
+                      return <PlanExerciseTable rows={rows} athletes={athletes} overrides={planExData.overrides} actual={planExData.actual || {}} uniqueDays={uniqueDays} painByAthleteDay={planExData.painByAthleteDay} />
                     })()}
                   </Card>
                 )
