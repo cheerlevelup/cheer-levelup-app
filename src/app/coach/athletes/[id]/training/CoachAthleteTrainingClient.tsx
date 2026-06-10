@@ -42,6 +42,24 @@ function ExerciseEditModal({ ex, athleteId, athleteName, existingOverride, exerc
   const [tempo, setTempo] = useState(existingOverride?.tempo_override || ex.tempo || '')
   const [rir, setRir] = useState(existingOverride?.rir?.toString() || ex.rir?.toString() || '')
   const [note, setNote] = useState(existingOverride?.coach_note_override || ex.coach_comment || '')
+  const [videoUrl, setVideoUrl] = useState(existingOverride?.exercise_url_override ?? ex.exercise_url ?? '')
+
+  // Warmup sets — format: { reps, weight_kg, note }
+  type WarmupSet = { reps: string; weight_kg: string; note: string }
+  function parseWarmupSets(raw: any): WarmupSet[] {
+    if (!raw) return []
+    const arr = Array.isArray(raw) ? raw : []
+    return arr.map((s: any) => ({ reps: s.reps?.toString() || '', weight_kg: s.weight_kg?.toString() || '', note: s.note || '' }))
+  }
+  const initialWarmup = parseWarmupSets(existingOverride?.warmup_sets_override ?? ex.warmup_sets)
+  const [warmupSets, setWarmupSets] = useState<WarmupSet[]>(initialWarmup)
+
+  function addWarmupSet() { setWarmupSets(prev => [...prev, { reps: '', weight_kg: '', note: '' }]) }
+  function removeWarmupSet(i: number) { setWarmupSets(prev => prev.filter((_, idx) => idx !== i)) }
+  function updateWarmupSet(i: number, field: keyof WarmupSet, val: string) {
+    setWarmupSets(prev => prev.map((s, idx) => idx === i ? { ...s, [field]: val } : s))
+  }
+
   const [wholePlan, setWholePlan] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -49,6 +67,9 @@ function ExerciseEditModal({ ex, athleteId, athleteName, existingOverride, exerc
   const originalName = ex.exercise?.name ? fmt(ex.exercise.name) : (ex.exercise_code || 'Ćwiczenie')
 
   function buildPayload(blockExerciseId: number): any {
+    const cleanWarmup = warmupSets
+      .filter(s => s.reps || s.weight_kg || s.note)
+      .map(s => ({ reps: s.reps || null, weight_kg: s.weight_kg || null, note: s.note || null }))
     return {
       athlete_id: athleteId,
       block_exercise_id: blockExerciseId,
@@ -61,6 +82,8 @@ function ExerciseEditModal({ ex, athleteId, athleteName, existingOverride, exerc
       skip: false,
       exercise_id_override: mode === 'library' && libId ? parseInt(libId) : null,
       exercise_code_override: mode === 'custom' && customName.trim() ? customName.trim() : null,
+      exercise_url_override: videoUrl.trim() || null,
+      warmup_sets_override: cleanWarmup.length > 0 ? cleanWarmup : null,
     }
   }
 
@@ -70,20 +93,23 @@ function ExerciseEditModal({ ex, athleteId, athleteName, existingOverride, exerc
       const payload = buildPayload(ex.id)
 
       // Próba z pełnym payloadem (nowe kolumny); fallback do podstawowego jeśli schema cache
+      function stripNewCols(p: any) {
+        const { exercise_id_override, exercise_code_override, skip, is_substitution, exercise_url_override, warmup_sets_override, ...basic } = p
+        return basic
+      }
+      function isSchemaErr(msg: string) {
+        return msg.includes('schema cache') || msg.includes('exercise_id_override') || msg.includes('skip') || msg.includes('exercise_url_override') || msg.includes('warmup_sets_override')
+      }
       async function tryUpsert(p: any, id?: number) {
         if (id) {
           const r = await supabase.from('athlete_exercise_overrides').update(p).eq('id', id).select().single()
-          if (r.error?.message?.includes('schema cache') || r.error?.message?.includes('exercise_id_override') || r.error?.message?.includes('skip')) {
-            const { exercise_id_override, exercise_code_override, skip, is_substitution, ...basic } = p
-            return supabase.from('athlete_exercise_overrides').update(basic).eq('id', id).select().single()
-          }
+          if (r.error && isSchemaErr(r.error.message))
+            return supabase.from('athlete_exercise_overrides').update(stripNewCols(p)).eq('id', id).select().single()
           return r
         }
         const r = await supabase.from('athlete_exercise_overrides').insert(p).select().single()
-        if (r.error?.message?.includes('schema cache') || r.error?.message?.includes('exercise_id_override') || r.error?.message?.includes('skip')) {
-          const { exercise_id_override, exercise_code_override, skip, is_substitution, ...basic } = p
-          return supabase.from('athlete_exercise_overrides').insert(basic).select().single()
-        }
+        if (r.error && isSchemaErr(r.error.message))
+          return supabase.from('athlete_exercise_overrides').insert(stripNewCols(p)).select().single()
         return r
       }
 
@@ -202,6 +228,45 @@ function ExerciseEditModal({ ex, athleteId, athleteName, existingOverride, exerc
             <label style={labelSt}>Notatka dla zawodniczki</label>
             <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Wskazówki, powód zmiany..." rows={2}
               style={{ width: '100%', padding: '0.75rem', border: `1.5px solid ${C.grayLight}`, borderRadius: 10, background: C.offWhite, color: C.navy, fontFamily: sans, fontSize: '0.9rem', outline: 'none', resize: 'none' }} />
+          </div>
+
+          {/* Link do filmiku */}
+          <div style={{ marginBottom: '1.25rem' }}>
+            <label style={labelSt}>Link do filmiku (YouTube / Vimeo)</label>
+            <input type="url" value={videoUrl} onChange={e => setVideoUrl(e.target.value)}
+              placeholder="https://youtube.com/..."
+              style={{ ...inputSt, textAlign: 'left', fontFamily: sans }} />
+          </div>
+
+          {/* Serie rozgrzewkowe */}
+          <div style={{ marginBottom: '1.25rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <label style={{ ...labelSt, marginBottom: 0 }}>Serie rozgrzewkowe</label>
+              <button onClick={addWarmupSet} style={{ border: `1.5px solid ${C.gold}`, background: C.navy, color: C.gold, borderRadius: 8, padding: '0.3rem 0.7rem', fontFamily: mono, fontSize: '0.65rem', fontWeight: 800, cursor: 'pointer' }}>+ Dodaj</button>
+            </div>
+            {warmupSets.length === 0 && (
+              <div style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray, fontStyle: 'italic' }}>Brak serii rozgrzewkowych</div>
+            )}
+            {warmupSets.map((s, i) => (
+              <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr auto', gap: 6, marginBottom: 6, alignItems: 'center' }}>
+                <div>
+                  {i === 0 && <label style={{ ...labelSt, fontSize: '0.55rem' }}>Powt.</label>}
+                  <input type="text" value={s.reps} onChange={e => updateWarmupSet(i, 'reps', e.target.value)}
+                    placeholder="np. 8" style={{ ...inputSt, fontSize: '0.82rem', padding: '0.5rem' }} />
+                </div>
+                <div>
+                  {i === 0 && <label style={{ ...labelSt, fontSize: '0.55rem' }}>Ciężar</label>}
+                  <input type="text" value={s.weight_kg} onChange={e => updateWarmupSet(i, 'weight_kg', e.target.value)}
+                    placeholder="kg / BW" style={{ ...inputSt, fontSize: '0.82rem', padding: '0.5rem' }} />
+                </div>
+                <div>
+                  {i === 0 && <label style={{ ...labelSt, fontSize: '0.55rem' }}>Notatka</label>}
+                  <input type="text" value={s.note} onChange={e => updateWarmupSet(i, 'note', e.target.value)}
+                    placeholder="wskazówka..." style={{ ...inputSt, textAlign: 'left', fontFamily: sans, fontSize: '0.82rem', padding: '0.5rem' }} />
+                </div>
+                <button onClick={() => removeWarmupSet(i)} style={{ border: `1.5px solid ${C.red}`, background: C.white, color: C.red, borderRadius: 8, padding: '0.4rem 0.6rem', fontFamily: mono, fontSize: '0.7rem', fontWeight: 800, cursor: 'pointer', marginTop: i === 0 ? 20 : 0 }}>✕</button>
+              </div>
+            ))}
           </div>
 
           {/* Zachowaj dla całego planu */}

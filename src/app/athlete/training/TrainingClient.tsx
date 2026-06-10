@@ -885,6 +885,8 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
   const effectiveTempo = exercise.override?.tempo_override || exercise.tempo
   const effectiveTempoNote = exercise.override?.coach_note_override || exercise.coach_comment
   const effectiveRir = exercise.override?.rir ?? exercise.rir ?? null
+  const effectiveUrl = (exercise.override as any)?.exercise_url_override ?? exercise.exercise_url ?? null
+  const effectiveWarmupSets = (exercise.override as any)?.warmup_sets_override ?? exercise.warmup_sets ?? null
 
   // Nazwa ćwiczenia — uwzględnia zamiennik trenera
   function getEffectiveName(): string {
@@ -898,7 +900,7 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
   const isSubstituted = !!exercise.override?.is_substitution && !exercise.override.skip
   const isExtra = !!(exercise as any).is_extra
 
-  const warmupSets: TrainingWarmupSet[] = Array.isArray(exercise.warmup_sets) ? exercise.warmup_sets : []
+  const warmupSets: TrainingWarmupSet[] = Array.isArray(effectiveWarmupSets) ? effectiveWarmupSets : []
   const legacyWarmupSets: TrainingWarmupSet[] = !warmupSets.length && exercise.warmup_reps
     ? [{ reps: exercise.warmup_reps, weight_kg: exercise.warmup_weight }]
     : []
@@ -947,7 +949,7 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
   return (
     <>
       {tempoOpen && effectiveTempo && <TempoModal tempo={effectiveTempo} note={effectiveTempoNote || undefined} onClose={() => setTempoOpen(false)} />}
-      {videoOpen && <VideoModal exerciseName={exerciseName} exerciseUrl={exercise.exercise_url} onClose={() => setVideoOpen(false)} />}
+      {videoOpen && <VideoModal exerciseName={exerciseName} exerciseUrl={effectiveUrl} onClose={() => setVideoOpen(false)} />}
       {rirOpen && effectiveRir != null && <RirModal rir={effectiveRir} onClose={() => setRirOpen(false)} />}
 
       <div style={{ background: '#fff', borderRadius: 14, border: allDone ? '1.5px solid #86EFAC' : `1.5px solid ${C.grayLight}`, marginBottom: 10, overflow: 'hidden', boxShadow: expanded ? '0 4px 20px rgba(13,27,42,0.08)' : 'none', transition: 'all 0.2s', fontFamily: sans }}>
@@ -983,7 +985,7 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
           </div>
 
           {/* Video icon — tylko gdy jest URL */}
-          {exercise.exercise_url && (
+          {effectiveUrl && (
             <button onClick={e => { e.stopPropagation(); setVideoOpen(true) }}
               style={{ width: 32, height: 32, borderRadius: 8, background: C.navy, border: `1.5px solid ${C.gold}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
               title="Film instruktażowy">
