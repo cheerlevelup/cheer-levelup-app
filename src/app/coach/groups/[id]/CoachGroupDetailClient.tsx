@@ -51,8 +51,8 @@ function CellStatus({ session }: { session: any | null }) {
   return <div style={{ width: 28, height: 28, borderRadius: '50%', background: C.gold, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: mono, fontSize: '0.7rem', color: C.navy, fontWeight: 800 }}>◑</div>
 }
 
-function AssignPlanModal({ athletes, plans, onClose, onAssigned }: {
-  athletes: any[]; plans: any[]
+function AssignPlanModal({ athletes, plans, groupId, onClose, onAssigned }: {
+  athletes: any[]; plans: any[]; groupId: number
   onClose: () => void; onAssigned: () => void
 }) {
   const supabase = createClient()
@@ -70,9 +70,16 @@ function AssignPlanModal({ athletes, plans, onClose, onAssigned }: {
     if (!selectedPlanId || selectedAthletes.length === 0) return
     setSaving(true); setError('')
     try {
+      // Dezaktywuj przypisania indywidualne dla wybranych zawodniczek
       await supabase.from('athlete_workout_assignments')
         .update({ is_active: false })
         .in('athlete_id', selectedAthletes)
+        .eq('is_active', true)
+
+      // Dezaktywuj przypisania grupowe (group_id) — żeby nie było duplikatów
+      await supabase.from('athlete_workout_assignments')
+        .update({ is_active: false })
+        .eq('group_id', groupId)
         .eq('is_active', true)
 
       const rows = selectedAthletes.map(athleteId => ({
@@ -1947,7 +1954,7 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
 
       {showAssignModal && (
         <AssignPlanModal
-          athletes={athletes} plans={plans}
+          athletes={athletes} plans={plans} groupId={group.id}
           onClose={() => setShowAssignModal(false)}
           onAssigned={() => { setAssignedMsg('Plan przypisany!'); router.refresh() }}
         />
