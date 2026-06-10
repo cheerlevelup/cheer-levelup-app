@@ -622,14 +622,17 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
         <span style={{ fontWeight: 800, fontSize: '0.82rem', color: done ? C.green : C.gold, minWidth: 24, fontFamily: mono, paddingTop: 1 }}>
           S{setNum}
         </span>
-        <span style={{
-          fontWeight: isLongReps ? 600 : 700,
-          fontSize: isLongReps ? '0.82rem' : '0.95rem',
-          color: C.navy,
-          flex: 1,
-          lineHeight: 1.4,
-        }}>
-          {repsStr}
+        <span style={{ display: 'flex', alignItems: 'baseline', gap: 3, flex: 1, lineHeight: 1.4 }}>
+          <span style={{
+            fontWeight: isLongReps ? 600 : 700,
+            fontSize: isLongReps ? '0.82rem' : '0.95rem',
+            color: C.navy,
+          }}>
+            {repsStr}
+          </span>
+          {!isLongReps && (
+            <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, fontWeight: 500 }}>powt.</span>
+          )}
         </span>
         {/* Na krótkich repsach — inputy i przycisk w tym samym rzędzie */}
         {!isLongReps && (
