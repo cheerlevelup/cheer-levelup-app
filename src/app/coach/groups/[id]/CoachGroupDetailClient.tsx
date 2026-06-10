@@ -305,10 +305,16 @@ function SessionReportModal({ session, athleteId, athleteName, dayName, onClose 
 
         {/* Header */}
         <div style={{ background: C.navy, padding: '1rem 1.25rem', borderRadius: '16px 16px 0 0', flexShrink: 0 }}>
-          <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 3 }}>Raport z treningu</div>
+          <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 3 }}>{session.completed ? 'Raport z treningu' : 'Podgląd treningu'}</div>
           <div style={{ color: C.white, fontWeight: 800, fontSize: '1.1rem' }}>{dayName}</div>
           <div style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray, marginTop: 3 }}>{athleteName} · {dateStr}</div>
         </div>
+        {!session.completed && (
+          <div style={{ background: '#F97316', padding: '0.5rem 1.25rem', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <span style={{ fontSize: '0.75rem' }}>◑</span>
+            <span style={{ fontFamily: mono, fontSize: '0.62rem', fontWeight: 800, color: C.white, letterSpacing: '0.05em' }}>TRENING W TOKU — dane na bieżąco, raport jeszcze nie wysłany</span>
+          </div>
+        )}
 
         <div style={{ overflowY: 'auto', flex: 1, padding: '1rem' }}>
           {loading ? (
@@ -2384,12 +2390,12 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                               </td>
                               {activePlanDays.map((day: any) => {
                                 const sess = sessionIndex[`${athlete.id}_${day.id}`] || null
-                                const clickable = sess?.completed
+                                const clickable = !!sess
                                 return (
                                   <td key={day.id} style={{ padding: '0.5rem', textAlign: 'center', borderBottom: `1px solid ${C.grayLight}` }}>
                                     <div
                                       onClick={() => clickable && openSessionReport(sess, athlete.id, athlete.full_name, day.day_name || `Trening ${day.id}`)}
-                                      title={clickable ? 'Kliknij aby zobaczyć raport' : undefined}
+                                      title={sess?.completed ? 'Kliknij aby zobaczyć raport' : sess ? 'Trening w toku — kliknij aby zobaczyć bieżące dane' : undefined}
                                       style={{ display: 'flex', justifyContent: 'center', cursor: clickable ? 'pointer' : 'default' }}>
                                       <CellStatus session={sess} />
                                     </div>
