@@ -81,7 +81,24 @@ ALTER TABLE public.wellness_logs
 ALTER TABLE public.post_session_feedback
   ADD COLUMN IF NOT EXISTS group_training_id bigint REFERENCES public.group_trainings(id) ON DELETE SET NULL;
 
--- 6. Trener może zapisywać gotowość i feedback w imieniu zawodniczek (tryb kiosku)
+-- 6. Feedback z kiosku nie ma sesji zawodniczki — kolumny sesji muszą dopuszczać NULL
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'post_session_feedback' AND column_name = 'session_id') THEN
+    ALTER TABLE public.post_session_feedback ALTER COLUMN session_id DROP NOT NULL;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'post_session_feedback' AND column_name = 'workout_session_id') THEN
+    ALTER TABLE public.post_session_feedback ALTER COLUMN workout_session_id DROP NOT NULL;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'wellness_logs' AND column_name = 'session_id') THEN
+    ALTER TABLE public.wellness_logs ALTER COLUMN session_id DROP NOT NULL;
+  END IF;
+END $$;
+
+-- 7. Trener może zapisywać gotowość i feedback w imieniu zawodniczek (tryb kiosku)
 DROP POLICY IF EXISTS "coach_manage_wellness" ON public.wellness_logs;
 CREATE POLICY "coach_manage_wellness" ON public.wellness_logs
   FOR ALL TO authenticated
