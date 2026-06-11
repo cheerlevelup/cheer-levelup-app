@@ -97,7 +97,7 @@ export default async function CoachAthletePage({ params }: Props) {
   // Wszystkie grupy i plany (do edycji profilu)
   const { data: allGroups } = await supabase
     .from('groups')
-    .select('id, name, training_level')
+    .select('*')
     .order('sort_order', { ascending: true })
 
   const { data: allPlans } = await supabase

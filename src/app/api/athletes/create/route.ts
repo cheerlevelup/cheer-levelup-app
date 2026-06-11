@@ -25,13 +25,25 @@ export async function POST(req: NextRequest) {
 
   const { email, password, full_name, birth_year, group_id } = await req.json()
 
-  if (!email || !password || !full_name) {
-    return NextResponse.json({ error: 'Email, hasło i imię są wymagane' }, { status: 400 })
+  if (!password || !full_name) {
+    return NextResponse.json({ error: 'Hasło i imię są wymagane' }, { status: 400 })
   }
+
+  // Bez maila (grupy zorganizowane — dzieci): konto powstaje z mailem
+  // technicznym, który w przyszłości można podmienić na prawdziwy
+  const isPlaceholderEmail = !email
+  const slug = full_name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/ł/g, 'l')
+    .replace(/[^a-z0-9]+/g, '.')
+    .replace(/^\.+|\.+$/g, '') || 'zawodniczka'
+  const finalEmail = email || `${slug}.${Date.now().toString(36)}@zawodniczki.cheerlevelup.pl`
 
   // Utwórz konto Auth
   const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-    email,
+    email: finalEmail,
     password,
     email_confirm: true,
   })
@@ -57,8 +69,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: athleteError.message }, { status: 400 })
   }
 
-  // Wyślij email powitalny jeśli klucz Resend jest ustawiony
-  if (process.env.RESEND_API_KEY) {
+  // Wyślij email powitalny jeśli klucz Resend jest ustawiony (nie dla maili technicznych)
+  if (process.env.RESEND_API_KEY && !isPlaceholderEmail) {
     try {
       const resend = new Resend(process.env.RESEND_API_KEY)
       await resend.emails.send({

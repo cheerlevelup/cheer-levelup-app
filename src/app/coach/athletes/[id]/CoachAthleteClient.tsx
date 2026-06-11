@@ -305,14 +305,14 @@ function MoveToGroupModal({ athlete, allGroups, onClose, onMoved }: {
         <div style={{ padding: '1.25rem' }}>
           <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Wybierz grupę docelową</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: '1rem' }}>
-            {allGroups.filter(g => g.id !== athlete.group_id).map(g => (
+            {allGroups.filter(g => g.id !== athlete.group_id && g.group_type !== 'managed').map(g => (
               <button key={g.id} onClick={() => setTargetGroupId(String(g.id))}
                 style={{ padding: '0.75rem 1rem', borderRadius: 10, border: `1.5px solid ${targetGroupId === String(g.id) ? C.gold : C.grayLight}`, background: targetGroupId === String(g.id) ? C.navy : C.offWhite, color: targetGroupId === String(g.id) ? C.gold : C.navy, fontWeight: 700, textAlign: 'left', cursor: 'pointer', fontFamily: sans }}>
                 {g.name}
                 {g.training_level && <span style={{ fontFamily: mono, fontSize: '0.65rem', color: targetGroupId === String(g.id) ? C.gray : C.gray, marginLeft: 8 }}>{g.training_level}</span>}
               </button>
             ))}
-            {allGroups.filter(g => g.id !== athlete.group_id).length === 0 && (
+            {allGroups.filter(g => g.id !== athlete.group_id && g.group_type !== 'managed').length === 0 && (
               <div style={{ color: C.gray, fontSize: '0.84rem', fontStyle: 'italic' }}>Brak innych grup.</div>
             )}
           </div>

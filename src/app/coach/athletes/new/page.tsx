@@ -12,8 +12,11 @@ export default async function NewAthletePage() {
 
   const { data: groups } = await supabase
     .from('groups')
-    .select('id, name')
+    .select('*')
     .order('sort_order', { ascending: true })
 
-  return <NewAthleteClient groups={groups || []} />
+  // Grupy zorganizowane (np. Ultra) mają własne dodawanie zawodniczek z widoku grupy
+  const selfGroups = (groups || []).filter((g: any) => g.group_type !== 'managed')
+
+  return <NewAthleteClient groups={selfGroups} />
 }

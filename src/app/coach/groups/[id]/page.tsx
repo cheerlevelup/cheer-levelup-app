@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import CoachGroupDetailClient from './CoachGroupDetailClient'
+import ManagedGroupClient from './ManagedGroupClient'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -33,6 +34,23 @@ export default async function CoachGroupDetailPage({ params }: Props) {
     .select('*')
     .eq('group_id', groupId)
     .order('full_name', { ascending: true })
+
+  // Grupa zorganizowana (np. Ultra) — osobny panel prowadzony przez trenera
+  if ((group as any).group_type === 'managed') {
+    const { data: trainings } = await supabase
+      .from('group_trainings')
+      .select('*')
+      .eq('group_id', groupId)
+      .order('training_date', { ascending: false })
+
+    return (
+      <ManagedGroupClient
+        group={group}
+        athletes={athletes || []}
+        trainings={trainings || []}
+      />
+    )
+  }
 
   if (!athletes || athletes.length === 0) {
     return <CoachGroupDetailClient group={group} athletes={[]} assignments={[]} days={[]} sessions={[]} />

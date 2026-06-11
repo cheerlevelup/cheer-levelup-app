@@ -143,6 +143,38 @@ export interface Group {
   name: string
   training_level?: string
   sort_order?: number
+  group_type?: 'self' | 'managed'
+}
+
+export interface GroupTraining {
+  id: number
+  group_id: number
+  training_date: string
+  created_at: string
+}
+
+export interface GroupTrainingSet {
+  reps?: string
+  tempo?: string
+  weight?: string
+}
+
+export interface GroupTrainingExercise {
+  id: number
+  training_id: number
+  name: string
+  exercise_order: number
+}
+
+export interface GroupTrainingEntry {
+  id: number
+  training_id: number
+  exercise_id: number
+  athlete_id: number
+  sets: GroupTrainingSet[]
+  pain_vas?: number | null
+  pain_comment?: string | null
+  comment?: string | null
 }
 
 export interface TrainingView {
