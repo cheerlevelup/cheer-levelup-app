@@ -21,9 +21,10 @@ const labelSt: React.CSSProperties = { fontFamily: mono, fontSize: '0.62rem', co
 function fmt(n: string) { return n.replace(/-/g, ' ') }
 
 // ─── MODAL EDYCJI ĆWICZENIA ───────────────────────────────────────────────────
-function ExerciseEditModal({ ex, athleteId, athleteName, existingOverride, exerciseLibrary, allBlocks, onSave, onSaveAll, onClose }: {
+function ExerciseEditModal({ ex, athleteId, athleteName, existingOverride, exerciseLibrary, allBlocks, days, currentDayId, onSave, onSaveAll, onClose }: {
   ex: any; athleteId: number; athleteName: string
   existingOverride: any | null; exerciseLibrary: any[]; allBlocks: any[]
+  days: any[]; currentDayId: number
   onSave: (override: any) => void
   onSaveAll: (exerciseId: number | null, exerciseCode: string | null, overrides: { exerciseId: number; override: any }[]) => void
   onClose: () => void
@@ -129,12 +130,26 @@ function ExerciseEditModal({ ex, athleteId, athleteName, existingOverride, exerc
       const enriched = { ...result, exercise_override: resolvedLibEx || null }
       onSave(enriched)
 
-      // Jeśli "zachowaj dla całego planu" — znajdź wszystkie ćwiczenia z tym samym exercise_id/code
+      // Jeśli "zachowaj dla kolejnych treningów" — znajdź to samo ćwiczenie
+      // w tym i we wszystkich PÓŹNIEJSZYCH dniach planu (wcześniejsze bez zmian)
       if (wholePlan) {
         const srcId = ex.exercise_id
         const srcCode = ex.exercise_code
+
+        // Kolejność dni w planie: tydzień, potem kolejność dnia
+        const sortedDays = [...days].sort((a: any, b: any) =>
+          (a.week?.week_number || 1) - (b.week?.week_number || 1)
+          || (a.day_order || 0) - (b.day_order || 0)
+          || a.id - b.id
+        )
+        const dayRank: Record<number, number> = {}
+        sortedDays.forEach((d: any, i: number) => { dayRank[d.id] = i })
+        const currentRank = dayRank[currentDayId] ?? 0
+
         const siblings: { exerciseId: number; override: any }[] = []
         for (const block of allBlocks) {
+          // Pomiń bloki z treningów wcześniejszych niż aktualnie edytowany
+          if ((dayRank[block.day_id] ?? 0) < currentRank) continue
           for (const bex of (block.workout_block_exercises || [])) {
             if (bex.id === ex.id) continue // ten już zapisany
             const match = srcId ? bex.exercise_id === srcId : (srcCode && bex.exercise_code === srcCode)
@@ -273,9 +288,9 @@ function ExerciseEditModal({ ex, athleteId, athleteName, existingOverride, exerc
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '0.875rem', background: wholePlan ? C.navyLight : C.offWhite, border: `1.5px solid ${wholePlan ? C.gold : C.grayLight}`, borderRadius: 10, cursor: 'pointer', marginBottom: '1.25rem' }}>
             <input type="checkbox" checked={wholePlan} onChange={e => setWholePlan(e.target.checked)} style={{ accentColor: C.gold, width: 16, height: 16, marginTop: 2, flexShrink: 0 }} />
             <div>
-              <div style={{ fontWeight: 800, fontSize: '0.88rem', color: wholePlan ? C.gold : C.navy }}>Zachowaj dla całego planu</div>
+              <div style={{ fontWeight: 800, fontSize: '0.88rem', color: wholePlan ? C.gold : C.navy }}>Zachowaj dla kolejnych treningów</div>
               <div style={{ fontSize: '0.75rem', color: C.gray, marginTop: 2 }}>
-                Zastosuje tę modyfikację do wszystkich wystąpień tego samego ćwiczenia w planie (np. we wszystkich tygodniach).
+                Zastosuje tę modyfikację do tego i wszystkich późniejszych wystąpień tego ćwiczenia w planie. Wcześniejsze treningi zostają bez zmian.
               </div>
             </div>
           </label>
@@ -292,7 +307,7 @@ function ExerciseEditModal({ ex, athleteId, athleteName, existingOverride, exerc
             )}
             <button onClick={handleSave} disabled={saving || (mode === 'library' && !libId) || (mode === 'custom' && !customName.trim())}
               style={{ flex: 1, padding: '0.875rem', border: 'none', borderRadius: 12, background: C.navy, color: C.gold, fontWeight: 900, opacity: saving ? 0.7 : 1 }}>
-              {saving ? 'Zapisuję...' : wholePlan ? 'Zapisz dla całego planu ✓' : 'Zapisz zmiany ✓'}
+              {saving ? 'Zapisuję...' : wholePlan ? 'Zapisz dla kolejnych treningów ✓' : 'Zapisz zmiany ✓'}
             </button>
           </div>
         </div>
@@ -604,6 +619,7 @@ export default function CoachAthleteTrainingClient({ athlete, assignment, days, 
           ex={editingExercise} athleteId={athlete.id} athleteName={athlete.full_name.split(' ')[0]}
           existingOverride={overrideMap[editingExercise.id] || null}
           exerciseLibrary={exerciseLibrary} allBlocks={localBlocks}
+          days={days} currentDayId={selectedDay}
           onSave={o => handleOverrideSave(editingExercise.id, o)}
           onSaveAll={handleSaveAll}
           onClose={() => setEditingExercise(null)}
