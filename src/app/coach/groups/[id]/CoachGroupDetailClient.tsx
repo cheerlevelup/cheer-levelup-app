@@ -222,9 +222,9 @@ function SessionReportModal({ session, athleteId, athleteName, dayName, onClose 
     async function load() {
       try {
         const sb = createClient()
-        const sessionDate = session.date_completed
-          ? new Date(session.date_completed).toISOString().split('T')[0]
-          : new Date().toISOString().split('T')[0]
+        // Data sesji w czasie lokalnym (UTC przesuwało wieczorne treningi na inny dzień)
+        const sessionBase = session.date_completed ? new Date(session.date_completed) : new Date()
+        const sessionDate = `${sessionBase.getFullYear()}-${String(sessionBase.getMonth() + 1).padStart(2, '0')}-${String(sessionBase.getDate()).padStart(2, '0')}`
 
         // Każde zapytanie niezależnie — błąd jednego nie blokuje reszty
         let fbData = null, logsData: any[] = [], blocksData: any[] = [], wellnessData = null
@@ -246,10 +246,29 @@ function SessionReportModal({ session, athleteId, athleteName, dayName, onClose 
           } catch {}
         }
 
+        // 1) Gotowość wypełniona w trakcie treningu — powiązana z sesją
         try {
-          const r = await sb.from('wellness_logs').select('*').eq('athlete_id', athleteId).eq('date', sessionDate).maybeSingle()
+          const r = await sb.from('wellness_logs').select('*').eq('workout_session_id', session.id).order('created_at', { ascending: false }).limit(1).maybeSingle()
           wellnessData = r.data || null
         } catch {}
+
+        // 2) Dzienny wpis wellness z datą sesji (strona wellness zapisuje pole date)
+        if (!wellnessData) {
+          try {
+            const r = await sb.from('wellness_logs').select('*').eq('athlete_id', athleteId).eq('date', sessionDate).order('created_at', { ascending: false }).limit(1).maybeSingle()
+            wellnessData = r.data || null
+          } catch {}
+        }
+
+        // 3) Jakikolwiek wpis zawodniczki z tego samego dnia (po created_at)
+        if (!wellnessData) {
+          try {
+            const dayStart = new Date(sessionBase); dayStart.setHours(0, 0, 0, 0)
+            const dayEnd = new Date(dayStart); dayEnd.setDate(dayEnd.getDate() + 1)
+            const r = await sb.from('wellness_logs').select('*').eq('athlete_id', athleteId).gte('created_at', dayStart.toISOString()).lt('created_at', dayEnd.toISOString()).order('created_at', { ascending: false }).limit(1).maybeSingle()
+            wellnessData = r.data || null
+          } catch {}
+        }
 
         setFeedback(fbData)
         setSetLogs(logsData)
