@@ -17,7 +17,16 @@ const mono = "'Space Mono', monospace"
 type Group = { id: number; name: string }
 type Training = { id: number; group_id: number; training_date: string }
 type Athlete = { id: number; full_name: string }
-type Exercise = { id: number; training_id: number; name: string; exercise_order: number }
+type Exercise = {
+  id: number
+  training_id: number
+  name: string
+  exercise_order: number
+  // rozpiska dla całej grupy (nagłówek kolumny)
+  sets_planned?: number | null
+  reps?: string | null
+  tempo?: string | null
+}
 type SetRow = { reps?: string; tempo?: string; weight?: string }
 type Entry = {
   id?: number
@@ -40,6 +49,17 @@ interface Props {
 
 const entryKey = (exerciseId: number, athleteId: number) => `${exerciseId}_${athleteId}`
 
+// Serie do wyświetlenia: wpis zawodniczki dopełniony do liczby serii z rozpiski,
+// puste serie dziedziczą powtórzenia i tempo z nagłówka kolumny
+function effectiveSets(ex: Exercise, entry: Entry | null | undefined, minOne = false): SetRow[] {
+  const fromEntry = entry?.sets || []
+  const planned = ex.sets_planned ?? 0
+  const n = Math.max(planned, fromEntry.length, minOne ? 1 : 0)
+  return Array.from({ length: n }, (_, i) =>
+    fromEntry[i] ? { ...fromEntry[i] } : { reps: ex.reps || '', tempo: ex.tempo || '', weight: '' }
+  )
+}
+
 // ── Modal komórki: serie + ból + komentarz ──────────────────────────────────
 function CellModal({ athlete, exercise, entry, training, onClose, onSaved }: {
   athlete: Athlete
@@ -50,7 +70,7 @@ function CellModal({ athlete, exercise, entry, training, onClose, onSaved }: {
   onSaved: (saved: Entry) => void
 }) {
   const supabase = createClient()
-  const [sets, setSets] = useState<SetRow[]>(entry?.sets?.length ? entry.sets.map(s => ({ ...s })) : [{}])
+  const [sets, setSets] = useState<SetRow[]>(() => effectiveSets(exercise, entry, true))
   const [painVas, setPainVas] = useState<number | null>(entry?.pain_vas ?? null)
   const [painComment, setPainComment] = useState(entry?.pain_comment || '')
   const [comment, setComment] = useState(entry?.comment || '')
@@ -209,6 +229,9 @@ export default function GroupTrainingClient({ group, training, athletes, initial
   const [copying, setCopying] = useState(false)
   const [focusExerciseId, setFocusExerciseId] = useState<number | null>(null)
   const nameInputRefs = useRef<Map<number, HTMLInputElement>>(new Map())
+  // Najnowsze serie per komórka — chroni przed zgubieniem ciężaru przy szybkim
+  // przechodzeniu między polami (zapis async może nie zdążyć przed kolejnym blur)
+  const latestSetsRef = useRef<Map<string, SetRow[]>>(new Map())
 
   // Po dodaniu kolumny kursor wskakuje w pole nazwy nowego ćwiczenia
   useEffect(() => {
@@ -228,7 +251,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     const maxOrder = Math.max(0, ...exercises.map(e => e.exercise_order))
     const { data, error: err } = await supabase
       .from('group_training_exercises')
-      .insert({ training_id: training.id, name: '', exercise_order: maxOrder + 1 })
+      .insert({ training_id: training.id, name: '', exercise_order: maxOrder + 1, sets_planned: 3 })
       .select()
       .single()
     if (err || !data) { setError(err?.message || 'Błąd dodawania ćwiczenia'); return }
@@ -236,16 +259,53 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     setFocusExerciseId((data as Exercise).id)
   }
 
-  function handleNameChange(exerciseId: number, name: string) {
-    setExercises(prev => prev.map(e => e.id === exerciseId ? { ...e, name } : e))
+  function handleExerciseField(exerciseId: number, field: 'name' | 'reps' | 'tempo' | 'sets_planned', value: string) {
+    setExercises(prev => prev.map(e => {
+      if (e.id !== exerciseId) return e
+      if (field === 'sets_planned') return { ...e, sets_planned: value === '' ? null : parseInt(value) || null }
+      return { ...e, [field]: value }
+    }))
   }
 
-  async function persistName(ex: Exercise) {
+  async function persistExercise(exerciseId: number) {
+    const ex = exercises.find(e => e.id === exerciseId)
+    if (!ex) return
     const { error: err } = await supabase
       .from('group_training_exercises')
-      .update({ name: ex.name.trim() })
+      .update({ name: ex.name.trim(), sets_planned: ex.sets_planned ?? null, reps: ex.reps?.trim() || null, tempo: ex.tempo?.trim() || null })
       .eq('id', ex.id)
     if (err) setError(err.message)
+  }
+
+  // Szybki zapis ciężaru wpisanego bezpośrednio w komórce tabeli
+  async function saveInlineWeight(athlete: Athlete, ex: Exercise, idx: number, value: string) {
+    const key = entryKey(ex.id, athlete.id)
+    const current = entryMap.get(key)
+    const sets = latestSetsRef.current.get(key) ?? effectiveSets(ex, current)
+    if ((sets[idx]?.weight || '') === value.trim()) return
+    sets[idx] = { ...(sets[idx] || { reps: ex.reps || '', tempo: ex.tempo || '' }), weight: value.trim() }
+    latestSetsRef.current.set(key, sets)
+    const payload = {
+      training_id: training.id,
+      exercise_id: ex.id,
+      athlete_id: athlete.id,
+      sets,
+      pain_vas: current?.pain_vas ?? null,
+      pain_comment: current?.pain_comment ?? null,
+      comment: current?.comment ?? null,
+      updated_at: new Date().toISOString(),
+    }
+    const { data, error: err } = await supabase
+      .from('group_training_entries')
+      .upsert(payload, { onConflict: 'exercise_id,athlete_id' })
+      .select()
+      .single()
+    if (err || !data) { setError(err?.message || 'Błąd zapisu ciężaru'); return }
+    setEntryMap(prev => {
+      const next = new Map(prev)
+      next.set(key, data as Entry)
+      return next
+    })
   }
 
   async function handleDeleteExercise(ex: Exercise) {
@@ -293,22 +353,24 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     if (!prevTraining) { setError('Brak wcześniejszego treningu do skopiowania.'); setCopying(false); return }
     const { data: prevExercises } = await supabase
       .from('group_training_exercises')
-      .select('name, exercise_order')
+      .select('*')
       .eq('training_id', prevTraining.id)
       .order('exercise_order', { ascending: true })
     if (!prevExercises || prevExercises.length === 0) { setError('Poprzedni trening nie miał ćwiczeń.'); setCopying(false); return }
     const { data: inserted, error: err } = await supabase
       .from('group_training_exercises')
-      .insert(prevExercises.map(e => ({ training_id: training.id, name: e.name, exercise_order: e.exercise_order })))
+      .insert(prevExercises.map((e: any) => ({
+        training_id: training.id,
+        name: e.name,
+        exercise_order: e.exercise_order,
+        sets_planned: e.sets_planned ?? null,
+        reps: e.reps ?? null,
+        tempo: e.tempo ?? null,
+      })))
       .select()
     setCopying(false)
     if (err || !inserted) { setError(err?.message || 'Błąd kopiowania'); return }
     setExercises(prev => [...prev, ...(inserted as Exercise[])])
-  }
-
-  function cellSummary(entry: Entry | undefined) {
-    if (!entry || (!entry.sets?.length && entry.pain_vas == null && !entry.comment)) return null
-    return entry
   }
 
   return (
@@ -343,7 +405,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
               Trening · {formatDatePl(trainingDate)}
             </h1>
             <p style={{ color: C.gray, fontSize: '0.8rem', marginTop: 3 }}>
-              Zawodniczki w wierszach, ćwiczenia w kolumnach. Nową kolumnę dodasz przyciskiem ＋ po prawej, komórka otwiera wpis serii, ciężaru i bólu.
+              W nagłówku kolumny: serie, powtórzenia i tempo dla całej grupy. W wierszu zawodniczki wpisujesz ciężar każdej serii, a ✎ otwiera ból i komentarz.
             </p>
           </div>
         </header>
@@ -374,27 +436,68 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                       <th className="gt-sticky" style={{ minWidth: 150, padding: '0.7rem 0.8rem', textAlign: 'left', fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', background: C.offWhite, zIndex: 3 }}>
                         Zawodniczka
                       </th>
-                      {sortedExercises.map(ex => (
-                        <th key={ex.id} style={{ minWidth: 160, padding: '0.45rem 0.5rem', background: C.offWhite }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <input
-                              ref={el => { if (el) nameInputRefs.current.set(ex.id, el); else nameInputRefs.current.delete(ex.id) }}
-                              value={ex.name}
-                              onChange={e => handleNameChange(ex.id, e.target.value)}
-                              onBlur={e => {
-                                e.target.style.background = 'transparent'
-                                e.target.style.borderColor = 'transparent'
-                                persistName(exercises.find(x => x.id === ex.id) || ex)
-                              }}
-                              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-                              placeholder="nazwa ćwiczenia"
-                              style={{ flex: 1, minWidth: 0, border: `1.5px solid transparent`, borderRadius: 7, background: 'transparent', fontWeight: 800, fontSize: '0.82rem', color: C.navy, padding: '0.3rem 0.35rem', outline: 'none', fontFamily: sans }}
-                              onFocus={e => { e.target.style.background = C.white; e.target.style.borderColor = C.gold }}
-                            />
-                            <button onClick={() => handleDeleteExercise(ex)} title="Usuń ćwiczenie" style={{ border: 'none', background: 'none', color: C.gray, fontSize: '0.78rem', padding: 2, flexShrink: 0 }}>✕</button>
-                          </div>
-                        </th>
-                      ))}
+                      {sortedExercises.map(ex => {
+                        const headerInput: React.CSSProperties = {
+                          width: '100%', minWidth: 0, border: `1.5px solid ${C.grayLight}`, borderRadius: 7,
+                          background: C.white, fontFamily: mono, fontSize: '0.72rem', color: C.navy,
+                          padding: '0.3rem 0.3rem', outline: 'none', textAlign: 'center',
+                        }
+                        return (
+                          <th key={ex.id} style={{ minWidth: 190, padding: '0.45rem 0.5rem', background: C.offWhite }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <input
+                                ref={el => { if (el) nameInputRefs.current.set(ex.id, el); else nameInputRefs.current.delete(ex.id) }}
+                                value={ex.name}
+                                onChange={e => handleExerciseField(ex.id, 'name', e.target.value)}
+                                onBlur={e => {
+                                  e.target.style.background = 'transparent'
+                                  e.target.style.borderColor = 'transparent'
+                                  persistExercise(ex.id)
+                                }}
+                                onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                                placeholder="nazwa ćwiczenia"
+                                style={{ flex: 1, minWidth: 0, border: `1.5px solid transparent`, borderRadius: 7, background: 'transparent', fontWeight: 800, fontSize: '0.82rem', color: C.navy, padding: '0.3rem 0.35rem', outline: 'none', fontFamily: sans }}
+                                onFocus={e => { e.target.style.background = C.white; e.target.style.borderColor = C.gold }}
+                              />
+                              <button onClick={() => handleDeleteExercise(ex)} title="Usuń ćwiczenie" style={{ border: 'none', background: 'none', color: C.gray, fontSize: '0.78rem', padding: 2, flexShrink: 0 }}>✕</button>
+                            </div>
+                            {/* Rozpiska dla całej grupy: serie / powtórzenia / tempo */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginTop: 4 }}>
+                              <div>
+                                <div style={{ fontFamily: mono, fontSize: '0.52rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center', marginBottom: 2 }}>serie</div>
+                                <input
+                                  type="number" min={0} max={20}
+                                  value={ex.sets_planned ?? ''}
+                                  onChange={e => handleExerciseField(ex.id, 'sets_planned', e.target.value)}
+                                  onBlur={() => persistExercise(ex.id)}
+                                  placeholder="3"
+                                  style={headerInput}
+                                />
+                              </div>
+                              <div>
+                                <div style={{ fontFamily: mono, fontSize: '0.52rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center', marginBottom: 2 }}>powt.</div>
+                                <input
+                                  value={ex.reps ?? ''}
+                                  onChange={e => handleExerciseField(ex.id, 'reps', e.target.value)}
+                                  onBlur={() => persistExercise(ex.id)}
+                                  placeholder="8"
+                                  style={headerInput}
+                                />
+                              </div>
+                              <div>
+                                <div style={{ fontFamily: mono, fontSize: '0.52rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center', marginBottom: 2 }}>tempo</div>
+                                <input
+                                  value={ex.tempo ?? ''}
+                                  onChange={e => handleExerciseField(ex.id, 'tempo', e.target.value)}
+                                  onBlur={() => persistExercise(ex.id)}
+                                  placeholder="3010"
+                                  style={headerInput}
+                                />
+                              </div>
+                            </div>
+                          </th>
+                        )
+                      })}
                       <th style={{ minWidth: 56, padding: 0, background: C.offWhite }}>
                         <button
                           onClick={handleAddExercise}
@@ -413,36 +516,42 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                           {athlete.full_name}
                         </td>
                         {sortedExercises.map(ex => {
-                          const entry = cellSummary(entryMap.get(entryKey(ex.id, athlete.id)))
+                          const entry = entryMap.get(entryKey(ex.id, athlete.id)) || null
+                          const sets = effectiveSets(ex, entry)
                           return (
-                            <td key={ex.id} style={{ padding: 0 }}>
-                              <button
-                                onClick={() => setOpenCell({ athlete, exercise: ex })}
-                                style={{ display: 'block', width: '100%', minHeight: 52, border: 'none', background: entry ? C.white : '#FAFBFC', textAlign: 'left', padding: '0.5rem 0.6rem' }}
-                              >
-                                {entry ? (
-                                  <>
-                                    {entry.sets.map((s, i) => (
-                                      <div key={i} style={{ fontFamily: mono, fontSize: '0.7rem', color: C.navy, whiteSpace: 'nowrap' }}>
-                                        <span style={{ color: C.gray }}>{i + 1}:</span>{' '}
-                                        {s.reps ? `${s.reps}` : '—'}
-                                        {s.weight ? ` × ${s.weight}${/[a-zA-Z%]/.test(s.weight) ? '' : ' kg'}` : ''}
-                                        {s.tempo ? ` @${s.tempo}` : ''}
-                                      </div>
-                                    ))}
-                                    <div style={{ display: 'flex', gap: 4, marginTop: entry.sets.length ? 4 : 0, flexWrap: 'wrap' }}>
-                                      {entry.pain_vas != null && (
-                                        <span style={{ fontFamily: mono, fontSize: '0.6rem', fontWeight: 700, color: C.white, background: entry.pain_vas >= 5 ? C.red : C.orange, borderRadius: 6, padding: '1px 6px' }}>
-                                          ból {entry.pain_vas}
-                                        </span>
-                                      )}
-                                      {entry.comment && <span style={{ fontSize: '0.7rem' }} title={entry.comment}>💬</span>}
-                                    </div>
-                                  </>
-                                ) : (
-                                  <span style={{ fontFamily: mono, fontSize: '0.72rem', color: C.grayLight }}>＋</span>
-                                )}
-                              </button>
+                            <td key={ex.id} style={{ padding: '0.4rem 0.5rem' }}>
+                              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, flexWrap: 'wrap' }}>
+                                {sets.map((s, i) => (
+                                  <div key={`${ex.id}_${athlete.id}_${i}_${s.weight || ''}`}>
+                                    <div style={{ fontFamily: mono, fontSize: '0.52rem', color: C.gray, textAlign: 'center', marginBottom: 2 }}>S{i + 1}</div>
+                                    <input
+                                      defaultValue={s.weight || ''}
+                                      placeholder="kg"
+                                      onBlur={e => saveInlineWeight(athlete, ex, i, e.target.value)}
+                                      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                                      style={{ width: 48, border: `1.5px solid ${s.weight ? C.grayLight : '#DBE2EB'}`, borderRadius: 7, background: s.weight ? C.white : '#FAFBFC', fontFamily: mono, fontSize: '0.74rem', color: C.navy, padding: '0.32rem 0.25rem', outline: 'none', textAlign: 'center' }}
+                                      onFocus={e => { e.target.style.borderColor = C.gold }}
+                                    />
+                                  </div>
+                                ))}
+                                <button
+                                  onClick={() => setOpenCell({ athlete, exercise: ex })}
+                                  title="Szczegóły: powtórzenia, tempo, ból, komentarz"
+                                  style={{ border: `1.5px solid ${C.grayLight}`, background: C.white, color: C.gray, borderRadius: 7, padding: '0.3rem 0.4rem', fontSize: '0.72rem', flexShrink: 0 }}
+                                >
+                                  ✎
+                                </button>
+                              </div>
+                              {(entry?.pain_vas != null || entry?.comment) && (
+                                <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                                  {entry?.pain_vas != null && (
+                                    <span style={{ fontFamily: mono, fontSize: '0.6rem', fontWeight: 700, color: C.white, background: entry.pain_vas >= 5 ? C.red : C.orange, borderRadius: 6, padding: '1px 6px' }}>
+                                      ból {entry.pain_vas}
+                                    </span>
+                                  )}
+                                  {entry?.comment && <span style={{ fontSize: '0.7rem' }} title={entry.comment}>💬</span>}
+                                </div>
+                              )}
                             </td>
                           )
                         })}
@@ -474,9 +583,11 @@ export default function GroupTrainingClient({ group, training, athletes, initial
           training={training}
           onClose={() => setOpenCell(null)}
           onSaved={saved => {
+            const key = entryKey(saved.exercise_id, saved.athlete_id)
+            latestSetsRef.current.delete(key)
             setEntryMap(prev => {
               const next = new Map(prev)
-              next.set(entryKey(saved.exercise_id, saved.athlete_id), saved)
+              next.set(key, saved)
               return next
             })
           }}

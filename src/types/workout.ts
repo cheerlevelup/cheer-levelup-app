@@ -164,6 +164,9 @@ export interface GroupTrainingExercise {
   training_id: number
   name: string
   exercise_order: number
+  sets_planned?: number | null
+  reps?: string | null
+  tempo?: string | null
 }
 
 export interface GroupTrainingEntry {

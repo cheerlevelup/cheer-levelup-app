@@ -18,7 +18,7 @@ type Group = { id: number; name: string }
 type Athlete = { id: number; full_name: string }
 type Training = { id: number; group_id: number; training_date: string }
 type SetRow = { reps?: string; tempo?: string; weight?: string }
-type Exercise = { id: number; name: string; exercise_order: number }
+type Exercise = { id: number; name: string; exercise_order: number; sets_planned?: number | null; reps?: string | null; tempo?: string | null }
 type Entry = {
   exercise_id: number
   athlete_id: number
@@ -83,7 +83,7 @@ export default function GroupSummaryClient({ group, athletes, trainings }: Props
       const { startIso, endIso } = dayRangeIso(selected!.training_date)
 
       const [{ data: ex }, { data: ent }, wellnessLinked, wellnessSameDay, feedbackLinked, feedbackSameDay] = await Promise.all([
-        supabase.from('group_training_exercises').select('id, name, exercise_order').eq('training_id', selected!.id).order('exercise_order'),
+        supabase.from('group_training_exercises').select('*').eq('training_id', selected!.id).order('exercise_order'),
         supabase.from('group_training_entries').select('*').eq('training_id', selected!.id),
         supabase.from('wellness_logs').select('*').eq('group_training_id', selected!.id),
         athleteIds.length
@@ -188,6 +188,13 @@ export default function GroupSummaryClient({ group, athletes, trainings }: Props
                         {exercises.map(ex => (
                           <th key={ex.id} style={{ minWidth: 150, padding: '0.6rem 0.7rem', fontWeight: 800, fontSize: '0.8rem', color: C.navy, background: C.offWhite, textAlign: 'left' }}>
                             {ex.name}
+                            {(ex.sets_planned || ex.reps || ex.tempo) && (
+                              <div style={{ fontFamily: mono, fontSize: '0.62rem', fontWeight: 400, color: C.gray, marginTop: 2 }}>
+                                {ex.sets_planned ? `${ex.sets_planned} serie` : ''}
+                                {ex.reps ? ` × ${ex.reps}` : ''}
+                                {ex.tempo ? ` @${ex.tempo}` : ''}
+                              </div>
+                            )}
                           </th>
                         ))}
                       </tr>
