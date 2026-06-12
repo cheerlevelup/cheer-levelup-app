@@ -1,7 +1,7 @@
 'use client'
 // src/app/coach/groups/[id]/training/[trainingId]/GroupTrainingClient.tsx
 // Tabela treningowa grupy zorganizowanej — wiersze: zawodniczki, kolumny: ćwiczenia
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { formatDatePl } from '@/lib/groupTraining'
@@ -207,35 +207,45 @@ export default function GroupTrainingClient({ group, training, athletes, initial
   const [trainingDate, setTrainingDate] = useState(training.training_date)
   const [error, setError] = useState('')
   const [copying, setCopying] = useState(false)
+  const [focusExerciseId, setFocusExerciseId] = useState<number | null>(null)
+  const nameInputRefs = useRef<Map<number, HTMLInputElement>>(new Map())
+
+  // Po dodaniu kolumny kursor wskakuje w pole nazwy nowego ćwiczenia
+  useEffect(() => {
+    if (focusExerciseId == null) return
+    const input = nameInputRefs.current.get(focusExerciseId)
+    if (input) { input.focus(); setFocusExerciseId(null) }
+  }, [focusExerciseId, exercises])
 
   const sortedExercises = useMemo(
     () => [...exercises].sort((a, b) => a.exercise_order - b.exercise_order || a.id - b.id),
     [exercises]
   )
 
+  // Nowa kolumna ćwiczenia — od razu z pustym polem nazwy do wpisania (jak w Excelu)
   async function handleAddExercise() {
     setError('')
-    const name = prompt('Nazwa ćwiczenia:')
-    if (!name || !name.trim()) return
     const maxOrder = Math.max(0, ...exercises.map(e => e.exercise_order))
     const { data, error: err } = await supabase
       .from('group_training_exercises')
-      .insert({ training_id: training.id, name: name.trim(), exercise_order: maxOrder + 1 })
+      .insert({ training_id: training.id, name: '', exercise_order: maxOrder + 1 })
       .select()
       .single()
     if (err || !data) { setError(err?.message || 'Błąd dodawania ćwiczenia'); return }
     setExercises(prev => [...prev, data as Exercise])
+    setFocusExerciseId((data as Exercise).id)
   }
 
-  async function handleRenameExercise(ex: Exercise) {
-    const name = prompt('Nowa nazwa ćwiczenia:', ex.name)
-    if (!name || !name.trim() || name.trim() === ex.name) return
+  function handleNameChange(exerciseId: number, name: string) {
+    setExercises(prev => prev.map(e => e.id === exerciseId ? { ...e, name } : e))
+  }
+
+  async function persistName(ex: Exercise) {
     const { error: err } = await supabase
       .from('group_training_exercises')
-      .update({ name: name.trim() })
+      .update({ name: ex.name.trim() })
       .eq('id', ex.id)
-    if (err) { setError(err.message); return }
-    setExercises(prev => prev.map(e => e.id === ex.id ? { ...e, name: name.trim() } : e))
+    if (err) setError(err.message)
   }
 
   async function handleDeleteExercise(ex: Exercise) {
@@ -333,7 +343,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
               Trening · {formatDatePl(trainingDate)}
             </h1>
             <p style={{ color: C.gray, fontSize: '0.8rem', marginTop: 3 }}>
-              Kliknij komórkę, aby wpisać serie, ciężar i ból. Kliknij nazwę ćwiczenia, aby ją zmienić.
+              Zawodniczki w wierszach, ćwiczenia w kolumnach. Nową kolumnę dodasz przyciskiem ＋ po prawej, komórka otwiera wpis serii, ciężaru i bólu.
             </p>
           </div>
         </header>
@@ -351,87 +361,97 @@ export default function GroupTrainingClient({ group, training, athletes, initial
             </div>
           ) : (
             <>
-              <div style={{ display: 'flex', gap: 10, marginBottom: '1rem', flexWrap: 'wrap' }}>
-                <button onClick={handleAddExercise} style={{ padding: '0.7rem 1.1rem', borderRadius: 12, border: 'none', background: C.navy, color: C.gold, fontWeight: 800, fontSize: '0.85rem' }}>
-                  ＋ Dodaj ćwiczenie
+              {exercises.length === 0 && (
+                <button onClick={handleCopyFromPrevious} disabled={copying} style={{ padding: '0.7rem 1.1rem', borderRadius: 12, border: `1.5px dashed ${C.gray}`, background: C.white, color: C.navy, fontWeight: 700, fontSize: '0.85rem', marginBottom: '1rem' }}>
+                  {copying ? 'Kopiuję...' : '⧉ Skopiuj ćwiczenia z poprzedniego treningu'}
                 </button>
-                {exercises.length === 0 && (
-                  <button onClick={handleCopyFromPrevious} disabled={copying} style={{ padding: '0.7rem 1.1rem', borderRadius: 12, border: `1.5px dashed ${C.gray}`, background: C.white, color: C.navy, fontWeight: 700, fontSize: '0.85rem' }}>
-                    {copying ? 'Kopiuję...' : '⧉ Skopiuj ćwiczenia z poprzedniego treningu'}
-                  </button>
-                )}
-              </div>
-
-              {exercises.length === 0 ? (
-                <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, padding: '1.5rem', textAlign: 'center', color: C.gray }}>
-                  Dodaj pierwsze ćwiczenie — pojawi się jako kolumna tabeli.
-                </div>
-              ) : (
-                <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, overflow: 'auto', maxHeight: '70vh' }}>
-                  <table className="gt-table">
-                    <thead>
-                      <tr>
-                        <th className="gt-sticky" style={{ minWidth: 150, padding: '0.7rem 0.8rem', textAlign: 'left', fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', background: C.offWhite, zIndex: 3 }}>
-                          Zawodniczka
-                        </th>
-                        {sortedExercises.map(ex => (
-                          <th key={ex.id} style={{ minWidth: 150, padding: '0.5rem 0.6rem', background: C.offWhite }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'space-between' }}>
-                              <button onClick={() => handleRenameExercise(ex)} title="Zmień nazwę" style={{ flex: 1, border: 'none', background: 'none', fontWeight: 800, fontSize: '0.82rem', color: C.navy, textAlign: 'left', padding: '0.2rem 0', lineHeight: 1.3 }}>
-                                {ex.name || '(bez nazwy)'}
-                              </button>
-                              <button onClick={() => handleDeleteExercise(ex)} title="Usuń ćwiczenie" style={{ border: 'none', background: 'none', color: C.gray, fontSize: '0.78rem', padding: 2 }}>✕</button>
-                            </div>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {athletes.map(athlete => (
-                        <tr key={athlete.id}>
-                          <td className="gt-sticky" style={{ padding: '0.7rem 0.8rem', fontWeight: 700, fontSize: '0.86rem', whiteSpace: 'nowrap' }}>
-                            {athlete.full_name}
-                          </td>
-                          {sortedExercises.map(ex => {
-                            const entry = cellSummary(entryMap.get(entryKey(ex.id, athlete.id)))
-                            return (
-                              <td key={ex.id} style={{ padding: 0 }}>
-                                <button
-                                  onClick={() => setOpenCell({ athlete, exercise: ex })}
-                                  style={{ display: 'block', width: '100%', minHeight: 52, border: 'none', background: entry ? C.white : '#FAFBFC', textAlign: 'left', padding: '0.5rem 0.6rem' }}
-                                >
-                                  {entry ? (
-                                    <>
-                                      {entry.sets.map((s, i) => (
-                                        <div key={i} style={{ fontFamily: mono, fontSize: '0.7rem', color: C.navy, whiteSpace: 'nowrap' }}>
-                                          <span style={{ color: C.gray }}>{i + 1}:</span>{' '}
-                                          {s.reps ? `${s.reps}` : '—'}
-                                          {s.weight ? ` × ${s.weight}${/[a-zA-Z%]/.test(s.weight) ? '' : ' kg'}` : ''}
-                                          {s.tempo ? ` @${s.tempo}` : ''}
-                                        </div>
-                                      ))}
-                                      <div style={{ display: 'flex', gap: 4, marginTop: entry.sets.length ? 4 : 0, flexWrap: 'wrap' }}>
-                                        {entry.pain_vas != null && (
-                                          <span style={{ fontFamily: mono, fontSize: '0.6rem', fontWeight: 700, color: C.white, background: entry.pain_vas >= 5 ? C.red : C.orange, borderRadius: 6, padding: '1px 6px' }}>
-                                            ból {entry.pain_vas}
-                                          </span>
-                                        )}
-                                        {entry.comment && <span style={{ fontSize: '0.7rem' }} title={entry.comment}>💬</span>}
-                                      </div>
-                                    </>
-                                  ) : (
-                                    <span style={{ fontFamily: mono, fontSize: '0.72rem', color: C.grayLight }}>＋</span>
-                                  )}
-                                </button>
-                              </td>
-                            )
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
               )}
+
+              <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, overflow: 'auto', maxHeight: '72vh' }}>
+                <table className="gt-table">
+                  <thead>
+                    <tr>
+                      <th className="gt-sticky" style={{ minWidth: 150, padding: '0.7rem 0.8rem', textAlign: 'left', fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', background: C.offWhite, zIndex: 3 }}>
+                        Zawodniczka
+                      </th>
+                      {sortedExercises.map(ex => (
+                        <th key={ex.id} style={{ minWidth: 160, padding: '0.45rem 0.5rem', background: C.offWhite }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <input
+                              ref={el => { if (el) nameInputRefs.current.set(ex.id, el); else nameInputRefs.current.delete(ex.id) }}
+                              value={ex.name}
+                              onChange={e => handleNameChange(ex.id, e.target.value)}
+                              onBlur={e => {
+                                e.target.style.background = 'transparent'
+                                e.target.style.borderColor = 'transparent'
+                                persistName(exercises.find(x => x.id === ex.id) || ex)
+                              }}
+                              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                              placeholder="nazwa ćwiczenia"
+                              style={{ flex: 1, minWidth: 0, border: `1.5px solid transparent`, borderRadius: 7, background: 'transparent', fontWeight: 800, fontSize: '0.82rem', color: C.navy, padding: '0.3rem 0.35rem', outline: 'none', fontFamily: sans }}
+                              onFocus={e => { e.target.style.background = C.white; e.target.style.borderColor = C.gold }}
+                            />
+                            <button onClick={() => handleDeleteExercise(ex)} title="Usuń ćwiczenie" style={{ border: 'none', background: 'none', color: C.gray, fontSize: '0.78rem', padding: 2, flexShrink: 0 }}>✕</button>
+                          </div>
+                        </th>
+                      ))}
+                      <th style={{ minWidth: 56, padding: 0, background: C.offWhite }}>
+                        <button
+                          onClick={handleAddExercise}
+                          title="Dodaj ćwiczenie (nowa kolumna)"
+                          style={{ width: '100%', height: '100%', minHeight: 44, border: 'none', background: 'none', color: C.navy, fontWeight: 800, fontSize: '1.1rem' }}
+                        >
+                          ＋
+                        </button>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {athletes.map(athlete => (
+                      <tr key={athlete.id}>
+                        <td className="gt-sticky" style={{ padding: '0.7rem 0.8rem', fontWeight: 700, fontSize: '0.86rem', whiteSpace: 'nowrap' }}>
+                          {athlete.full_name}
+                        </td>
+                        {sortedExercises.map(ex => {
+                          const entry = cellSummary(entryMap.get(entryKey(ex.id, athlete.id)))
+                          return (
+                            <td key={ex.id} style={{ padding: 0 }}>
+                              <button
+                                onClick={() => setOpenCell({ athlete, exercise: ex })}
+                                style={{ display: 'block', width: '100%', minHeight: 52, border: 'none', background: entry ? C.white : '#FAFBFC', textAlign: 'left', padding: '0.5rem 0.6rem' }}
+                              >
+                                {entry ? (
+                                  <>
+                                    {entry.sets.map((s, i) => (
+                                      <div key={i} style={{ fontFamily: mono, fontSize: '0.7rem', color: C.navy, whiteSpace: 'nowrap' }}>
+                                        <span style={{ color: C.gray }}>{i + 1}:</span>{' '}
+                                        {s.reps ? `${s.reps}` : '—'}
+                                        {s.weight ? ` × ${s.weight}${/[a-zA-Z%]/.test(s.weight) ? '' : ' kg'}` : ''}
+                                        {s.tempo ? ` @${s.tempo}` : ''}
+                                      </div>
+                                    ))}
+                                    <div style={{ display: 'flex', gap: 4, marginTop: entry.sets.length ? 4 : 0, flexWrap: 'wrap' }}>
+                                      {entry.pain_vas != null && (
+                                        <span style={{ fontFamily: mono, fontSize: '0.6rem', fontWeight: 700, color: C.white, background: entry.pain_vas >= 5 ? C.red : C.orange, borderRadius: 6, padding: '1px 6px' }}>
+                                          ból {entry.pain_vas}
+                                        </span>
+                                      )}
+                                      {entry.comment && <span style={{ fontSize: '0.7rem' }} title={entry.comment}>💬</span>}
+                                    </div>
+                                  </>
+                                ) : (
+                                  <span style={{ fontFamily: mono, fontSize: '0.72rem', color: C.grayLight }}>＋</span>
+                                )}
+                              </button>
+                            </td>
+                          )
+                        })}
+                        <td style={{ background: '#FAFBFC' }} />
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
               <div style={{ display: 'flex', gap: 10, marginTop: '1.25rem' }}>
                 <button onClick={() => router.push(`/coach/groups/${group.id}/summary`)} style={{ padding: '0.8rem 1.1rem', borderRadius: 12, border: `1.5px solid ${C.grayLight}`, background: C.white, color: C.navy, fontWeight: 700, fontSize: '0.85rem' }}>
