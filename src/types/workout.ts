@@ -178,6 +178,7 @@ export interface GroupTrainingEntry {
   pain_vas?: number | null
   pain_comment?: string | null
   comment?: string | null
+  exercise_override?: string | null
 }
 
 export interface TrainingView {

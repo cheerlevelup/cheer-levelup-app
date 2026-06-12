@@ -37,6 +37,8 @@ type Entry = {
   pain_vas?: number | null
   pain_comment?: string | null
   comment?: string | null
+  // zamiana / modyfikacja ćwiczenia tylko dla tej zawodniczki
+  exercise_override?: string | null
 }
 
 interface Props {
@@ -74,6 +76,7 @@ function CellModal({ athlete, exercise, entry, training, onClose, onSaved }: {
   const [painVas, setPainVas] = useState<number | null>(entry?.pain_vas ?? null)
   const [painComment, setPainComment] = useState(entry?.pain_comment || '')
   const [comment, setComment] = useState(entry?.comment || '')
+  const [exerciseOverride, setExerciseOverride] = useState(entry?.exercise_override || '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -104,6 +107,7 @@ function CellModal({ athlete, exercise, entry, training, onClose, onSaved }: {
       pain_vas: painVas,
       pain_comment: painVas !== null ? (painComment.trim() || null) : null,
       comment: comment.trim() || null,
+      exercise_override: exerciseOverride.trim() || null,
       updated_at: new Date().toISOString(),
     }
     const { data, error: err } = await supabase
@@ -134,6 +138,17 @@ function CellModal({ athlete, exercise, entry, training, onClose, onSaved }: {
         </div>
 
         <div style={{ overflowY: 'auto', flex: 1, padding: '1.1rem 1.25rem' }}>
+          {/* ── MODYFIKACJA ĆWICZENIA ── */}
+          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8 }}>
+            Modyfikacja ćwiczenia — tylko ta zawodniczka
+          </div>
+          <input
+            value={exerciseOverride}
+            onChange={e => setExerciseOverride(e.target.value)}
+            placeholder={`np. zamiast „${exercise.name || 'ćwiczenia'}”: wersja z gumą, inne ćwiczenie...`}
+            style={{ width: '100%', padding: '0.65rem', border: `1.5px solid ${exerciseOverride.trim() ? C.gold : C.grayLight}`, borderRadius: 10, background: exerciseOverride.trim() ? '#FFFBEB' : C.offWhite, color: C.navy, fontFamily: sans, fontSize: '0.88rem', outline: 'none', marginBottom: '1.25rem' }}
+          />
+
           {/* ── SERIE ── */}
           <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8 }}>
             Serie
@@ -293,6 +308,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
       pain_vas: current?.pain_vas ?? null,
       pain_comment: current?.pain_comment ?? null,
       comment: current?.comment ?? null,
+      exercise_override: current?.exercise_override ?? null,
       updated_at: new Date().toISOString(),
     }
     const { data, error: err } = await supabase
@@ -520,6 +536,11 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                           const sets = effectiveSets(ex, entry)
                           return (
                             <td key={ex.id} style={{ padding: '0.4rem 0.5rem' }}>
+                              {entry?.exercise_override && (
+                                <div style={{ fontFamily: mono, fontSize: '0.62rem', fontWeight: 700, color: '#92600A', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 6, padding: '2px 6px', marginBottom: 4, display: 'inline-block' }}>
+                                  ↷ {entry.exercise_override}
+                                </div>
+                              )}
                               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, flexWrap: 'wrap' }}>
                                 {sets.map((s, i) => (
                                   <div key={`${ex.id}_${athlete.id}_${i}_${s.weight || ''}`}>

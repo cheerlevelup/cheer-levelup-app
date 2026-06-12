@@ -26,6 +26,7 @@ type Entry = {
   pain_vas?: number | null
   pain_comment?: string | null
   comment?: string | null
+  exercise_override?: string | null
 }
 type WellnessRow = {
   athlete_id: number
@@ -207,11 +208,16 @@ export default function GroupSummaryClient({ group, athletes, trainings }: Props
                           </td>
                           {exercises.map(ex => {
                             const entry = entryMap.get(entryKey(ex.id, athlete.id))
-                            const hasContent = entry && (entry.sets?.length || entry.pain_vas != null || entry.comment)
+                            const hasContent = entry && (entry.sets?.length || entry.pain_vas != null || entry.comment || entry.exercise_override)
                             return (
                               <td key={ex.id} style={{ padding: '0.5rem 0.7rem' }}>
                                 {hasContent ? (
                                   <>
+                                    {entry!.exercise_override && (
+                                      <div style={{ fontFamily: mono, fontSize: '0.62rem', fontWeight: 700, color: '#92600A', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 6, padding: '2px 6px', marginBottom: 4, display: 'inline-block' }}>
+                                        ↷ {entry!.exercise_override}
+                                      </div>
+                                    )}
                                     {(entry!.sets || []).map((s, i) => (
                                       <div key={i} style={{ fontFamily: mono, fontSize: '0.7rem', color: C.navy, whiteSpace: 'nowrap' }}>
                                         <span style={{ color: C.gray }}>{i + 1}:</span>{' '}
