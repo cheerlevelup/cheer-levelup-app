@@ -397,8 +397,17 @@ export default function GroupTrainingClient({ group, training, athletes, initial
         body { background: ${C.offWhite}; }
         button { cursor: pointer; font-family: inherit; }
         .gt-table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; }
-        .gt-table th, .gt-table td { border-bottom: 1.5px solid ${C.grayLight}; border-right: 1.5px solid ${C.grayLight}; vertical-align: top; }
-        .gt-sticky { position: sticky; left: 0; z-index: 2; background: ${C.white}; box-shadow: 2px 0 0 ${C.grayLight}; }
+        .gt-table th, .gt-table td { border-bottom: 1px solid ${C.grayLight}; border-right: 1px solid ${C.grayLight}; vertical-align: top; }
+        .gt-table tbody tr:last-child td { border-bottom: none; }
+        .gt-sticky { position: sticky; left: 0; z-index: 2; background: ${C.white}; box-shadow: 3px 0 8px rgba(13,27,42,0.05); }
+        .gt-table thead th { position: sticky; top: 0; z-index: 4; box-shadow: 0 2px 6px rgba(13,27,42,0.05); }
+        .gt-table thead th.gt-sticky { z-index: 5; }
+        .gt-row td { transition: background 0.12s ease; }
+        .gt-row:nth-child(even) td, .gt-row:nth-child(even) .gt-sticky { background: #FBFCFE; }
+        .gt-row:hover td, .gt-row:hover .gt-sticky { background: #EFF4FB; }
+        .gt-w { width: 44px; border: 1.5px solid #DBE2EB; border-radius: 7px; background: #FAFBFC; font-family: ${mono}; font-size: 0.74rem; color: ${C.navy}; padding: 0.3rem 0.2rem; outline: none; text-align: center; transition: border-color 0.12s, background 0.12s; }
+        .gt-w.filled { border-color: ${C.grayLight}; background: ${C.white}; }
+        .gt-w:focus { border-color: ${C.gold}; background: ${C.white}; }
       `}</style>
       <div style={{ minHeight: '100vh', background: C.offWhite, fontFamily: sans, color: C.navy }}>
         <header style={{ background: C.navy, padding: '1rem 1.25rem 1.2rem', position: 'sticky', top: 0, zIndex: 10 }}>
@@ -445,21 +454,21 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                 </button>
               )}
 
-              <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, overflow: 'auto', maxHeight: '72vh' }}>
+              <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, overflow: 'auto', maxHeight: '72vh', boxShadow: '0 4px 20px rgba(13,27,42,0.06)' }}>
                 <table className="gt-table">
                   <thead>
                     <tr>
-                      <th className="gt-sticky" style={{ minWidth: 150, padding: '0.7rem 0.8rem', textAlign: 'left', fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', background: C.offWhite, zIndex: 3 }}>
+                      <th className="gt-sticky" style={{ minWidth: 150, padding: '0.7rem 0.85rem', textAlign: 'left', fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', background: C.offWhite, zIndex: 5 }}>
                         Zawodniczka
                       </th>
                       {sortedExercises.map(ex => {
                         const headerInput: React.CSSProperties = {
-                          width: '100%', minWidth: 0, border: `1.5px solid ${C.grayLight}`, borderRadius: 7,
-                          background: C.white, fontFamily: mono, fontSize: '0.72rem', color: C.navy,
-                          padding: '0.3rem 0.3rem', outline: 'none', textAlign: 'center',
+                          width: '100%', minWidth: 0, border: `1px solid transparent`, borderRadius: 6,
+                          background: C.white, fontFamily: mono, fontSize: '0.72rem', fontWeight: 700, color: C.navy,
+                          padding: '0.28rem 0.15rem', outline: 'none', textAlign: 'center',
                         }
                         return (
-                          <th key={ex.id} style={{ minWidth: 190, padding: '0.45rem 0.5rem', background: C.offWhite }}>
+                          <th key={ex.id} style={{ width: 178, minWidth: 178, maxWidth: 178, padding: '0.4rem 0.45rem', background: C.offWhite }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                               <input
                                 ref={el => { if (el) nameInputRefs.current.set(ex.id, el); else nameInputRefs.current.delete(ex.id) }}
@@ -478,87 +487,76 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                               <button onClick={() => handleDeleteExercise(ex)} title="Usuń ćwiczenie" style={{ border: 'none', background: 'none', color: C.gray, fontSize: '0.78rem', padding: 2, flexShrink: 0 }}>✕</button>
                             </div>
                             {/* Rozpiska dla całej grupy: serie / powtórzenia / tempo */}
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginTop: 4 }}>
-                              <div>
-                                <div style={{ fontFamily: mono, fontSize: '0.52rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center', marginBottom: 2 }}>serie</div>
-                                <input
-                                  type="number" min={0} max={20}
-                                  value={ex.sets_planned ?? ''}
-                                  onChange={e => handleExerciseField(ex.id, 'sets_planned', e.target.value)}
-                                  onBlur={() => persistExercise(ex.id)}
-                                  placeholder="3"
-                                  style={headerInput}
-                                />
-                              </div>
-                              <div>
-                                <div style={{ fontFamily: mono, fontSize: '0.52rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center', marginBottom: 2 }}>powt.</div>
-                                <input
-                                  value={ex.reps ?? ''}
-                                  onChange={e => handleExerciseField(ex.id, 'reps', e.target.value)}
-                                  onBlur={() => persistExercise(ex.id)}
-                                  placeholder="8"
-                                  style={headerInput}
-                                />
-                              </div>
-                              <div>
-                                <div style={{ fontFamily: mono, fontSize: '0.52rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center', marginBottom: 2 }}>tempo</div>
-                                <input
-                                  value={ex.tempo ?? ''}
-                                  onChange={e => handleExerciseField(ex.id, 'tempo', e.target.value)}
-                                  onBlur={() => persistExercise(ex.id)}
-                                  placeholder="3010"
-                                  style={headerInput}
-                                />
-                              </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.3fr', gap: 2, marginTop: 5, padding: 3, background: C.white, border: `1px solid ${C.grayLight}`, borderRadius: 9 }}>
+                              {([
+                                { field: 'sets_planned' as const, label: 'serie', value: ex.sets_planned ?? '', placeholder: '3', type: 'number' },
+                                { field: 'reps' as const, label: 'powt.', value: ex.reps ?? '', placeholder: '8', type: 'text' },
+                                { field: 'tempo' as const, label: 'tempo', value: ex.tempo ?? '', placeholder: '3010', type: 'text' },
+                              ]).map(f => (
+                                <div key={f.field}>
+                                  <div style={{ fontFamily: mono, fontSize: '0.48rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.04em', textAlign: 'center', marginBottom: 1 }}>{f.label}</div>
+                                  <input
+                                    type={f.type}
+                                    {...(f.type === 'number' ? { min: 0, max: 20 } : {})}
+                                    value={f.value}
+                                    onChange={e => handleExerciseField(ex.id, f.field, e.target.value)}
+                                    onBlur={() => persistExercise(ex.id)}
+                                    onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                                    placeholder={f.placeholder}
+                                    style={headerInput}
+                                  />
+                                </div>
+                              ))}
                             </div>
                           </th>
                         )
                       })}
-                      <th style={{ minWidth: 56, padding: 0, background: C.offWhite }}>
+                      <th style={{ width: 44, minWidth: 44, padding: 0, background: C.offWhite }}>
                         <button
                           onClick={handleAddExercise}
                           title="Dodaj ćwiczenie (nowa kolumna)"
-                          style={{ width: '100%', height: '100%', minHeight: 44, border: 'none', background: 'none', color: C.navy, fontWeight: 800, fontSize: '1.1rem' }}
+                          style={{ width: '100%', height: '100%', minHeight: 44, border: 'none', background: 'none', color: C.navy, fontWeight: 800, fontSize: '1.05rem' }}
                         >
                           ＋
                         </button>
                       </th>
+                      {/* Wypełniacz — nie pozwala kolumnom ćwiczeń rozciągać się na cały ekran */}
+                      <th style={{ width: '100%', background: C.offWhite, borderRight: 'none' }} />
                     </tr>
                   </thead>
                   <tbody>
                     {athletes.map(athlete => (
-                      <tr key={athlete.id}>
-                        <td className="gt-sticky" style={{ padding: '0.7rem 0.8rem', fontWeight: 700, fontSize: '0.86rem', whiteSpace: 'nowrap' }}>
+                      <tr key={athlete.id} className="gt-row">
+                        <td className="gt-sticky" style={{ padding: '0.5rem 0.85rem', fontWeight: 700, fontSize: '0.84rem', whiteSpace: 'nowrap' }}>
                           {athlete.full_name}
                         </td>
                         {sortedExercises.map(ex => {
                           const entry = entryMap.get(entryKey(ex.id, athlete.id)) || null
                           const sets = effectiveSets(ex, entry)
                           return (
-                            <td key={ex.id} style={{ padding: '0.4rem 0.5rem' }}>
+                            <td key={ex.id} style={{ padding: '0.45rem 0.5rem' }}>
                               {entry?.exercise_override && (
-                                <div style={{ fontFamily: mono, fontSize: '0.62rem', fontWeight: 700, color: '#92600A', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 6, padding: '2px 6px', marginBottom: 4, display: 'inline-block' }}>
+                                <div style={{ fontFamily: mono, fontSize: '0.6rem', fontWeight: 700, color: '#92600A', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 6, padding: '2px 6px', marginBottom: 5, display: 'inline-block' }}>
                                   ↷ {entry.exercise_override}
                                 </div>
                               )}
-                              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, flexWrap: 'wrap' }}>
+                              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, flexWrap: 'wrap' }}>
                                 {sets.map((s, i) => (
                                   <div key={`${ex.id}_${athlete.id}_${i}_${s.weight || ''}`}>
-                                    <div style={{ fontFamily: mono, fontSize: '0.52rem', color: C.gray, textAlign: 'center', marginBottom: 2 }}>S{i + 1}</div>
+                                    <div style={{ fontFamily: mono, fontSize: '0.5rem', color: C.gray, textAlign: 'center', marginBottom: 1, letterSpacing: '0.03em' }}>S{i + 1}</div>
                                     <input
                                       defaultValue={s.weight || ''}
                                       placeholder="kg"
                                       onBlur={e => saveInlineWeight(athlete, ex, i, e.target.value)}
                                       onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-                                      style={{ width: 48, border: `1.5px solid ${s.weight ? C.grayLight : '#DBE2EB'}`, borderRadius: 7, background: s.weight ? C.white : '#FAFBFC', fontFamily: mono, fontSize: '0.74rem', color: C.navy, padding: '0.32rem 0.25rem', outline: 'none', textAlign: 'center' }}
-                                      onFocus={e => { e.target.style.borderColor = C.gold }}
+                                      className={`gt-w${s.weight ? ' filled' : ''}`}
                                     />
                                   </div>
                                 ))}
                                 <button
                                   onClick={() => setOpenCell({ athlete, exercise: ex })}
                                   title="Szczegóły: powtórzenia, tempo, ból, komentarz"
-                                  style={{ border: `1.5px solid ${C.grayLight}`, background: C.white, color: C.gray, borderRadius: 7, padding: '0.3rem 0.4rem', fontSize: '0.72rem', flexShrink: 0 }}
+                                  style={{ border: `1.5px solid ${C.grayLight}`, background: C.white, color: C.gray, borderRadius: 7, padding: '0.28rem 0.36rem', fontSize: '0.72rem', flexShrink: 0, lineHeight: 1 }}
                                 >
                                   ✎
                                 </button>
@@ -577,6 +575,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                           )
                         })}
                         <td style={{ background: '#FAFBFC' }} />
+                        <td style={{ borderRight: 'none' }} />
                       </tr>
                     ))}
                   </tbody>
