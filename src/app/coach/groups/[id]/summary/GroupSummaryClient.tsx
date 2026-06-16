@@ -66,9 +66,16 @@ const entryKey = (exerciseId: number, athleteId: number) => `${exerciseId}_${ath
 // – ciężar 0 / pusty traktujemy jak masę ciała (bez „× 0 kg”),
 // – serie identyczne zwijamy w jedną linię (np. „3 ser. · 5 × 10 kg”),
 // – tempo wspólne dla wszystkich serii pokazujemy raz, nie przy każdej.
-function SetsSummary({ sets }: { sets: SetRow[] }) {
+function SetsSummary({ sets, ex }: { sets: SetRow[]; ex: Exercise }) {
+  // Powtórzenia/tempo dziedziczą z rozpiski ćwiczenia, gdy nie zapisano ich przy serii
+  // (starsze wpisy miały tylko ciężar — bez tego pokazywało się brzydkie „— × 2 kg”).
   const ss = (sets || [])
-    .map(s => ({ reps: (s.reps || '').trim(), tempo: (s.tempo || '').trim(), weight: (s.weight || '').trim(), skipped: !!s.skipped }))
+    .map(s => ({
+      reps: (s.reps || '').trim() || (ex.reps || '').trim(),
+      tempo: (s.tempo || '').trim() || (ex.tempo || '').trim(),
+      weight: (s.weight || '').trim(),
+      skipped: !!s.skipped,
+    }))
     .filter(s => s.reps || s.tempo || s.weight || s.skipped)
   if (ss.length === 0) return <span style={{ fontFamily: mono, fontSize: '0.72rem', color: C.grayLight }}>—</span>
 
@@ -104,8 +111,8 @@ function SetsSummary({ sets }: { sets: SetRow[] }) {
   )
 }
 
-// Kolumny siatki gotowości (nazwa + 5 metryk)
-const WELLNESS_COLS = 'minmax(140px, 1.4fr) repeat(5, minmax(66px, 1fr))'
+// Kolumny siatki gotowości (nazwa + 5 metryk + uwagi)
+const WELLNESS_COLS = 'minmax(130px, 1.2fr) repeat(5, minmax(60px, 0.8fr)) minmax(150px, 1.8fr)'
 
 // Kolor wartości wg progów — od razu widać słabe wyniki.
 // 'good-high': im więcej tym lepiej (gotowość, energia)
@@ -294,7 +301,7 @@ export default function GroupSummaryClient({ group, athletes, trainings }: Props
                                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry!.exercise_override}</span>
                                       </div>
                                     )}
-                                    <SetsSummary sets={entry!.sets || []} />
+                                    <SetsSummary sets={entry!.sets || []} ex={ex} />
                                     {entry!.pain_vas != null && (
                                       <div style={{ marginTop: 5 }}>
                                         <span style={{ fontFamily: mono, fontSize: '0.6rem', fontWeight: 700, color: C.white, background: entry!.pain_vas! >= 5 ? C.red : C.orange, borderRadius: 6, padding: '1px 6px' }}>
@@ -325,7 +332,7 @@ export default function GroupSummaryClient({ group, athletes, trainings }: Props
               {/* ── GOTOWOŚĆ ── */}
               <div style={sectionLabel}>Gotowość treningowa</div>
               <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, overflow: 'auto', marginBottom: '1.5rem', boxShadow: '0 4px 20px rgba(13,27,42,0.06)' }}>
-                <div style={{ minWidth: 560 }}>
+                <div style={{ minWidth: 720 }}>
                   {/* Nagłówek kolumn — pozwala porównywać metryki w pionie */}
                   <div style={{ display: 'grid', gridTemplateColumns: WELLNESS_COLS, gap: 8, alignItems: 'center', padding: '0.6rem 1rem', background: C.offWhite, borderBottom: `1px solid ${C.grayLight}`, fontFamily: mono, fontSize: '0.55rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>
                     <span>Zawodniczka</span>
@@ -334,27 +341,26 @@ export default function GroupSummaryClient({ group, athletes, trainings }: Props
                     <span style={{ justifySelf: 'center' }}>⚡ Energia</span>
                     <span style={{ justifySelf: 'center' }}>😬 Stres</span>
                     <span style={{ justifySelf: 'center' }}>💪 Zakwasy</span>
+                    <span>💬 Uwagi</span>
                   </div>
                   {athletes.map((a, i) => {
                     const w = wellnessByAthlete.get(a.id)
                     return (
-                      <div key={a.id} className="gs-wrow" style={{ borderTop: i > 0 ? `1px solid ${C.grayLight}` : 'none' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: WELLNESS_COLS, gap: 8, alignItems: 'center', padding: '0.5rem 1rem' }}>
-                          <span style={{ fontWeight: 700, fontSize: '0.84rem' }}>{a.full_name}</span>
-                          {w ? (
-                            <>
-                              <Score value={w.sleep_hours} kind="sleep" />
-                              <Score value={w.readiness} kind="good-high" />
-                              <Score value={w.energy} kind="good-high" />
-                              <Score value={w.stress} kind="good-low" />
-                              <Score value={w.muscle_sorness} kind="good-low" />
-                            </>
-                          ) : (
-                            <span style={{ gridColumn: '2 / -1', justifySelf: 'start', fontFamily: mono, fontSize: '0.68rem', color: C.gray }}>nie uzupełniono</span>
-                          )}
-                        </div>
-                        {w?.concerns && (
-                          <div style={{ padding: '0 1rem 0.55rem', fontSize: '0.76rem', color: C.gray, fontStyle: 'italic' }}>„{w.concerns}”</div>
+                      <div key={a.id} className="gs-wrow" style={{ display: 'grid', gridTemplateColumns: WELLNESS_COLS, gap: 8, alignItems: 'center', padding: '0.5rem 1rem', borderTop: i > 0 ? `1px solid ${C.grayLight}` : 'none' }}>
+                        <span style={{ fontWeight: 700, fontSize: '0.84rem' }}>{a.full_name}</span>
+                        {w ? (
+                          <>
+                            <Score value={w.sleep_hours} kind="sleep" />
+                            <Score value={w.readiness} kind="good-high" />
+                            <Score value={w.energy} kind="good-high" />
+                            <Score value={w.stress} kind="good-low" />
+                            <Score value={w.muscle_sorness} kind="good-low" />
+                            <span style={{ fontSize: '0.76rem', color: C.gray, fontStyle: 'italic', lineHeight: 1.4 }}>
+                              {w.concerns ? `„${w.concerns}”` : ''}
+                            </span>
+                          </>
+                        ) : (
+                          <span style={{ gridColumn: '2 / -1', justifySelf: 'start', fontFamily: mono, fontSize: '0.68rem', color: C.gray }}>nie uzupełniono</span>
                         )}
                       </div>
                     )
