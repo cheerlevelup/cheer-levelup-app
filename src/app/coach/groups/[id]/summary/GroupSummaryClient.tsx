@@ -100,6 +100,31 @@ function SetsSummary({ sets }: { sets: SetRow[] }) {
   )
 }
 
+// Kolumny siatki gotowości (nazwa + 5 metryk)
+const WELLNESS_COLS = 'minmax(140px, 1.4fr) repeat(5, minmax(66px, 1fr))'
+
+// Kolor wartości wg progów — od razu widać słabe wyniki.
+// 'good-high': im więcej tym lepiej (gotowość, energia)
+// 'good-low':  im mniej tym lepiej (stres, zakwasy)
+function scoreColor(v: number, kind: 'good-high' | 'good-low' | 'sleep') {
+  const green = { bg: '#E9F7EF', fg: '#15803D' }
+  const amber = { bg: '#FEF3E2', fg: '#B45309' }
+  const red = { bg: '#FDEDED', fg: '#C81E1E' }
+  if (kind === 'sleep') return v >= 7.5 ? green : v >= 6 ? amber : red
+  if (kind === 'good-high') return v >= 7 ? green : v >= 4 ? amber : red
+  return v <= 3 ? green : v <= 6 ? amber : red
+}
+
+function Score({ value, kind }: { value?: number | null; kind: 'good-high' | 'good-low' | 'sleep' }) {
+  if (value == null) return <span style={{ justifySelf: 'center', fontFamily: mono, fontSize: '0.72rem', color: C.grayLight }}>–</span>
+  const c = scoreColor(value, kind)
+  return (
+    <span style={{ justifySelf: 'center', fontFamily: mono, fontSize: '0.74rem', fontWeight: 700, color: c.fg, background: c.bg, borderRadius: 7, padding: '2px 8px', minWidth: 44, textAlign: 'center' }}>
+      {value}{kind === 'sleep' ? 'h' : '/10'}
+    </span>
+  )
+}
+
 export default function GroupSummaryClient({ group, athletes, trainings }: Props) {
   const router = useRouter()
   const supabase = createClient()
@@ -176,6 +201,8 @@ export default function GroupSummaryClient({ group, athletes, trainings }: Props
         .gs-row td { transition: background 0.12s ease; }
         .gs-row:nth-child(even) td, .gs-row:nth-child(even) .gs-sticky { background: #FBFCFE; }
         .gs-row:hover td, .gs-row:hover .gs-sticky { background: #EFF4FB; }
+        .gs-wrow { transition: background 0.12s ease; }
+        .gs-wrow:hover { background: #F7FAFD; }
       `}</style>
       <div style={{ minHeight: '100vh', background: C.offWhite, fontFamily: sans, color: C.navy }}>
         <header style={{ background: C.navy, padding: '1rem 1.25rem 1.2rem', position: 'sticky', top: 0, zIndex: 10 }}>
@@ -293,27 +320,42 @@ export default function GroupSummaryClient({ group, athletes, trainings }: Props
 
               {/* ── GOTOWOŚĆ ── */}
               <div style={sectionLabel}>Gotowość treningowa</div>
-              <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, overflow: 'hidden', marginBottom: '1.5rem' }}>
-                {athletes.map((a, i) => {
-                  const w = wellnessByAthlete.get(a.id)
-                  return (
-                    <div key={a.id} style={{ padding: '0.7rem 1rem', borderTop: i > 0 ? `1.5px solid ${C.grayLight}` : 'none', display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: 700, fontSize: '0.86rem', minWidth: 140 }}>{a.full_name}</span>
-                      {w ? (
-                        <span style={{ fontFamily: mono, fontSize: '0.7rem', color: C.navy, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                          {w.sleep_hours != null && <span>😴 {w.sleep_hours}h</span>}
-                          {w.readiness != null && <span>✅ gotowość {w.readiness}/10</span>}
-                          {w.energy != null && <span>⚡ energia {w.energy}/10</span>}
-                          {w.stress != null && <span>😬 stres {w.stress}/10</span>}
-                          {w.muscle_sorness != null && <span>💪 zakwasy {w.muscle_sorness}/10</span>}
-                          {w.concerns && <span style={{ color: C.gray, fontFamily: sans, fontStyle: 'italic' }}>„{w.concerns}”</span>}
-                        </span>
-                      ) : (
-                        <span style={{ fontFamily: mono, fontSize: '0.7rem', color: C.gray }}>nie uzupełniono</span>
-                      )}
-                    </div>
-                  )
-                })}
+              <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, overflow: 'auto', marginBottom: '1.5rem', boxShadow: '0 4px 20px rgba(13,27,42,0.06)' }}>
+                <div style={{ minWidth: 560 }}>
+                  {/* Nagłówek kolumn — pozwala porównywać metryki w pionie */}
+                  <div style={{ display: 'grid', gridTemplateColumns: WELLNESS_COLS, gap: 8, alignItems: 'center', padding: '0.6rem 1rem', background: C.offWhite, borderBottom: `1px solid ${C.grayLight}`, fontFamily: mono, fontSize: '0.55rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>
+                    <span>Zawodniczka</span>
+                    <span style={{ justifySelf: 'center' }}>😴 Sen</span>
+                    <span style={{ justifySelf: 'center' }}>✅ Gotow.</span>
+                    <span style={{ justifySelf: 'center' }}>⚡ Energia</span>
+                    <span style={{ justifySelf: 'center' }}>😬 Stres</span>
+                    <span style={{ justifySelf: 'center' }}>💪 Zakwasy</span>
+                  </div>
+                  {athletes.map((a, i) => {
+                    const w = wellnessByAthlete.get(a.id)
+                    return (
+                      <div key={a.id} className="gs-wrow" style={{ borderTop: i > 0 ? `1px solid ${C.grayLight}` : 'none' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: WELLNESS_COLS, gap: 8, alignItems: 'center', padding: '0.5rem 1rem' }}>
+                          <span style={{ fontWeight: 700, fontSize: '0.84rem' }}>{a.full_name}</span>
+                          {w ? (
+                            <>
+                              <Score value={w.sleep_hours} kind="sleep" />
+                              <Score value={w.readiness} kind="good-high" />
+                              <Score value={w.energy} kind="good-high" />
+                              <Score value={w.stress} kind="good-low" />
+                              <Score value={w.muscle_sorness} kind="good-low" />
+                            </>
+                          ) : (
+                            <span style={{ gridColumn: '2 / -1', justifySelf: 'start', fontFamily: mono, fontSize: '0.68rem', color: C.gray }}>nie uzupełniono</span>
+                          )}
+                        </div>
+                        {w?.concerns && (
+                          <div style={{ padding: '0 1rem 0.55rem', fontSize: '0.76rem', color: C.gray, fontStyle: 'italic' }}>„{w.concerns}”</div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
 
               {/* ── FEEDBACK ── */}
