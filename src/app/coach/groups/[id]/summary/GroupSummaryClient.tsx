@@ -62,6 +62,44 @@ const FEELING_LABELS: Record<string, string> = {
 
 const entryKey = (exerciseId: number, athleteId: number) => `${exerciseId}_${athleteId}`
 
+// Czytelne podsumowanie serii w jednej komórce:
+// – ciężar 0 / pusty traktujemy jak masę ciała (bez „× 0 kg”),
+// – serie identyczne zwijamy w jedną linię (np. „3 ser. · 5 × 10 kg”),
+// – tempo wspólne dla wszystkich serii pokazujemy raz, nie przy każdej.
+function SetsSummary({ sets }: { sets: SetRow[] }) {
+  const ss = (sets || [])
+    .map(s => ({ reps: (s.reps || '').trim(), tempo: (s.tempo || '').trim(), weight: (s.weight || '').trim() }))
+    .filter(s => s.reps || s.tempo || s.weight)
+  if (ss.length === 0) return <span style={{ fontFamily: mono, fontSize: '0.72rem', color: C.grayLight }}>—</span>
+
+  const hasWeight = (w: string) => !!w && w !== '0'
+  const fmtWeight = (w: string) => (/[a-zA-Z%]/.test(w) ? w : `${w} kg`)
+  const sameTempo = ss.every(s => s.tempo === ss[0].tempo) ? ss[0].tempo : ''
+  const allSame = ss.every(s => s.reps === ss[0].reps && s.weight === ss[0].weight && s.tempo === ss[0].tempo)
+
+  const line = (label: string, reps: string, weight: string, tempo: string) => (
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, lineHeight: 1.5 }}>
+      <span style={{ fontFamily: mono, fontSize: '0.55rem', color: C.gray, minWidth: 24, flexShrink: 0 }}>{label}</span>
+      <span style={{ fontFamily: mono, fontSize: '0.74rem', color: C.navy, whiteSpace: 'nowrap' }}>
+        {reps || '—'}
+        {hasWeight(weight) ? <> × <strong style={{ fontWeight: 700 }}>{fmtWeight(weight)}</strong></> : null}
+        {tempo ? <span style={{ color: C.gray }}> · {tempo}</span> : null}
+      </span>
+    </div>
+  )
+
+  if (allSame) return line(`${ss.length} ser.`, ss[0].reps, ss[0].weight, ss[0].tempo)
+
+  return (
+    <div>
+      {ss.map((s, i) => line(`S${i + 1}`, s.reps, s.weight, sameTempo ? '' : s.tempo))}
+      {sameTempo ? (
+        <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, marginTop: 3 }}>tempo {sameTempo}</div>
+      ) : null}
+    </div>
+  )
+}
+
 export default function GroupSummaryClient({ group, athletes, trainings }: Props) {
   const router = useRouter()
   const supabase = createClient()
@@ -130,8 +168,14 @@ export default function GroupSummaryClient({ group, athletes, trainings }: Props
         body { background: ${C.offWhite}; }
         button { cursor: pointer; font-family: inherit; }
         .gs-table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; }
-        .gs-table th, .gs-table td { border-bottom: 1.5px solid ${C.grayLight}; border-right: 1.5px solid ${C.grayLight}; vertical-align: top; }
-        .gs-sticky { position: sticky; left: 0; z-index: 2; background: ${C.white}; box-shadow: 2px 0 0 ${C.grayLight}; }
+        .gs-table th, .gs-table td { border-bottom: 1px solid ${C.grayLight}; border-right: 1px solid ${C.grayLight}; vertical-align: top; }
+        .gs-table tbody tr:last-child td { border-bottom: none; }
+        .gs-sticky { position: sticky; left: 0; z-index: 2; background: ${C.white}; box-shadow: 3px 0 8px rgba(13,27,42,0.05); }
+        .gs-table thead th { position: sticky; top: 0; z-index: 4; box-shadow: 0 2px 6px rgba(13,27,42,0.05); }
+        .gs-table thead th.gs-sticky { z-index: 5; }
+        .gs-row td { transition: background 0.12s ease; }
+        .gs-row:nth-child(even) td, .gs-row:nth-child(even) .gs-sticky { background: #FBFCFE; }
+        .gs-row:hover td, .gs-row:hover .gs-sticky { background: #EFF4FB; }
       `}</style>
       <div style={{ minHeight: '100vh', background: C.offWhite, fontFamily: sans, color: C.navy }}>
         <header style={{ background: C.navy, padding: '1rem 1.25rem 1.2rem', position: 'sticky', top: 0, zIndex: 10 }}>
@@ -179,21 +223,21 @@ export default function GroupSummaryClient({ group, athletes, trainings }: Props
                   Ten trening nie ma jeszcze wpisanych ćwiczeń.
                 </div>
               ) : (
-                <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, overflow: 'auto', maxHeight: '65vh', marginBottom: '1.5rem' }}>
+                <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, overflow: 'auto', maxHeight: '65vh', marginBottom: '1.5rem', boxShadow: '0 4px 20px rgba(13,27,42,0.06)' }}>
                   <table className="gs-table">
                     <thead>
                       <tr>
-                        <th className="gs-sticky" style={{ minWidth: 150, padding: '0.7rem 0.8rem', textAlign: 'left', fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', background: C.offWhite, zIndex: 3 }}>
+                        <th className="gs-sticky" style={{ minWidth: 150, padding: '0.7rem 0.85rem', textAlign: 'left', fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', background: C.offWhite, zIndex: 5 }}>
                           Zawodniczka
                         </th>
                         {exercises.map(ex => (
-                          <th key={ex.id} style={{ minWidth: 150, padding: '0.6rem 0.7rem', fontWeight: 800, fontSize: '0.8rem', color: C.navy, background: C.offWhite, textAlign: 'left' }}>
+                          <th key={ex.id} style={{ minWidth: 150, padding: '0.6rem 0.75rem', fontWeight: 800, fontSize: '0.82rem', color: C.navy, background: C.offWhite, textAlign: 'left' }}>
                             {ex.name}
                             {(ex.sets_planned || ex.reps || ex.tempo) && (
-                              <div style={{ fontFamily: mono, fontSize: '0.62rem', fontWeight: 400, color: C.gray, marginTop: 2 }}>
-                                {ex.sets_planned ? `${ex.sets_planned} serie` : ''}
-                                {ex.reps ? ` × ${ex.reps}` : ''}
-                                {ex.tempo ? ` @${ex.tempo}` : ''}
+                              <div style={{ fontFamily: mono, fontSize: '0.6rem', fontWeight: 400, color: C.gray, marginTop: 3, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                {ex.sets_planned ? <span>{ex.sets_planned} serie</span> : null}
+                                {ex.reps ? <span>{ex.reps} powt.</span> : null}
+                                {ex.tempo ? <span>tempo {ex.tempo}</span> : null}
                               </div>
                             )}
                           </th>
@@ -202,8 +246,8 @@ export default function GroupSummaryClient({ group, athletes, trainings }: Props
                     </thead>
                     <tbody>
                       {athletes.map(athlete => (
-                        <tr key={athlete.id}>
-                          <td className="gs-sticky" style={{ padding: '0.7rem 0.8rem', fontWeight: 700, fontSize: '0.86rem', whiteSpace: 'nowrap' }}>
+                        <tr key={athlete.id} className="gs-row">
+                          <td className="gs-sticky" style={{ padding: '0.6rem 0.85rem', fontWeight: 700, fontSize: '0.84rem', whiteSpace: 'nowrap' }}>
                             {athlete.full_name}
                           </td>
                           {exercises.map(ex => {
@@ -214,20 +258,14 @@ export default function GroupSummaryClient({ group, athletes, trainings }: Props
                                 {hasContent ? (
                                   <>
                                     {entry!.exercise_override && (
-                                      <div style={{ fontFamily: mono, fontSize: '0.62rem', fontWeight: 700, color: '#92600A', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 6, padding: '2px 6px', marginBottom: 4, display: 'inline-block' }}>
-                                        ↷ {entry!.exercise_override}
+                                      <div title={`Zamiana ćwiczenia: ${entry!.exercise_override}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%', fontFamily: sans, fontSize: '0.64rem', fontWeight: 700, color: '#854F0B', background: '#FEF6E0', border: '1px solid #F7D27A', borderRadius: 999, padding: '2px 9px 2px 2px', marginBottom: 5 }}>
+                                        <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, borderRadius: '50%', background: C.gold, color: C.navy, fontFamily: mono, fontSize: '0.62rem', fontWeight: 700, lineHeight: 1 }}>⇄</span>
+                                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry!.exercise_override}</span>
                                       </div>
                                     )}
-                                    {(entry!.sets || []).map((s, i) => (
-                                      <div key={i} style={{ fontFamily: mono, fontSize: '0.7rem', color: C.navy, whiteSpace: 'nowrap' }}>
-                                        <span style={{ color: C.gray }}>{i + 1}:</span>{' '}
-                                        {s.reps || '—'}
-                                        {s.weight ? ` × ${s.weight}${/[a-zA-Z%]/.test(s.weight) ? '' : ' kg'}` : ''}
-                                        {s.tempo ? ` @${s.tempo}` : ''}
-                                      </div>
-                                    ))}
+                                    <SetsSummary sets={entry!.sets || []} />
                                     {entry!.pain_vas != null && (
-                                      <div style={{ marginTop: 4 }}>
+                                      <div style={{ marginTop: 5 }}>
                                         <span style={{ fontFamily: mono, fontSize: '0.6rem', fontWeight: 700, color: C.white, background: entry!.pain_vas! >= 5 ? C.red : C.orange, borderRadius: 6, padding: '1px 6px' }}>
                                           ból VAS {entry!.pain_vas}
                                         </span>
@@ -237,7 +275,7 @@ export default function GroupSummaryClient({ group, athletes, trainings }: Props
                                       </div>
                                     )}
                                     {entry!.comment && (
-                                      <div style={{ fontSize: '0.72rem', color: C.gray, marginTop: 4, fontStyle: 'italic' }}>💬 {entry!.comment}</div>
+                                      <div style={{ fontSize: '0.72rem', color: C.gray, marginTop: 5, fontStyle: 'italic' }}>💬 {entry!.comment}</div>
                                     )}
                                   </>
                                 ) : (
