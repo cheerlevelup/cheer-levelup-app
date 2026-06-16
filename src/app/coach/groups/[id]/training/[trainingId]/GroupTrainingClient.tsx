@@ -15,7 +15,7 @@ const sans = "'Space Grotesk', sans-serif"
 const mono = "'Space Mono', monospace"
 
 type Group = { id: number; name: string }
-type Training = { id: number; group_id: number; training_date: string }
+type Training = { id: number; group_id: number; training_date: string; absent_athlete_ids?: number[] | null }
 type Athlete = { id: number; full_name: string }
 type Exercise = {
   id: number
@@ -27,7 +27,7 @@ type Exercise = {
   reps?: string | null
   tempo?: string | null
 }
-type SetRow = { reps?: string; tempo?: string; weight?: string }
+type SetRow = { reps?: string; tempo?: string; weight?: string; skipped?: boolean }
 type Entry = {
   id?: number
   training_id: number
@@ -96,9 +96,13 @@ function CellModal({ athlete, exercise, entry, training, onClose, onSaved }: {
     setSets(prev => prev.filter((_, i) => i !== idx))
   }
 
+  function toggleSkip(idx: number) {
+    setSets(prev => prev.map((s, i) => i === idx ? { ...s, skipped: !s.skipped } : s))
+  }
+
   async function handleSave() {
     setSaving(true); setError('')
-    const cleanSets = sets.filter(s => (s.reps || '').trim() || (s.tempo || '').trim() || (s.weight || '').trim())
+    const cleanSets = sets.filter(s => (s.reps || '').trim() || (s.tempo || '').trim() || (s.weight || '').trim() || s.skipped)
     const payload = {
       training_id: training.id,
       exercise_id: exercise.id,
@@ -160,15 +164,29 @@ function CellModal({ athlete, exercise, entry, training, onClose, onSaved }: {
             <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, textAlign: 'center' }}>CIĘŻAR</span>
             <span />
           </div>
-          {sets.map((s, idx) => (
-            <div key={idx} style={{ display: 'grid', gridTemplateColumns: '34px 1fr 1fr 1fr 30px', gap: 6, alignItems: 'center', marginBottom: 6 }}>
-              <span style={{ fontFamily: mono, fontSize: '0.82rem', fontWeight: 700, color: C.navy, textAlign: 'center' }}>{idx + 1}</span>
-              <input value={s.reps || ''} onChange={e => updateSet(idx, 'reps', e.target.value)} placeholder="8" style={cellInput} inputMode="text" />
-              <input value={s.tempo || ''} onChange={e => updateSet(idx, 'tempo', e.target.value)} placeholder="3010" style={cellInput} inputMode="text" />
-              <input value={s.weight || ''} onChange={e => updateSet(idx, 'weight', e.target.value)} placeholder="kg" style={cellInput} inputMode="text" />
-              <button onClick={() => removeSet(idx)} title="Usuń serię" style={{ border: 'none', background: 'none', color: C.gray, fontSize: '0.9rem', padding: 4 }}>✕</button>
-            </div>
-          ))}
+          {sets.map((s, idx) => {
+            const skipInput: React.CSSProperties = s.skipped
+              ? { ...cellInput, textDecoration: 'line-through', color: C.gray, background: '#F1F3F7' }
+              : cellInput
+            return (
+              <div key={idx} style={{ display: 'grid', gridTemplateColumns: '34px 1fr 1fr 1fr 30px', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+                <button
+                  onClick={() => toggleSkip(idx)}
+                  title={s.skipped ? 'Cofnij — seria zrobiona' : 'Oznacz: seria nie zrobiona'}
+                  style={{ border: s.skipped ? `1.5px solid ${C.red}` : '1.5px solid transparent', borderRadius: 7, background: s.skipped ? '#FDEDED' : 'none', fontFamily: mono, fontSize: '0.82rem', fontWeight: 700, color: s.skipped ? C.red : C.navy, textAlign: 'center', textDecoration: s.skipped ? 'line-through' : 'none', padding: '0.32rem 0' }}
+                >
+                  {idx + 1}
+                </button>
+                <input value={s.reps || ''} onChange={e => updateSet(idx, 'reps', e.target.value)} placeholder="8" style={skipInput} inputMode="text" disabled={s.skipped} />
+                <input value={s.tempo || ''} onChange={e => updateSet(idx, 'tempo', e.target.value)} placeholder="3010" style={skipInput} inputMode="text" disabled={s.skipped} />
+                <input value={s.weight || ''} onChange={e => updateSet(idx, 'weight', e.target.value)} placeholder="kg" style={skipInput} inputMode="text" disabled={s.skipped} />
+                <button onClick={() => removeSet(idx)} title="Usuń serię" style={{ border: 'none', background: 'none', color: C.gray, fontSize: '0.9rem', padding: 4 }}>✕</button>
+              </div>
+            )
+          })}
+          <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, marginBottom: 8 }}>
+            Kliknij numer serii, by oznaczyć „nie zrobiła".
+          </div>
           <button onClick={addSet} style={{ width: '100%', padding: '0.6rem', borderRadius: 10, border: `1.5px dashed ${C.gray}`, background: C.white, color: C.navy, fontWeight: 700, fontSize: '0.82rem', marginBottom: '1.25rem' }}>
             ＋ Dodaj serię
           </button>
@@ -240,6 +258,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
   )
   const [openCell, setOpenCell] = useState<{ athlete: Athlete; exercise: Exercise } | null>(null)
   const [trainingDate, setTrainingDate] = useState(training.training_date)
+  const [absentIds, setAbsentIds] = useState<Set<number>>(() => new Set(training.absent_athlete_ids || []))
   const [error, setError] = useState('')
   const [copying, setCopying] = useState(false)
   const [focusExerciseId, setFocusExerciseId] = useState<number | null>(null)
@@ -259,6 +278,27 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     () => [...exercises].sort((a, b) => a.exercise_order - b.exercise_order || a.id - b.id),
     [exercises]
   )
+
+  // Obecne zawodniczki na górze (w oryginalnej kolejności), wykreślone na końcu
+  const orderedAthletes = useMemo(() => {
+    const present = athletes.filter(a => !absentIds.has(a.id)).map(a => ({ athlete: a, absent: false }))
+    const absent = athletes.filter(a => absentIds.has(a.id)).map(a => ({ athlete: a, absent: true }))
+    return [...present, ...absent]
+  }, [athletes, absentIds])
+
+  // Wykreślenie / przywrócenie zawodniczki (nieobecność na tym treningu)
+  async function toggleAbsent(athleteId: number) {
+    setError('')
+    const prev = absentIds
+    const next = new Set(prev)
+    if (next.has(athleteId)) next.delete(athleteId); else next.add(athleteId)
+    setAbsentIds(next)
+    const { error: err } = await supabase
+      .from('group_trainings')
+      .update({ absent_athlete_ids: Array.from(next) })
+      .eq('id', training.id)
+    if (err) { setError(err.message); setAbsentIds(prev) }
+  }
 
   // Nowa kolumna ćwiczenia — od razu z pustym polem nazwy do wpisania (jak w Excelu)
   async function handleAddExercise() {
@@ -317,6 +357,37 @@ export default function GroupTrainingClient({ group, training, athletes, initial
       .select()
       .single()
     if (err || !data) { setError(err?.message || 'Błąd zapisu ciężaru'); return }
+    setEntryMap(prev => {
+      const next = new Map(prev)
+      next.set(key, data as Entry)
+      return next
+    })
+  }
+
+  // Oznaczenie / cofnięcie „nie zrobiła tej serii" bezpośrednio w tabeli
+  async function toggleSkipInline(athlete: Athlete, ex: Exercise, idx: number) {
+    const key = entryKey(ex.id, athlete.id)
+    const current = entryMap.get(key)
+    const sets = (latestSetsRef.current.get(key) ?? effectiveSets(ex, current)).map(s => ({ ...s }))
+    sets[idx] = { ...(sets[idx] || { reps: ex.reps || '', tempo: ex.tempo || '' }), skipped: !sets[idx]?.skipped }
+    latestSetsRef.current.set(key, sets)
+    const payload = {
+      training_id: training.id,
+      exercise_id: ex.id,
+      athlete_id: athlete.id,
+      sets,
+      pain_vas: current?.pain_vas ?? null,
+      pain_comment: current?.pain_comment ?? null,
+      comment: current?.comment ?? null,
+      exercise_override: current?.exercise_override ?? null,
+      updated_at: new Date().toISOString(),
+    }
+    const { data, error: err } = await supabase
+      .from('group_training_entries')
+      .upsert(payload, { onConflict: 'exercise_id,athlete_id' })
+      .select()
+      .single()
+    if (err || !data) { setError(err?.message || 'Błąd zapisu'); return }
     setEntryMap(prev => {
       const next = new Map(prev)
       next.set(key, data as Entry)
@@ -430,7 +501,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
               Trening · {formatDatePl(trainingDate)}
             </h1>
             <p style={{ color: C.gray, fontSize: '0.8rem', marginTop: 3 }}>
-              W nagłówku kolumny: serie, powtórzenia i tempo dla całej grupy. W wierszu zawodniczki wpisujesz ciężar każdej serii, a ✎ otwiera ból i komentarz.
+              W nagłówku kolumny: serie, powtórzenia i tempo dla całej grupy. W wierszu zawodniczki wpisujesz ciężar, a ✎ otwiera ból i komentarz. Kliknij numer serii (S1, S2…), by oznaczyć „nie zrobiła", a ✕ przy nazwisku wykreśla nieobecną na koniec listy.
             </p>
           </div>
         </header>
@@ -525,16 +596,30 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                     </tr>
                   </thead>
                   <tbody>
-                    {athletes.map(athlete => (
+                    {orderedAthletes.map(({ athlete, absent }) => (
                       <tr key={athlete.id} className="gt-row">
-                        <td className="gt-sticky" style={{ padding: '0.5rem 0.85rem', fontWeight: 700, fontSize: '0.84rem', whiteSpace: 'nowrap' }}>
-                          {athlete.full_name}
+                        <td className="gt-sticky" style={{ padding: '0.5rem 0.7rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                            <button
+                              onClick={() => toggleAbsent(athlete.id)}
+                              title={absent ? 'Przywróć na trening' : 'Wykreśl z treningu (nieobecna)'}
+                              style={{ flexShrink: 0, width: 22, height: 22, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, border: `1.5px solid ${absent ? C.gold : C.grayLight}`, background: absent ? '#FFFBEB' : C.white, color: absent ? '#92600A' : C.gray, fontSize: '0.72rem', lineHeight: 1 }}
+                            >
+                              {absent ? '↩' : '✕'}
+                            </button>
+                            <span style={{ fontWeight: 700, fontSize: '0.84rem', whiteSpace: 'nowrap', textDecoration: absent ? 'line-through' : 'none', color: absent ? C.gray : C.navy }}>
+                              {athlete.full_name}
+                            </span>
+                            {absent && (
+                              <span style={{ flexShrink: 0, fontFamily: mono, fontSize: '0.5rem', fontWeight: 700, color: '#92600A', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 5, padding: '1px 5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>nieob.</span>
+                            )}
+                          </div>
                         </td>
                         {sortedExercises.map(ex => {
                           const entry = entryMap.get(entryKey(ex.id, athlete.id)) || null
                           const sets = effectiveSets(ex, entry)
                           return (
-                            <td key={ex.id} style={{ padding: '0.45rem 0.5rem' }}>
+                            <td key={ex.id} style={{ padding: '0.45rem 0.5rem', ...(absent ? { opacity: 0.35, pointerEvents: 'none' as const } : {}) }}>
                               {entry?.exercise_override && (
                                 <div title={`Zamiana ćwiczenia: ${entry.exercise_override}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%', fontFamily: sans, fontSize: '0.64rem', fontWeight: 700, color: '#854F0B', background: '#FEF6E0', border: '1px solid #F7D27A', borderRadius: 999, padding: '2px 9px 2px 2px', marginBottom: 5 }}>
                                   <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, borderRadius: '50%', background: C.gold, color: C.navy, fontFamily: mono, fontSize: '0.62rem', fontWeight: 700, lineHeight: 1 }}>⇄</span>
@@ -543,15 +628,31 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                               )}
                               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, flexWrap: 'wrap' }}>
                                 {sets.map((s, i) => (
-                                  <div key={`${ex.id}_${athlete.id}_${i}_${s.weight || ''}`}>
-                                    <div style={{ fontFamily: mono, fontSize: '0.5rem', color: C.gray, textAlign: 'center', marginBottom: 1, letterSpacing: '0.03em' }}>S{i + 1}</div>
-                                    <input
-                                      defaultValue={s.weight || ''}
-                                      placeholder="kg"
-                                      onBlur={e => saveInlineWeight(athlete, ex, i, e.target.value)}
-                                      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-                                      className={`gt-w${s.weight ? ' filled' : ''}`}
-                                    />
+                                  <div key={`${ex.id}_${athlete.id}_${i}_${s.skipped ? 'x' : (s.weight || '')}`}>
+                                    <button
+                                      onClick={() => toggleSkipInline(athlete, ex, i)}
+                                      title={s.skipped ? 'Seria nie zrobiona — kliknij, by cofnąć' : 'Oznacz: nie zrobiła tej serii'}
+                                      style={{ display: 'block', width: '100%', border: 'none', background: 'none', fontFamily: mono, fontSize: '0.5rem', color: s.skipped ? C.red : C.gray, textAlign: 'center', marginBottom: 1, letterSpacing: '0.03em', textDecoration: s.skipped ? 'line-through' : 'none', padding: 0 }}
+                                    >
+                                      S{i + 1}
+                                    </button>
+                                    {s.skipped ? (
+                                      <button
+                                        onClick={() => toggleSkipInline(athlete, ex, i)}
+                                        title="Nie zrobiła tej serii (kliknij, by cofnąć)"
+                                        style={{ width: 44, border: '1.5px solid #F4B5B5', borderRadius: 7, background: '#FDEDED', color: C.red, fontFamily: mono, fontSize: '0.78rem', fontWeight: 700, padding: '0.3rem 0', lineHeight: 1 }}
+                                      >
+                                        ✕
+                                      </button>
+                                    ) : (
+                                      <input
+                                        defaultValue={s.weight || ''}
+                                        placeholder="kg"
+                                        onBlur={e => saveInlineWeight(athlete, ex, i, e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                                        className={`gt-w${s.weight ? ' filled' : ''}`}
+                                      />
+                                    )}
                                   </div>
                                 ))}
                                 <button

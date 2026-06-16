@@ -17,7 +17,7 @@ const mono = "'Space Mono', monospace"
 type Group = { id: number; name: string }
 type Athlete = { id: number; full_name: string }
 type Training = { id: number; group_id: number; training_date: string }
-type SetRow = { reps?: string; tempo?: string; weight?: string }
+type SetRow = { reps?: string; tempo?: string; weight?: string; skipped?: boolean }
 type Exercise = { id: number; name: string; exercise_order: number; sets_planned?: number | null; reps?: string | null; tempo?: string | null }
 type Entry = {
   exercise_id: number
@@ -68,31 +68,35 @@ const entryKey = (exerciseId: number, athleteId: number) => `${exerciseId}_${ath
 // – tempo wspólne dla wszystkich serii pokazujemy raz, nie przy każdej.
 function SetsSummary({ sets }: { sets: SetRow[] }) {
   const ss = (sets || [])
-    .map(s => ({ reps: (s.reps || '').trim(), tempo: (s.tempo || '').trim(), weight: (s.weight || '').trim() }))
-    .filter(s => s.reps || s.tempo || s.weight)
+    .map(s => ({ reps: (s.reps || '').trim(), tempo: (s.tempo || '').trim(), weight: (s.weight || '').trim(), skipped: !!s.skipped }))
+    .filter(s => s.reps || s.tempo || s.weight || s.skipped)
   if (ss.length === 0) return <span style={{ fontFamily: mono, fontSize: '0.72rem', color: C.grayLight }}>—</span>
 
   const hasWeight = (w: string) => !!w && w !== '0'
   const fmtWeight = (w: string) => (/[a-zA-Z%]/.test(w) ? w : `${w} kg`)
   const sameTempo = ss.every(s => s.tempo === ss[0].tempo) ? ss[0].tempo : ''
-  const allSame = ss.every(s => s.reps === ss[0].reps && s.weight === ss[0].weight && s.tempo === ss[0].tempo)
+  const allSame = ss.every(s => s.reps === ss[0].reps && s.weight === ss[0].weight && s.tempo === ss[0].tempo && s.skipped === ss[0].skipped)
 
-  const line = (label: string, reps: string, weight: string, tempo: string) => (
+  const line = (label: string, s: { reps: string; weight: string; tempo: string; skipped: boolean }, tempo: string) => (
     <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, lineHeight: 1.5 }}>
-      <span style={{ fontFamily: mono, fontSize: '0.55rem', color: C.gray, minWidth: 24, flexShrink: 0 }}>{label}</span>
-      <span style={{ fontFamily: mono, fontSize: '0.74rem', color: C.navy, whiteSpace: 'nowrap' }}>
-        {reps || '—'}
-        {hasWeight(weight) ? <> × <strong style={{ fontWeight: 700 }}>{fmtWeight(weight)}</strong></> : null}
-        {tempo ? <span style={{ color: C.gray }}> · {tempo}</span> : null}
-      </span>
+      <span style={{ fontFamily: mono, fontSize: '0.55rem', color: s.skipped ? C.red : C.gray, minWidth: 24, flexShrink: 0 }}>{label}</span>
+      {s.skipped ? (
+        <span style={{ fontFamily: mono, fontSize: '0.72rem', color: C.red, textDecoration: 'line-through' }}>nie zrob.</span>
+      ) : (
+        <span style={{ fontFamily: mono, fontSize: '0.74rem', color: C.navy, whiteSpace: 'nowrap' }}>
+          {s.reps || '—'}
+          {hasWeight(s.weight) ? <> × <strong style={{ fontWeight: 700 }}>{fmtWeight(s.weight)}</strong></> : null}
+          {tempo ? <span style={{ color: C.gray }}> · {tempo}</span> : null}
+        </span>
+      )}
     </div>
   )
 
-  if (allSame) return line(`${ss.length} ser.`, ss[0].reps, ss[0].weight, ss[0].tempo)
+  if (allSame) return line(`${ss.length} ser.`, ss[0], ss[0].tempo)
 
   return (
     <div>
-      {ss.map((s, i) => line(`S${i + 1}`, s.reps, s.weight, sameTempo ? '' : s.tempo))}
+      {ss.map((s, i) => line(`S${i + 1}`, s, sameTempo ? '' : s.tempo))}
       {sameTempo ? (
         <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, marginTop: 3 }}>tempo {sameTempo}</div>
       ) : null}
