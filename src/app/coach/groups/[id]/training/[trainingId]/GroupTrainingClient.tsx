@@ -51,6 +51,10 @@ interface Props {
 
 const entryKey = (exerciseId: number, athleteId: number) => `${exerciseId}_${athleteId}`
 
+// Ćwiczenie „na maksa" — w polu POWT. wpisano max/maks/amrap.
+// Wtedy w komórkach zawodniczek wpisujemy wykonane powtórzenia, nie ciężar.
+const isMaxReps = (reps?: string | null) => /^(max|maks|amrap)/i.test((reps || '').trim())
+
 // Serie do wyświetlenia: wpis zawodniczki dopełniony do liczby serii z rozpiski,
 // puste serie dziedziczą powtórzenia i tempo z nagłówka kolumny
 function effectiveSets(ex: Exercise, entry: Entry | null | undefined, minOne = false): SetRow[] {
@@ -332,13 +336,13 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     if (err) setError(err.message)
   }
 
-  // Szybki zapis ciężaru wpisanego bezpośrednio w komórce tabeli
-  async function saveInlineWeight(athlete: Athlete, ex: Exercise, idx: number, value: string) {
+  // Szybki zapis wartości wpisanej w komórce tabeli (ciężar albo wykonane powtórzenia)
+  async function saveInlineField(athlete: Athlete, ex: Exercise, idx: number, field: 'weight' | 'reps', value: string) {
     const key = entryKey(ex.id, athlete.id)
     const current = entryMap.get(key)
     const sets = latestSetsRef.current.get(key) ?? effectiveSets(ex, current)
-    if ((sets[idx]?.weight || '') === value.trim()) return
-    sets[idx] = { ...(sets[idx] || { reps: ex.reps || '', tempo: ex.tempo || '' }), weight: value.trim() }
+    if ((sets[idx]?.[field] || '') === value.trim()) return
+    sets[idx] = { ...(sets[idx] || { reps: ex.reps || '', tempo: ex.tempo || '' }), [field]: value.trim() }
     latestSetsRef.current.set(key, sets)
     const payload = {
       training_id: training.id,
@@ -356,7 +360,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
       .upsert(payload, { onConflict: 'exercise_id,athlete_id' })
       .select()
       .single()
-    if (err || !data) { setError(err?.message || 'Błąd zapisu ciężaru'); return }
+    if (err || !data) { setError(err?.message || 'Błąd zapisu'); return }
     setEntryMap(prev => {
       const next = new Map(prev)
       next.set(key, data as Entry)
@@ -579,6 +583,11 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 </div>
                               ))}
                             </div>
+                            {isMaxReps(ex.reps) && (
+                              <div style={{ fontFamily: mono, fontSize: '0.5rem', fontWeight: 700, color: '#854F0B', background: '#FEF6E0', border: '1px solid #F7D27A', borderRadius: 6, padding: '2px 5px', marginTop: 4, textAlign: 'center' }}>
+                                ↓ wpisuj wykonane powt.
+                              </div>
+                            )}
                           </th>
                         )
                       })}
@@ -618,6 +627,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                         {sortedExercises.map(ex => {
                           const entry = entryMap.get(entryKey(ex.id, athlete.id)) || null
                           const sets = effectiveSets(ex, entry)
+                          const maxMode = isMaxReps(ex.reps)
                           return (
                             <td key={ex.id} style={{ padding: '0.45rem 0.5rem', ...(absent ? { opacity: 0.35, pointerEvents: 'none' as const } : {}) }}>
                               {entry?.exercise_override && (
@@ -627,34 +637,40 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 </div>
                               )}
                               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, flexWrap: 'wrap' }}>
-                                {sets.map((s, i) => (
-                                  <div key={`${ex.id}_${athlete.id}_${i}_${s.skipped ? 'x' : (s.weight || '')}`}>
-                                    <button
-                                      onClick={() => toggleSkipInline(athlete, ex, i)}
-                                      title={s.skipped ? 'Seria nie zrobiona — kliknij, by cofnąć' : 'Oznacz: nie zrobiła tej serii'}
-                                      style={{ display: 'block', width: '100%', border: 'none', background: 'none', fontFamily: mono, fontSize: '0.5rem', color: s.skipped ? C.red : C.gray, textAlign: 'center', marginBottom: 1, letterSpacing: '0.03em', textDecoration: s.skipped ? 'line-through' : 'none', padding: 0 }}
-                                    >
-                                      S{i + 1}
-                                    </button>
-                                    {s.skipped ? (
+                                {sets.map((s, i) => {
+                                  // W trybie „max" wpisujemy wykonane powtórzenia; odziedziczone „max”
+                                  // z rozpiski traktujemy jak puste (jeszcze nie wpisano wyniku).
+                                  const repsPerf = s.reps && !isMaxReps(s.reps) ? s.reps : ''
+                                  const cellVal = maxMode ? repsPerf : (s.weight || '')
+                                  return (
+                                    <div key={`${ex.id}_${athlete.id}_${i}_${s.skipped ? 'x' : cellVal}`}>
                                       <button
                                         onClick={() => toggleSkipInline(athlete, ex, i)}
-                                        title="Nie zrobiła tej serii (kliknij, by cofnąć)"
-                                        style={{ width: 44, border: '1.5px solid #F4B5B5', borderRadius: 7, background: '#FDEDED', color: C.red, fontFamily: mono, fontSize: '0.78rem', fontWeight: 700, padding: '0.3rem 0', lineHeight: 1 }}
+                                        title={s.skipped ? 'Seria nie zrobiona — kliknij, by cofnąć' : 'Oznacz: nie zrobiła tej serii'}
+                                        style={{ display: 'block', width: '100%', border: 'none', background: 'none', fontFamily: mono, fontSize: '0.5rem', color: s.skipped ? C.red : C.gray, textAlign: 'center', marginBottom: 1, letterSpacing: '0.03em', textDecoration: s.skipped ? 'line-through' : 'none', padding: 0 }}
                                       >
-                                        ✕
+                                        S{i + 1}
                                       </button>
-                                    ) : (
-                                      <input
-                                        defaultValue={s.weight || ''}
-                                        placeholder="kg"
-                                        onBlur={e => saveInlineWeight(athlete, ex, i, e.target.value)}
-                                        onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-                                        className={`gt-w${s.weight ? ' filled' : ''}`}
-                                      />
-                                    )}
-                                  </div>
-                                ))}
+                                      {s.skipped ? (
+                                        <button
+                                          onClick={() => toggleSkipInline(athlete, ex, i)}
+                                          title="Nie zrobiła tej serii (kliknij, by cofnąć)"
+                                          style={{ width: 44, border: '1.5px solid #F4B5B5', borderRadius: 7, background: '#FDEDED', color: C.red, fontFamily: mono, fontSize: '0.78rem', fontWeight: 700, padding: '0.3rem 0', lineHeight: 1 }}
+                                        >
+                                          ✕
+                                        </button>
+                                      ) : (
+                                        <input
+                                          defaultValue={cellVal}
+                                          placeholder={maxMode ? 'powt.' : 'kg'}
+                                          onBlur={e => saveInlineField(athlete, ex, i, maxMode ? 'reps' : 'weight', e.target.value)}
+                                          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                                          className={`gt-w${cellVal ? ' filled' : ''}`}
+                                        />
+                                      )}
+                                    </div>
+                                  )
+                                })}
                                 <button
                                   onClick={() => setOpenCell({ athlete, exercise: ex })}
                                   title="Szczegóły: powtórzenia, tempo, ból, komentarz"
