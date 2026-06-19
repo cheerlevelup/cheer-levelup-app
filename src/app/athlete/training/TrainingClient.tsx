@@ -465,26 +465,52 @@ function WarmupSetRow({ warmup, setNum, existingLog, sessionId, athleteId, block
   const [weight, setWeight] = useState(existingLog?.weight?.toString() || '')
   const [done, setDone] = useState(!!existingLog?.completed)
   const savedIdRef = React.useRef<number | null>(existingLog?.id ?? null)
+  // Kolejkujemy zapisy, by szybkie dwukrotne kliknięcie nie zrobiło dwóch INSERT-ów
+  const saveChainRef = React.useRef<Promise<void>>(Promise.resolve())
 
-  async function toggle() {
-    const newDone = !done
-    setDone(newDone)
+  async function findExistingId(): Promise<number | null> {
+    const { data } = await supabase
+      .from('set_logs').select('id')
+      .eq('workout_session_id', sessionId).eq('block_exercise_id', blockExerciseId)
+      .eq('set_number', setNum).eq('is_warmup', true)
+      .order('created_at', { ascending: false }).limit(1).maybeSingle()
+    return data?.id ?? null
+  }
+
+  async function doToggle(newDone: boolean) {
     const payload = {
       workout_session_id: sessionId, block_exercise_id: blockExerciseId,
       athlete_id: athleteId, set_number: setNum,
       weight: weight ? parseFloat(weight.replace(',', '.')) : null,
       reps_completed: null, is_warmup: true, completed: newDone,
     }
-    if (savedIdRef.current) {
-      await supabase.from('set_logs').update(payload).eq('id', savedIdRef.current)
-      onLogSaved?.({ ...payload, reps_completed: undefined, id: savedIdRef.current, created_at: new Date().toISOString() } as SetLog)
-    } else {
-      const { data } = await supabase.from('set_logs').insert(payload).select('id').single()
-      if (data?.id) {
-        savedIdRef.current = data.id
-        onLogSaved?.({ ...payload, reps_completed: undefined, id: data.id, created_at: new Date().toISOString() } as SetLog)
-      }
+    const knownId = savedIdRef.current ?? await findExistingId()
+    if (knownId) {
+      savedIdRef.current = knownId
+      await supabase.from('set_logs').update(payload).eq('id', knownId)
+      onLogSaved?.({ ...payload, reps_completed: undefined, id: knownId, created_at: new Date().toISOString() } as SetLog)
+      return
     }
+    const { data, error } = await supabase.from('set_logs').insert(payload).select('id').single()
+    if (!error && data?.id) {
+      savedIdRef.current = data.id
+      onLogSaved?.({ ...payload, reps_completed: undefined, id: data.id, created_at: new Date().toISOString() } as SetLog)
+      return
+    }
+    // Równoległy zapis utworzył już wiersz — odszukaj i zaktualizuj
+    const raceId = await findExistingId()
+    if (raceId) {
+      savedIdRef.current = raceId
+      await supabase.from('set_logs').update(payload).eq('id', raceId)
+      onLogSaved?.({ ...payload, reps_completed: undefined, id: raceId, created_at: new Date().toISOString() } as SetLog)
+    }
+  }
+
+  function toggle() {
+    const newDone = !done
+    setDone(newDone)
+    const run = () => doToggle(newDone)
+    saveChainRef.current = saveChainRef.current.then(run, run)
   }
 
   // Notatka dla zawodniczki: powtórzenia, ciężar (bez słowa "ref" i zduplikowanego "kg"), treść notatki
@@ -535,8 +561,20 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
   const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   // Cache ID po pierwszym zapisie, żeby uniknąć wyścigu INSERT vs INSERT
   const savedLogIdRef = React.useRef<number | null>(existingLog?.id ?? null)
+  // Kolejkujemy zapisy tej serii — dla ćwiczeń AMRAP ciężar i powtórzenia mają
+  // osobne pola, więc bez tego dwa równoległe INSERT-y dawały błąd duplikatu.
+  const saveChainRef = React.useRef<Promise<void>>(Promise.resolve())
 
-  async function saveSet(nextDone: boolean, currentWeight: string) {
+  async function findExistingLogId(): Promise<number | null> {
+    const { data } = await supabase
+      .from('set_logs').select('id')
+      .eq('workout_session_id', sessionId).eq('block_exercise_id', blockExerciseId)
+      .eq('set_number', setNum).eq('is_warmup', false)
+      .order('created_at', { ascending: false }).limit(1).maybeSingle()
+    return data?.id ?? null
+  }
+
+  async function doSaveSet(nextDone: boolean, currentWeight: string) {
     setSaveError('')
     const payload = {
       workout_session_id: sessionId, block_exercise_id: blockExerciseId,
@@ -546,34 +584,42 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
       is_warmup: false, completed: nextDone,
     }
 
-    // Jeśli mamy już ID z cache — update; w przeciwnym razie szukaj lub twórz nowy
-    if (savedLogIdRef.current) {
-      const { error } = await supabase.from('set_logs').update(payload).eq('id', savedLogIdRef.current)
-      if (!error) onLogSaved?.({ ...payload, id: savedLogIdRef.current, created_at: new Date().toISOString() } as SetLog)
+    // Mamy ID (z cache albo z bazy) — zwykły UPDATE
+    const knownId = savedLogIdRef.current ?? await findExistingLogId()
+    if (knownId) {
+      savedLogIdRef.current = knownId
+      const { error } = await supabase.from('set_logs').update(payload).eq('id', knownId)
+      if (!error) onLogSaved?.({ ...payload, id: knownId, created_at: new Date().toISOString() } as SetLog)
       else setSaveError(error.message)
       return
     }
 
-    const { data: currentLog } = await supabase
-      .from('set_logs').select('id')
-      .eq('workout_session_id', sessionId).eq('block_exercise_id', blockExerciseId)
-      .eq('set_number', setNum).eq('is_warmup', false)
-      .order('created_at', { ascending: false }).limit(1).maybeSingle()
-
-    const logId = currentLog?.id
-    if (logId) {
-      savedLogIdRef.current = logId
-      const { error } = await supabase.from('set_logs').update(payload).eq('id', logId)
-      if (!error) onLogSaved?.({ ...payload, id: logId, created_at: new Date().toISOString() } as SetLog)
-      else setSaveError(error.message)
-    } else {
-      const { data, error } = await supabase.from('set_logs').insert(payload).select('id').single()
-      if (error) setSaveError(error.message)
-      else if (data?.id) {
-        savedLogIdRef.current = data.id
-        onLogSaved?.({ ...payload, id: data.id, created_at: new Date().toISOString() } as SetLog)
-      }
+    // Brak wiersza — INSERT
+    const { data, error } = await supabase.from('set_logs').insert(payload).select('id').single()
+    if (!error && data?.id) {
+      savedLogIdRef.current = data.id
+      onLogSaved?.({ ...payload, id: data.id, created_at: new Date().toISOString() } as SetLog)
+      return
     }
+
+    // INSERT się nie powiódł — najczęściej równoległy zapis utworzył już wiersz.
+    // Zamiast straszyć zawodniczkę błędem o duplikacie, odszukaj wiersz i zaktualizuj.
+    const raceId = await findExistingLogId()
+    if (raceId) {
+      savedLogIdRef.current = raceId
+      const { error: upErr } = await supabase.from('set_logs').update(payload).eq('id', raceId)
+      if (!upErr) onLogSaved?.({ ...payload, id: raceId, created_at: new Date().toISOString() } as SetLog)
+      else setSaveError(upErr.message)
+    } else if (error) {
+      setSaveError(error.message)
+    }
+  }
+
+  // Wszystkie zapisy tej serii idą po kolei (jeden po drugim)
+  function saveSet(nextDone: boolean, currentWeight: string) {
+    const run = () => doSaveSet(nextDone, currentWeight)
+    saveChainRef.current = saveChainRef.current.then(run, run)
+    return saveChainRef.current
   }
 
   async function toggle() {
