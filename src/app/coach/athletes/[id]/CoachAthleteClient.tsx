@@ -263,6 +263,7 @@ interface Props {
   wellnessLogs: any[]
   wellnessList: any[]
   dietLogs: any[]
+  groupTrainings: any[]
   painLogs: any[]
   groupModuleConfigs: any[]
   athleteModuleConfigs: any[]
@@ -580,7 +581,7 @@ function SessionFeedbackModal({ session, onClose }: { session: any; onClose: () 
 
 type MainTab = 'overview' | 'wellness' | 'diet'
 
-export default function CoachAthleteClient({ athlete, assignment, pastAssignments, sessions, feedbacks, wellnessLogs, wellnessList, dietLogs, painLogs, groupModuleConfigs, athleteModuleConfigs, allGroups, allPlans }: Props) {
+export default function CoachAthleteClient({ athlete, assignment, pastAssignments, sessions, feedbacks, wellnessLogs, wellnessList, dietLogs, groupTrainings, painLogs, groupModuleConfigs, athleteModuleConfigs, allGroups, allPlans }: Props) {
   const router = useRouter()
   const supabase = createClient()
   const [planTab, setPlanTab] = useState<'active' | 'history'>('active')
@@ -684,6 +685,18 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
     const key = toDateKey(s.date_completed || s.date_started || '')
     if (key) completedByDate[key] = { session: s, num: i + 1 }
   })
+
+  // Dni z treningiem grupy zorganizowanej, w które zawodniczka była obecna.
+  // Klucz liczymy tak samo jak komórkę kalendarza (lokalna północ → ISO),
+  // żeby trening trafił na właściwy dzień.
+  const groupTrainingDates = new Set<string>()
+  for (const gt of (groupTrainings || [])) {
+    const absent = Array.isArray(gt.absent_athlete_ids) ? gt.absent_athlete_ids : []
+    const isAbsent = absent.map((x: any) => Number(x)).includes(Number(athlete.id))
+    if (isAbsent || !gt.training_date) continue
+    const key = new Date(`${gt.training_date}T00:00:00`).toISOString().split('T')[0]
+    groupTrainingDates.add(key)
+  }
 
   const todayDate = new Date()
   todayDate.setHours(0, 0, 0, 0)
@@ -969,7 +982,7 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
           {/* Szybkie statystyki */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: '1rem' }}>
             {[
-              { label: 'Treningi', value: completedSessions.length, color: C.navy },
+              { label: 'Treningi', value: completedSessions.length + groupTrainingDates.size, color: C.navy },
               { label: 'Śr. RPE', value: avgRpe ?? '—', color: avgRpe ? rpeColor(parseFloat(avgRpe)) : C.gray },
               { label: 'Wellness', value: `${wellnessLogs.length}d`, color: C.green },
               { label: 'Dieta', value: `${dietLogs.length}d`, color: C.gold },
@@ -1059,12 +1072,21 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
                                   </button>
                                   {/* Dieta */}
                                   {hasDiet && <div title="Dieta uzupełniona" style={{ fontSize: '0.72rem', lineHeight: 1 }}>🥗</div>}
-                                  {/* Trening */}
+                                  {/* Trening indywidualny (nr w planie) */}
                                   {trainingInfo && (
                                     <div title={`Trening #${trainingInfo.num}`} style={{ position: 'relative', width: 18, height: 18 }}>
                                       <div style={{ width: 18, height: 18, borderRadius: '50%', background: C.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem' }}>🏋️</div>
                                       <div style={{ position: 'absolute', top: -4, right: -5, width: 12, height: 12, borderRadius: '50%', background: C.gold, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: mono, fontSize: '0.48rem', fontWeight: 900, color: C.navy }}>
                                         {trainingInfo.num}
+                                      </div>
+                                    </div>
+                                  )}
+                                  {/* Trening grupy zorganizowanej — obecna */}
+                                  {!trainingInfo && groupTrainingDates.has(key) && (
+                                    <div title="Trening grupowy — obecna" style={{ position: 'relative', width: 18, height: 18 }}>
+                                      <div style={{ width: 18, height: 18, borderRadius: '50%', background: C.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem' }}>🏋️</div>
+                                      <div style={{ position: 'absolute', top: -4, right: -5, width: 12, height: 12, borderRadius: '50%', background: C.green, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: mono, fontSize: '0.5rem', fontWeight: 900, color: C.white }}>
+                                        ✓
                                       </div>
                                     </div>
                                   )}
@@ -1084,6 +1106,7 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
                   { icon: <div style={{ width: 12, height: 12, borderRadius: '50%', background: C.red }} />, label: 'Wellness brak' },
                   { icon: <span style={{ fontSize: '0.7rem' }}>🥗</span>, label: 'Dieta' },
                   { icon: <span style={{ fontSize: '0.7rem' }}>🏋️</span>, label: 'Trening (nr w planie)' },
+                  { icon: <div style={{ width: 12, height: 12, borderRadius: '50%', background: C.green, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.white, fontSize: '0.5rem', fontWeight: 900 }}>✓</div>, label: 'Trening grupowy (obecna)' },
                 ].map((item, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                     {item.icon}

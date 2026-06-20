@@ -74,6 +74,18 @@ export default async function CoachAthletePage({ params }: Props) {
     .gte('date', daysAgo28.toISOString().split('T')[0])
     .order('date', { ascending: false })
 
+  // Treningi grupy zorganizowanej (np. Ultra) — ostatnie 28 dni.
+  // Zawodniczka „zrobiła” trening grupowy, jeśli tego dnia był trening grupy
+  // i nie była oznaczona jako nieobecna.
+  const { data: groupTrainings } = athlete.group_id
+    ? await supabase
+        .from('group_trainings')
+        .select('id, training_date, absent_athlete_ids')
+        .eq('group_id', athlete.group_id)
+        .gte('training_date', daysAgo28.toISOString().split('T')[0])
+        .order('training_date', { ascending: false })
+    : { data: [] }
+
   // Pain logs — przez sesje zawodniczki (tabela nie ma athlete_id)
   const athleteSessionIds = (sessions || []).map((s: any) => s.id).slice(0, 20)
   const { data: painLogs } = athleteSessionIds.length > 0
@@ -115,6 +127,7 @@ export default async function CoachAthletePage({ params }: Props) {
       wellnessLogs={wellnessLogs || []}
       wellnessList={wellnessList}
       dietLogs={dietLogs || []}
+      groupTrainings={groupTrainings || []}
       painLogs={painLogs || []}
       groupModuleConfigs={groupModuleConfigs || []}
       athleteModuleConfigs={athleteModuleConfigs || []}
