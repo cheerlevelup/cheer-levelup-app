@@ -67,46 +67,42 @@ const entryKey = (exerciseId: number, athleteId: number) => `${exerciseId}_${ath
 // – serie identyczne zwijamy w jedną linię (np. „3 ser. · 5 × 10 kg”),
 // – tempo wspólne dla wszystkich serii pokazujemy raz, nie przy każdej.
 function SetsSummary({ sets, ex }: { sets: SetRow[]; ex: Exercise }) {
-  // Powtórzenia/tempo dziedziczą z rozpiski ćwiczenia, gdy nie zapisano ich przy serii
-  // (starsze wpisy miały tylko ciężar — bez tego pokazywało się brzydkie „— × 2 kg”).
+  const prescTempo = (ex.tempo || '').trim()
+  // Jednolity zapis per seria (S1, S2…). Powtórzenia dziedziczą z rozpiski,
+  // gdy nie zapisano ich przy serii. Tempo pokazujemy TYLKO gdy różni się od
+  // rozpiski (modyfikacja) — standardowe i tak widać w nagłówku kolumny.
   const ss = (sets || [])
     .map(s => ({
       reps: (s.reps || '').trim() || (ex.reps || '').trim(),
-      tempo: (s.tempo || '').trim() || (ex.tempo || '').trim(),
+      tempo: (s.tempo || '').trim(),
       weight: (s.weight || '').trim(),
       skipped: !!s.skipped,
     }))
     .filter(s => s.reps || s.tempo || s.weight || s.skipped)
   if (ss.length === 0) return <span style={{ fontFamily: mono, fontSize: '0.72rem', color: C.grayLight }}>—</span>
 
-  const hasWeight = (w: string) => !!w && w !== '0'
-  const fmtWeight = (w: string) => (/[a-zA-Z%]/.test(w) ? w : `${w} kg`)
-  const sameTempo = ss.every(s => s.tempo === ss[0].tempo) ? ss[0].tempo : ''
-  const allSame = ss.every(s => s.reps === ss[0].reps && s.weight === ss[0].weight && s.tempo === ss[0].tempo && s.skipped === ss[0].skipped)
-
-  const line = (label: string, s: { reps: string; weight: string; tempo: string; skipped: boolean }, tempo: string) => (
-    <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, lineHeight: 1.5 }}>
-      <span style={{ fontFamily: mono, fontSize: '0.55rem', color: s.skipped ? C.red : C.gray, minWidth: 24, flexShrink: 0 }}>{label}</span>
-      {s.skipped ? (
-        <span style={{ fontFamily: mono, fontSize: '0.72rem', color: C.red, textDecoration: 'line-through' }}>nie zrob.</span>
-      ) : (
-        <span style={{ fontFamily: mono, fontSize: '0.74rem', color: C.navy, whiteSpace: 'nowrap' }}>
-          {s.reps || '—'}
-          {hasWeight(s.weight) ? <> × <strong style={{ fontWeight: 700 }}>{fmtWeight(s.weight)}</strong></> : null}
-          {tempo ? <span style={{ color: C.gray }}> · {tempo}</span> : null}
-        </span>
-      )}
-    </div>
-  )
-
-  if (allSame) return line(`${ss.length} ser.`, ss[0], ss[0].tempo)
+  // Ciężar: 0 = masa ciała (BW), puste = nic, reszta z „kg”
+  const fmtWeight = (w: string) => (w === '0' ? 'BW' : /[a-zA-Z%]/.test(w) ? w : `${w} kg`)
 
   return (
     <div>
-      {ss.map((s, i) => line(`S${i + 1}`, s, sameTempo ? '' : s.tempo))}
-      {sameTempo ? (
-        <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, marginTop: 3 }}>tempo {sameTempo}</div>
-      ) : null}
+      {ss.map((s, i) => {
+        const tempoMod = !!s.tempo && s.tempo !== prescTempo
+        return (
+          <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 7, lineHeight: 1.5 }}>
+            <span style={{ fontFamily: mono, fontSize: '0.55rem', color: s.skipped ? C.red : C.gray, minWidth: 24, flexShrink: 0 }}>S{i + 1}</span>
+            {s.skipped ? (
+              <span style={{ fontFamily: mono, fontSize: '0.72rem', color: C.red, textDecoration: 'line-through' }}>nie zrob.</span>
+            ) : (
+              <span style={{ fontFamily: mono, fontSize: '0.74rem', color: C.navy, whiteSpace: 'nowrap' }}>
+                {s.reps || '—'}
+                {s.weight !== '' ? <> × <strong style={{ fontWeight: 700 }}>{fmtWeight(s.weight)}</strong></> : null}
+                {tempoMod ? <span style={{ color: C.gray }}> · {s.tempo}</span> : null}
+              </span>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
