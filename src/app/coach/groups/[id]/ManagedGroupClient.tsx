@@ -104,7 +104,8 @@ function AddAthleteModal({ group, onClose, onAdded }: { group: Group; onClose: (
   )
 }
 
-type MatrixEntry = { athleteId: number; weights: string[] }
+type SetCell = { weight?: string; skipped?: boolean }
+type MatrixEntry = { athleteId: number; sets: SetCell[]; comment?: string }
 type ParsedRow = { name: string; sets: string; reps: string; tempo: string; entries?: MatrixEntry[] }
 
 function normName(s: any) {
@@ -117,63 +118,120 @@ function normName(s: any) {
     .trim()
 }
 
-// Komórka z ciężarami → tablica ciężarów serii: „10/12/15”, „10 12 15”, „10, 12” → [10,12,15]
-function parseWeights(cell: any): string[] {
-  const s = String(cell ?? '').trim()
-  if (!s) return []
-  return s.split(/[,;/|\s]+/).map(t => t.trim()).filter(Boolean)
-}
-
-// Wiersz nagłówka = w kolumnach (od 2.) są nazwy ćwiczeń (tekst), nie liczby
-function isHeaderRow(r: any[]) {
-  const cells = (r || []).slice(1).map(c => String(c ?? '').trim()).filter(Boolean)
-  if (cells.length < 2) return false
-  const textCells = cells.filter(c => /[a-ząćęłńóśźż]/i.test(c))
-  return textCells.length >= Math.ceil(cells.length * 0.6)
-}
-
-// Format siatki: imiona w wierszach × ćwiczenia w kolumnach, ciężary w komórkach
+// Format z arkusza: imię + nazwisko w 2 kolumnach, ćwiczenia w scalonym nagłówku,
+// pod nimi I (kg) / II (kg) (serie), reps, tempo, kom. Ciężary w komórkach, „-” = nie zrobiła.
 function detectMatrix(rows: any[][], athletes: Athlete[]):
-  { exercises: ParsedRow[]; matched: string[]; unmatched: string[] } | null {
-  const athleteMap = new Map<string, number>()
-  for (const a of athletes) athleteMap.set(normName(a.full_name), a.id)
-
-  let headerIdx = -1
-  for (let i = 0; i < Math.min(rows.length, 12); i++) {
-    if (isHeaderRow(rows[i])) { headerIdx = i; break }
+  { exercises: ParsedRow[]; matched: number; unmatched: string[] } | null {
+  // 1. Wiersz etykiet (zawiera „reps” i „tempo”) + wiersz pod nim z wartościami i I/II (kg)
+  let labelRow = -1
+  for (let i = 0; i < Math.min(rows.length, 8); i++) {
+    const j = (rows[i] || []).map(x => String(x ?? '').toLowerCase()).join(' ')
+    if (/rep/.test(j) && /tempo/.test(j)) { labelRow = i; break }
   }
-  if (headerIdx < 0) return null
+  if (labelRow < 0) return null
+  const presRow = labelRow + 1
+  const labelArr = rows[labelRow] || []
+  const presArr = rows[presRow] || []
 
-  const header = rows[headerIdx] || []
-  const exCols: { col: number; name: string }[] = []
-  for (let c = 1; c < header.length; c++) {
-    const nm = String(header[c] ?? '').trim()
-    if (nm) exCols.push({ col: c, name: nm })
+  // 2. Nazwy ćwiczeń: scalony nagłówek w wierszu 0 — uzupełniamy w prawo
+  const maxCol = Math.max(...rows.slice(0, presRow + 1).map(r => (r || []).length), 0)
+  const colName: string[] = []
+  let cur = '', started = false
+  for (let c = 0; c < maxCol; c++) {
+    const v = String((rows[0] || [])[c] ?? '').trim()
+    if (v) { cur = v; started = true }
+    colName[c] = started ? cur : ''
   }
-  if (exCols.length === 0) return null
 
-  const perEx: MatrixEntry[][] = exCols.map(() => [])
-  const matched: string[] = []
-  const unmatched: string[] = []
-  for (let i = headerIdx + 1; i < rows.length; i++) {
-    const r = rows[i] || []
-    const rawName = String(r[0] ?? '').trim()
-    if (!rawName) continue
-    const id = athleteMap.get(normName(rawName))
-    if (!id) { unmatched.push(rawName); continue }
-    matched.push(rawName)
-    exCols.forEach((ec, ei) => {
-      const weights = parseWeights(r[ec.col])
-      if (weights.length) perEx[ei].push({ athleteId: id, weights })
+  // 3. Kolumny każdego ćwiczenia: ciężary (I/II kg), reps, tempo, kom
+  const order: string[] = []
+  const colsByName = new Map<string, number[]>()
+  for (let c = 2; c < maxCol; c++) {
+    const nm = colName[c]
+    if (!nm) continue
+    if (!colsByName.has(nm)) { colsByName.set(nm, []); order.push(nm) }
+    colsByName.get(nm)!.push(c)
+  }
+
+  type ExMeta = { name: string; weightCols: number[]; repsVal: string; tempoVal: string; komCol: number | null }
+  const exMeta: ExMeta[] = []
+  for (const nm of order) {
+    const cols = colsByName.get(nm)!
+    const weightCols = cols.filter(c => /kg/i.test(String(presArr[c] ?? '')))
+    if (weightCols.length === 0) continue
+    const repsCol = cols.find(c => /rep/i.test(String(labelArr[c] ?? '')))
+    const tempoCol = cols.find(c => /tempo/i.test(String(labelArr[c] ?? '')))
+    const komCol = cols.find(c => /kom/i.test(String(labelArr[c] ?? ''))) ?? null
+    exMeta.push({
+      name: nm,
+      weightCols,
+      repsVal: repsCol != null ? String(presArr[repsCol] ?? '').trim() : '',
+      tempoVal: tempoCol != null ? String(presArr[tempoCol] ?? '').trim() : '',
+      komCol,
     })
   }
-  if (matched.length === 0) return null
+  if (exMeta.length === 0) return null
 
-  const exercises: ParsedRow[] = exCols.map((ec, ei) => {
-    const maxSets = Math.max(1, ...perEx[ei].map(e => e.weights.length))
-    return { name: ec.name, sets: String(maxSets), reps: '', tempo: '', entries: perEx[ei] }
+  // 4. Wiersze zawodniczek (imię w kol. 0, nazwisko w kol. 1)
+  const dataRows: { first: string; last: string; cells: any[] }[] = []
+  for (let i = presRow + 1; i < rows.length; i++) {
+    const r = rows[i] || []
+    const first = String(r[0] ?? '').trim()
+    const last = String(r[1] ?? '').trim()
+    if (!first && !last) continue
+    dataRows.push({ first, last, cells: r })
+  }
+
+  // 5. Dopasowanie imion (zdrobnienia!): najpierw pełne, potem unikalne nazwisko, potem imię+nazwisko
+  const pool = athletes.map(a => ({ id: a.id, full: normName(a.full_name), tokens: normName(a.full_name).split(' ').filter(Boolean) }))
+  const consumed = new Set<number>()
+  const assigned: (number | null)[] = dataRows.map(() => null)
+  const tryAssign = (idx: number, id: number) => { assigned[idx] = id; consumed.add(id) }
+
+  dataRows.forEach((d, idx) => {
+    const full = normName(`${d.first} ${d.last}`)
+    const a = pool.find(p => !consumed.has(p.id) && p.full === full)
+    if (a) tryAssign(idx, a.id)
   })
-  return { exercises, matched, unmatched }
+  dataRows.forEach((d, idx) => {
+    if (assigned[idx]) return
+    const lt = normName(d.last)
+    if (!lt) return
+    const cand = pool.filter(p => !consumed.has(p.id) && p.tokens.includes(lt))
+    if (cand.length === 1) tryAssign(idx, cand[0].id)
+  })
+  dataRows.forEach((d, idx) => {
+    if (assigned[idx]) return
+    const ft = normName(d.first), lt = normName(d.last)
+    const cand = pool.filter(p => !consumed.has(p.id) && (ft ? p.tokens.includes(ft) : false) && (lt ? p.tokens.includes(lt) : true))
+    if (cand.length === 1) tryAssign(idx, cand[0].id)
+  })
+
+  const unmatched: string[] = []
+  dataRows.forEach((d, idx) => { if (!assigned[idx]) unmatched.push(`${d.first} ${d.last}`.trim()) })
+
+  // 6. Złóż ćwiczenia z ciężarami zawodniczek
+  const exercises: ParsedRow[] = exMeta.map(ex => {
+    const entries: MatrixEntry[] = []
+    dataRows.forEach((d, idx) => {
+      const aid = assigned[idx]
+      if (!aid) return
+      const sets: SetCell[] = []
+      for (const c of ex.weightCols) {
+        const raw = String(d.cells[c] ?? '').trim()
+        if (raw === '') continue
+        if (raw === '-' || raw === '–' || /^x$/i.test(raw)) sets.push({ skipped: true })
+        else sets.push({ weight: raw })
+      }
+      const comment = ex.komCol != null ? String(d.cells[ex.komCol] ?? '').trim() : ''
+      if (sets.length || comment) entries.push({ athleteId: aid, sets, comment: comment || undefined })
+    })
+    return { name: ex.name, sets: String(ex.weightCols.length), reps: ex.repsVal, tempo: ex.tempoVal, entries }
+  })
+
+  const matchedCount = assigned.filter(Boolean).length
+  if (matchedCount === 0) return null
+  return { exercises, matched: matchedCount, unmatched }
 }
 
 // Heurystyka: znajdź ćwiczenia w arkuszu (wiersz = ćwiczenie, kolumny:
@@ -235,7 +293,7 @@ function ImportTrainingModal({ group, athletes, onClose }: { group: Group; athle
       const matrix = detectMatrix(rows, athletes)
       if (matrix) {
         setRowsData(matrix.exercises)
-        setMatchReport({ matched: matrix.matched.length, unmatched: matrix.unmatched })
+        setMatchReport({ matched: matrix.matched, unmatched: matrix.unmatched })
       } else {
         const parsed = extractExercises(rows)
         if (parsed.length === 0) setError('Nie rozpoznałem układu pliku. Oczekiwany: imiona w 1. kolumnie, ćwiczenia w nagłówku, ciężary w komórkach — albo lista ćwiczeń (Ćwiczenie / Serie / Powt. / Tempo).')
@@ -290,12 +348,13 @@ function ImportTrainingModal({ group, athletes, onClose }: { group: Group; athle
       const exId = idByOrder.get(i + 1)
       if (!exId || !r.entries) return
       for (const e of r.entries) {
-        if (!e.weights.length) continue
+        if (!e.sets.length && !e.comment) continue
         entryRows.push({
           training_id: tr.id,
           exercise_id: exId,
           athlete_id: e.athleteId,
-          sets: e.weights.map(w => ({ weight: w })),
+          sets: e.sets,
+          comment: e.comment || null,
         })
       }
     })
