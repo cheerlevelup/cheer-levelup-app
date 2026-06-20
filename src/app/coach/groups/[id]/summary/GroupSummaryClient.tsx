@@ -23,6 +23,7 @@ type Entry = {
   exercise_id: number
   athlete_id: number
   sets: SetRow[]
+  pain?: boolean | null
   pain_vas?: number | null
   pain_comment?: string | null
   comment?: string | null
@@ -341,7 +342,7 @@ export default function GroupSummaryClient({ group, athletes, trainings }: Props
                           </td>
                           {exercises.map(ex => {
                             const entry = entryMap.get(entryKey(ex.id, athlete.id))
-                            const hasContent = entry && (entry.sets?.length || entry.pain_vas != null || entry.comment || entry.exercise_override)
+                            const hasContent = entry && (entry.sets?.length || entry.pain || entry.pain_vas != null || entry.pain_comment || entry.comment || entry.exercise_override)
                             return (
                               <td key={ex.id} style={{ padding: '0.5rem 0.7rem' }}>
                                 {hasContent ? (
@@ -353,10 +354,10 @@ export default function GroupSummaryClient({ group, athletes, trainings }: Props
                                       </div>
                                     )}
                                     <SetsSummary sets={entry!.sets || []} ex={ex} />
-                                    {entry!.pain_vas != null && (
+                                    {(entry!.pain || entry!.pain_vas != null || entry!.pain_comment) && (
                                       <div style={{ marginTop: 5 }}>
-                                        <span style={{ fontFamily: mono, fontSize: '0.6rem', fontWeight: 700, color: C.white, background: entry!.pain_vas! >= 5 ? C.red : C.orange, borderRadius: 6, padding: '1px 6px' }}>
-                                          ból VAS {entry!.pain_vas}
+                                        <span style={{ fontFamily: mono, fontSize: '0.6rem', fontWeight: 700, color: C.white, background: (entry!.pain_vas != null && entry!.pain_vas! >= 5) ? C.red : C.orange, borderRadius: 6, padding: '1px 6px' }}>
+                                          ból{entry!.pain_vas != null ? ` VAS ${entry!.pain_vas}` : ''}
                                         </span>
                                         {entry!.pain_comment && (
                                           <div style={{ fontSize: '0.72rem', color: C.red, marginTop: 2 }}>{entry!.pain_comment}</div>

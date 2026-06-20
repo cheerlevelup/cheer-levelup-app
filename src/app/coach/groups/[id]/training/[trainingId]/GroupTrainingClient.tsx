@@ -34,6 +34,7 @@ type Entry = {
   exercise_id: number
   athlete_id: number
   sets: SetRow[]
+  pain?: boolean | null
   pain_vas?: number | null
   pain_comment?: string | null
   comment?: string | null
@@ -79,6 +80,7 @@ function CellModal({ athlete, exercise, entry, training, onClose, onSaved }: {
 }) {
   const supabase = createClient()
   const [sets, setSets] = useState<SetRow[]>(() => effectiveSets(exercise, entry, true))
+  const [pain, setPain] = useState<boolean>(!!entry?.pain || entry?.pain_vas != null || !!(entry?.pain_comment))
   const [painVas, setPainVas] = useState<number | null>(entry?.pain_vas ?? null)
   const [painComment, setPainComment] = useState(entry?.pain_comment || '')
   const [comment, setComment] = useState(entry?.comment || '')
@@ -115,8 +117,9 @@ function CellModal({ athlete, exercise, entry, training, onClose, onSaved }: {
       exercise_id: exercise.id,
       athlete_id: athlete.id,
       sets: cleanSets,
-      pain_vas: painVas,
-      pain_comment: painVas !== null ? (painComment.trim() || null) : null,
+      pain,
+      pain_vas: pain ? painVas : null,
+      pain_comment: pain ? (painComment.trim() || null) : null,
       comment: comment.trim() || null,
       exercise_override: exerciseOverride.trim() || null,
       bodyweight,
@@ -127,12 +130,17 @@ function CellModal({ athlete, exercise, entry, training, onClose, onSaved }: {
       .upsert(payload, { onConflict: 'exercise_id,athlete_id' })
       .select()
       .single()
-    // Migracja kolumny „bodyweight” jeszcze nie wgrana — zapisz bez niej
-    if (err && err.message.includes('bodyweight')) {
-      const { bodyweight: _omit, ...rest } = payload
+    // Migracje kolumn „pain” / „bodyweight” jeszcze nie wgrane — zapisz bez brakującej
+    let attempt: Record<string, any> = payload
+    let guard = 0
+    while (err && guard++ < 3) {
+      const missing = ['pain', 'bodyweight'].find(col => new RegExp(`'${col}'`).test(err!.message) && col in attempt)
+      if (!missing) break
+      const { [missing]: _omit, ...rest } = attempt
+      attempt = rest
       ;({ data, error: err } = await supabase
         .from('group_training_entries')
-        .upsert(rest, { onConflict: 'exercise_id,athlete_id' })
+        .upsert(attempt, { onConflict: 'exercise_id,athlete_id' })
         .select()
         .single())
     }
@@ -224,36 +232,51 @@ function CellModal({ athlete, exercise, entry, training, onClose, onSaved }: {
 
           {/* ── BÓL ── */}
           <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8 }}>
-            Ból (skala VAS)
+            Ból
           </div>
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
-            <button
-              onClick={() => setPainVas(null)}
-              style={{ padding: '0.45rem 0.7rem', borderRadius: 8, border: `1.5px solid ${painVas === null ? C.gold : C.grayLight}`, background: painVas === null ? C.navy : C.offWhite, color: painVas === null ? C.gold : C.navy, fontFamily: mono, fontSize: '0.72rem', fontWeight: 700 }}
-            >
-              brak
-            </button>
-            {Array.from({ length: 11 }, (_, v) => (
-              <button
-                key={v}
-                onClick={() => setPainVas(v)}
-                style={{ width: 34, padding: '0.45rem 0', borderRadius: 8, border: `1.5px solid ${painVas === v ? C.gold : C.grayLight}`, background: painVas === v ? (v >= 5 ? C.red : C.orange) : C.offWhite, color: painVas === v ? C.white : C.navy, fontFamily: mono, fontSize: '0.78rem', fontWeight: 700 }}
-              >
-                {v}
-              </button>
-            ))}
-          </div>
-          {painVas !== null && (
-            <input
-              value={painComment}
-              onChange={e => setPainComment(e.target.value)}
-              placeholder="Gdzie boli? Komentarz do bólu..."
-              style={{ width: '100%', padding: '0.65rem', border: `1.5px solid ${C.grayLight}`, borderRadius: 10, background: C.offWhite, color: C.navy, fontFamily: sans, fontSize: '0.88rem', outline: 'none', marginBottom: '1rem' }}
-            />
+          <button
+            onClick={() => { const next = !pain; setPain(next); if (!next) { setPainVas(null); setPainComment('') } }}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: 10, border: `1.5px solid ${pain ? C.red : C.grayLight}`, background: pain ? '#FEF2F2' : C.offWhite, marginBottom: pain ? '0.85rem' : '1.25rem' }}
+          >
+            <span style={{ flexShrink: 0, width: 38, height: 22, borderRadius: 999, background: pain ? C.red : C.grayLight, position: 'relative', transition: 'background 0.15s' }}>
+              <span style={{ position: 'absolute', top: 2, left: pain ? 18 : 2, width: 18, height: 18, borderRadius: '50%', background: C.white, transition: 'left 0.15s' }} />
+            </span>
+            <span style={{ fontWeight: 700, fontSize: '0.84rem', color: pain ? '#B91C1C' : C.navy }}>Wystąpił ból</span>
+          </button>
+
+          {pain && (
+            <>
+              <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 6 }}>
+                Nasilenie (skala VAS) — opcjonalnie
+              </div>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
+                <button
+                  onClick={() => setPainVas(null)}
+                  style={{ padding: '0.45rem 0.7rem', borderRadius: 8, border: `1.5px solid ${painVas === null ? C.gold : C.grayLight}`, background: painVas === null ? C.navy : C.offWhite, color: painVas === null ? C.gold : C.navy, fontFamily: mono, fontSize: '0.72rem', fontWeight: 700 }}
+                >
+                  nie podano
+                </button>
+                {Array.from({ length: 11 }, (_, v) => (
+                  <button
+                    key={v}
+                    onClick={() => setPainVas(v)}
+                    style={{ width: 34, padding: '0.45rem 0', borderRadius: 8, border: `1.5px solid ${painVas === v ? C.gold : C.grayLight}`, background: painVas === v ? (v >= 5 ? C.red : C.orange) : C.offWhite, color: painVas === v ? C.white : C.navy, fontFamily: mono, fontSize: '0.78rem', fontWeight: 700 }}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+              <input
+                value={painComment}
+                onChange={e => setPainComment(e.target.value)}
+                placeholder="Gdzie boli? Opis bólu..."
+                style={{ width: '100%', padding: '0.65rem', border: `1.5px solid ${C.grayLight}`, borderRadius: 10, background: C.offWhite, color: C.navy, fontFamily: sans, fontSize: '0.88rem', outline: 'none', marginBottom: '1.25rem' }}
+              />
+            </>
           )}
 
           {/* ── KOMENTARZ ── */}
-          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8, marginTop: painVas === null ? '0.25rem' : 0 }}>
+          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8 }}>
             Komentarz do całego ćwiczenia
           </div>
           <textarea
@@ -767,11 +790,11 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                   ✎
                                 </button>
                               </div>
-                              {(entry?.pain_vas != null || entry?.comment) && (
+                              {(entry?.pain || entry?.pain_vas != null || entry?.pain_comment || entry?.comment) && (
                                 <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap', alignItems: 'center' }}>
-                                  {entry?.pain_vas != null && (
-                                    <span style={{ fontFamily: mono, fontSize: '0.6rem', fontWeight: 700, color: C.white, background: entry.pain_vas >= 5 ? C.red : C.orange, borderRadius: 6, padding: '1px 6px' }}>
-                                      ból {entry.pain_vas}
+                                  {(entry?.pain || entry?.pain_vas != null) && (
+                                    <span title={entry?.pain_comment || undefined} style={{ fontFamily: mono, fontSize: '0.6rem', fontWeight: 700, color: C.white, background: (entry?.pain_vas != null && entry.pain_vas >= 5) ? C.red : C.orange, borderRadius: 6, padding: '1px 6px' }}>
+                                      ból{entry?.pain_vas != null ? ` ${entry.pain_vas}` : ''}
                                     </span>
                                   )}
                                   {entry?.comment && <span style={{ fontSize: '0.7rem' }} title={entry.comment}>💬</span>}
