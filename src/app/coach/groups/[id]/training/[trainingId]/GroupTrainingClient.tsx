@@ -39,6 +39,8 @@ type Entry = {
   comment?: string | null
   // zamiana / modyfikacja ćwiczenia tylko dla tej zawodniczki
   exercise_override?: string | null
+  // masa własna — w komórce wpisujemy powtórzenia zamiast ciężaru
+  bodyweight?: boolean | null
 }
 
 interface Props {
@@ -81,6 +83,7 @@ function CellModal({ athlete, exercise, entry, training, onClose, onSaved }: {
   const [painComment, setPainComment] = useState(entry?.pain_comment || '')
   const [comment, setComment] = useState(entry?.comment || '')
   const [exerciseOverride, setExerciseOverride] = useState(entry?.exercise_override || '')
+  const [bodyweight, setBodyweight] = useState(!!entry?.bodyweight)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -116,13 +119,23 @@ function CellModal({ athlete, exercise, entry, training, onClose, onSaved }: {
       pain_comment: painVas !== null ? (painComment.trim() || null) : null,
       comment: comment.trim() || null,
       exercise_override: exerciseOverride.trim() || null,
+      bodyweight,
       updated_at: new Date().toISOString(),
     }
-    const { data, error: err } = await supabase
+    let { data, error: err } = await supabase
       .from('group_training_entries')
       .upsert(payload, { onConflict: 'exercise_id,athlete_id' })
       .select()
       .single()
+    // Migracja kolumny „bodyweight” jeszcze nie wgrana — zapisz bez niej
+    if (err && err.message.includes('bodyweight')) {
+      const { bodyweight: _omit, ...rest } = payload
+      ;({ data, error: err } = await supabase
+        .from('group_training_entries')
+        .upsert(rest, { onConflict: 'exercise_id,athlete_id' })
+        .select()
+        .single())
+    }
     setSaving(false)
     if (err || !data) { setError(err?.message || 'Błąd zapisu'); return }
     onSaved(data as Entry)
@@ -154,18 +167,32 @@ function CellModal({ athlete, exercise, entry, training, onClose, onSaved }: {
             value={exerciseOverride}
             onChange={e => setExerciseOverride(e.target.value)}
             placeholder={`np. zamiast „${exercise.name || 'ćwiczenia'}”: wersja z gumą, inne ćwiczenie...`}
-            style={{ width: '100%', padding: '0.65rem', border: `1.5px solid ${exerciseOverride.trim() ? C.gold : C.grayLight}`, borderRadius: 10, background: exerciseOverride.trim() ? '#FFFBEB' : C.offWhite, color: C.navy, fontFamily: sans, fontSize: '0.88rem', outline: 'none', marginBottom: '1.25rem' }}
+            style={{ width: '100%', padding: '0.65rem', border: `1.5px solid ${exerciseOverride.trim() ? C.gold : C.grayLight}`, borderRadius: 10, background: exerciseOverride.trim() ? '#FFFBEB' : C.offWhite, color: C.navy, fontFamily: sans, fontSize: '0.88rem', outline: 'none', marginBottom: '0.75rem' }}
           />
+
+          {/* ── BEZ CIĘŻARU (masa własna) ── */}
+          <button
+            onClick={() => setBodyweight(v => !v)}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: 10, border: `1.5px solid ${bodyweight ? C.gold : C.grayLight}`, background: bodyweight ? '#FFFBEB' : C.offWhite, marginBottom: '1.25rem' }}
+          >
+            <span style={{ flexShrink: 0, width: 38, height: 22, borderRadius: 999, background: bodyweight ? C.gold : C.grayLight, position: 'relative', transition: 'background 0.15s' }}>
+              <span style={{ position: 'absolute', top: 2, left: bodyweight ? 18 : 2, width: 18, height: 18, borderRadius: '50%', background: C.white, transition: 'left 0.15s' }} />
+            </span>
+            <span>
+              <span style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', color: C.navy }}>Bez ciężaru — wpisuj powtórzenia</span>
+              <span style={{ display: 'block', fontFamily: mono, fontSize: '0.6rem', color: C.gray, marginTop: 1 }}>masa własna: w tabeli zamiast kg wpisujesz wykonane powt.</span>
+            </span>
+          </button>
 
           {/* ── SERIE ── */}
           <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8 }}>
             Serie
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '34px 1fr 1fr 1fr 30px', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: bodyweight ? '34px 1fr 1fr 30px' : '34px 1fr 1fr 1fr 30px', gap: 6, alignItems: 'center', marginBottom: 6 }}>
             <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, textAlign: 'center' }}>#</span>
             <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, textAlign: 'center' }}>POWT.</span>
             <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, textAlign: 'center' }}>TEMPO</span>
-            <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, textAlign: 'center' }}>CIĘŻAR</span>
+            {!bodyweight && <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, textAlign: 'center' }}>CIĘŻAR</span>}
             <span />
           </div>
           {sets.map((s, idx) => {
@@ -173,7 +200,7 @@ function CellModal({ athlete, exercise, entry, training, onClose, onSaved }: {
               ? { ...cellInput, textDecoration: 'line-through', color: C.gray, background: '#F1F3F7' }
               : cellInput
             return (
-              <div key={idx} style={{ display: 'grid', gridTemplateColumns: '34px 1fr 1fr 1fr 30px', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+              <div key={idx} style={{ display: 'grid', gridTemplateColumns: bodyweight ? '34px 1fr 1fr 30px' : '34px 1fr 1fr 1fr 30px', gap: 6, alignItems: 'center', marginBottom: 6 }}>
                 <button
                   onClick={() => toggleSkip(idx)}
                   title={s.skipped ? 'Cofnij — seria zrobiona' : 'Oznacz: seria nie zrobiona'}
@@ -183,7 +210,7 @@ function CellModal({ athlete, exercise, entry, training, onClose, onSaved }: {
                 </button>
                 <input value={s.reps || ''} onChange={e => updateSet(idx, 'reps', e.target.value)} placeholder="8" style={skipInput} inputMode="text" disabled={s.skipped} />
                 <input value={s.tempo || ''} onChange={e => updateSet(idx, 'tempo', e.target.value)} placeholder="3010" style={skipInput} inputMode="text" disabled={s.skipped} />
-                <input value={s.weight || ''} onChange={e => updateSet(idx, 'weight', e.target.value)} placeholder="kg" style={skipInput} inputMode="text" disabled={s.skipped} />
+                {!bodyweight && <input value={s.weight || ''} onChange={e => updateSet(idx, 'weight', e.target.value)} placeholder="kg" style={skipInput} inputMode="text" disabled={s.skipped} />}
                 <button onClick={() => removeSet(idx)} title="Usuń serię" style={{ border: 'none', background: 'none', color: C.gray, fontSize: '0.9rem', padding: 4 }}>✕</button>
               </div>
             )
@@ -627,7 +654,8 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                         {sortedExercises.map(ex => {
                           const entry = entryMap.get(entryKey(ex.id, athlete.id)) || null
                           const sets = effectiveSets(ex, entry)
-                          const maxMode = isMaxReps(ex.reps)
+                          // Tryb powtórzeń: kolumna „max" dla całej grupy ALBO „bez ciężaru” dla tej zawodniczki
+                          const repsMode = isMaxReps(ex.reps) || !!entry?.bodyweight
                           return (
                             <td key={ex.id} style={{ padding: '0.45rem 0.5rem', ...(absent ? { opacity: 0.35, pointerEvents: 'none' as const } : {}) }}>
                               {entry?.exercise_override && (
@@ -638,10 +666,10 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                               )}
                               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, flexWrap: 'wrap' }}>
                                 {sets.map((s, i) => {
-                                  // W trybie „max" wpisujemy wykonane powtórzenia; odziedziczone „max”
+                                  // W trybie powtórzeń pokazujemy wpisane powt.; odziedziczone „max”
                                   // z rozpiski traktujemy jak puste (jeszcze nie wpisano wyniku).
                                   const repsPerf = s.reps && !isMaxReps(s.reps) ? s.reps : ''
-                                  const cellVal = maxMode ? repsPerf : (s.weight || '')
+                                  const cellVal = repsMode ? repsPerf : (s.weight || '')
                                   return (
                                     <div key={`${ex.id}_${athlete.id}_${i}_${s.skipped ? 'x' : cellVal}`}>
                                       <button
@@ -662,8 +690,8 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                       ) : (
                                         <input
                                           defaultValue={cellVal}
-                                          placeholder={maxMode ? 'powt.' : 'kg'}
-                                          onBlur={e => saveInlineField(athlete, ex, i, maxMode ? 'reps' : 'weight', e.target.value)}
+                                          placeholder={repsMode ? 'powt.' : 'kg'}
+                                          onBlur={e => saveInlineField(athlete, ex, i, repsMode ? 'reps' : 'weight', e.target.value)}
                                           onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
                                           className={`gt-w${cellVal ? ' filled' : ''}`}
                                         />
