@@ -268,10 +268,13 @@ export default function GroupSummaryClient({ group, athletes, trainings }: Props
                           <th key={ex.id} style={{ minWidth: 150, padding: '0.6rem 0.75rem', fontWeight: 800, fontSize: '0.82rem', color: C.navy, background: C.offWhite, textAlign: 'left' }}>
                             {ex.name}
                             {(ex.sets_planned || ex.reps || ex.tempo) && (
-                              <div style={{ fontFamily: mono, fontSize: '0.6rem', fontWeight: 400, color: C.gray, marginTop: 3, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                                {ex.sets_planned ? <span>{ex.sets_planned} serie</span> : null}
-                                {ex.reps ? <span>{ex.reps} powt.</span> : null}
-                                {ex.tempo ? <span>tempo {ex.tempo}</span> : null}
+                              <div style={{ fontFamily: mono, fontSize: '0.6rem', fontWeight: 400, color: C.gray, marginTop: 3 }}>
+                                {[
+                                  ex.sets_planned && ex.reps ? `${ex.sets_planned} × ${ex.reps}`
+                                    : ex.sets_planned ? `${ex.sets_planned} ser.`
+                                    : ex.reps ? `${ex.reps} powt.` : '',
+                                  ex.tempo || '',
+                                ].filter(Boolean).join(' · ')}
                               </div>
                             )}
                           </th>
