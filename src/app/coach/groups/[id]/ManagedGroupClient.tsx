@@ -104,10 +104,178 @@ function AddAthleteModal({ group, onClose, onAdded }: { group: Group; onClose: (
   )
 }
 
+type ParsedRow = { name: string; sets: string; reps: string; tempo: string }
+
+// Heurystyka: znajdź ćwiczenia w arkuszu (wiersz = ćwiczenie, kolumny:
+// nazwa / serie / powtórzenia / tempo). Wynik i tak jest edytowalny.
+function extractExercises(rows: any[][]): ParsedRow[] {
+  const norm = (s: any) => String(s ?? '').trim()
+  let headerIdx = -1
+  for (let i = 0; i < Math.min(rows.length, 12); i++) {
+    if ((rows[i] || []).some(c => /ćwicz|cwicz|exercise|nazwa/i.test(norm(c)))) { headerIdx = i; break }
+  }
+  let nameCol = 0, setsCol = 1, repsCol = 2, tempoCol = 3
+  if (headerIdx >= 0) {
+    const h = (rows[headerIdx] || []).map(norm)
+    const find = (re: RegExp, def: number) => { const idx = h.findIndex(c => re.test(c)); return idx >= 0 ? idx : def }
+    nameCol = find(/ćwicz|cwicz|exercise|nazwa/i, 0)
+    setsCol = find(/seri|sets/i, 1)
+    repsCol = find(/powt|reps|rep/i, 2)
+    tempoCol = find(/tempo/i, 3)
+  }
+  const start = headerIdx >= 0 ? headerIdx + 1 : 0
+  const out: ParsedRow[] = []
+  for (let i = start; i < rows.length; i++) {
+    const r = rows[i] || []
+    const name = norm(r[nameCol])
+    if (!name) continue
+    if (headerIdx < 0 && i === start && /ćwicz|nazwa|serie|powt|tempo/i.test(name)) continue
+    out.push({
+      name,
+      sets: norm(r[setsCol]).replace(/[^\d]/g, ''),
+      reps: norm(r[repsCol]),
+      tempo: norm(r[tempoCol]),
+    })
+  }
+  return out
+}
+
+function ImportTrainingModal({ group, onClose }: { group: Group; onClose: () => void }) {
+  const router = useRouter()
+  const supabase = createClient()
+  const [date, setDate] = useState(localDateStr())
+  const [rowsData, setRowsData] = useState<ParsedRow[]>([])
+  const [fileName, setFileName] = useState('')
+  const [parsing, setParsing] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleFile(file?: File | null) {
+    if (!file) return
+    setError(''); setParsing(true); setFileName(file.name)
+    try {
+      const XLSX = await import('xlsx')
+      const buf = await file.arrayBuffer()
+      const wb = XLSX.read(buf, { type: 'array' })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: '' }) as any[][]
+      const parsed = extractExercises(rows)
+      if (parsed.length === 0) setError('Nie znalazłem ćwiczeń w pliku. Sprawdź układ (kolumny: Ćwiczenie, Serie, Powtórzenia, Tempo) albo dodaj wiersze ręcznie poniżej.')
+      setRowsData(parsed)
+    } catch (e: any) {
+      setError(`Nie udało się odczytać pliku: ${e?.message || e}`)
+    }
+    setParsing(false)
+  }
+
+  function updateRow(i: number, field: keyof ParsedRow, val: string) {
+    setRowsData(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: val } : r))
+  }
+  function removeRow(i: number) { setRowsData(prev => prev.filter((_, idx) => idx !== i)) }
+  function addRow() { setRowsData(prev => [...prev, { name: '', sets: '3', reps: '', tempo: '' }]) }
+
+  async function handleCreate() {
+    const valid = rowsData.filter(r => r.name.trim())
+    if (!date) { setError('Wybierz datę treningu.'); return }
+    if (valid.length === 0) { setError('Brak ćwiczeń do zapisania — wgraj plik albo dodaj wiersz.'); return }
+    setCreating(true); setError('')
+    const { data: tr, error: e1 } = await supabase
+      .from('group_trainings')
+      .insert({ group_id: group.id, training_date: date })
+      .select()
+      .single()
+    if (e1 || !tr) {
+      setCreating(false)
+      const dup = (e1?.message || '').includes('duplicate') || (e1?.message || '').includes('unique')
+      setError(dup ? 'Istnieje już trening z tą datą — wybierz inną.' : (e1?.message || 'Błąd tworzenia treningu'))
+      return
+    }
+    const exRows = valid.map((r, i) => ({
+      training_id: tr.id,
+      name: r.name.trim(),
+      exercise_order: i + 1,
+      sets_planned: r.sets ? parseInt(r.sets) : 3,
+      reps: r.reps.trim() || null,
+      tempo: r.tempo.trim() || null,
+    }))
+    const { error: e2 } = await supabase.from('group_training_exercises').insert(exRows)
+    if (e2) { setCreating(false); setError(e2.message); return }
+    router.push(`/coach/groups/${group.id}/training/${tr.id}`)
+  }
+
+  const cellInput: React.CSSProperties = {
+    width: '100%', padding: '0.5rem', border: `1.5px solid ${C.grayLight}`, borderRadius: 8,
+    background: C.offWhite, color: C.navy, fontFamily: sans, fontSize: '0.84rem', outline: 'none',
+  }
+  const monoInput: React.CSSProperties = { ...cellInput, fontFamily: mono, fontSize: '0.78rem', textAlign: 'center' }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(13,27,42,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: sans }}>
+      <div style={{ width: '100%', maxWidth: 640, maxHeight: '92vh', display: 'flex', flexDirection: 'column', background: C.white, borderRadius: 18, overflow: 'hidden', border: `1.5px solid ${C.grayLight}` }}>
+        <div style={{ background: C.navy, padding: '1rem 1.25rem', flexShrink: 0 }}>
+          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>{group.name}</div>
+          <div style={{ fontWeight: 800, fontSize: '1.15rem', color: C.white }}>Wgraj trening z archiwum</div>
+          <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: 4 }}>Plik Excel (.xlsx/.csv) — wiersz = ćwiczenie, kolumny: nazwa, serie, powtórzenia, tempo.</div>
+        </div>
+
+        <div style={{ overflowY: 'auto', flex: 1, padding: '1.1rem 1.25rem' }}>
+          {/* Data */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '1rem', flexWrap: 'wrap' }}>
+            <span style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>Data treningu</span>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...monoInput, width: 'auto', textAlign: 'left' }} />
+          </div>
+
+          {/* Plik */}
+          <label style={{ display: 'block', cursor: 'pointer', marginBottom: '1.1rem' }}>
+            <input type="file" accept=".xlsx,.xls,.csv" onChange={e => handleFile(e.target.files?.[0])} style={{ display: 'none' }} />
+            <div style={{ padding: '0.9rem', borderRadius: 12, border: `1.5px dashed ${C.gray}`, background: C.offWhite, textAlign: 'center', color: C.navy, fontWeight: 700, fontSize: '0.86rem' }}>
+              {parsing ? 'Analizuję plik...' : fileName ? `📄 ${fileName} — kliknij, by wgrać inny` : '⬆ Wgraj plik Excel / CSV'}
+            </div>
+          </label>
+
+          {error && <div style={{ color: C.red, fontSize: '0.82rem', marginBottom: '0.9rem', background: '#FEF2F2', border: `1.5px solid ${C.red}`, borderRadius: 10, padding: '0.6rem 0.75rem' }}>❌ {error}</div>}
+
+          {/* Edytowalna lista ćwiczeń */}
+          {rowsData.length > 0 && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 52px 70px 80px 28px', gap: 6, marginBottom: 5 }}>
+                {['Ćwiczenie', 'Serie', 'Powt.', 'Tempo', ''].map((h, i) => (
+                  <span key={i} style={{ fontFamily: mono, fontSize: '0.56rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: i === 0 ? 'left' : 'center' }}>{h}</span>
+                ))}
+              </div>
+              {rowsData.map((r, i) => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 52px 70px 80px 28px', gap: 6, marginBottom: 6, alignItems: 'center' }}>
+                  <input value={r.name} onChange={e => updateRow(i, 'name', e.target.value)} placeholder="nazwa ćwiczenia" style={cellInput} />
+                  <input value={r.sets} onChange={e => updateRow(i, 'sets', e.target.value.replace(/[^\d]/g, ''))} placeholder="3" style={monoInput} inputMode="numeric" />
+                  <input value={r.reps} onChange={e => updateRow(i, 'reps', e.target.value)} placeholder="8" style={monoInput} />
+                  <input value={r.tempo} onChange={e => updateRow(i, 'tempo', e.target.value)} placeholder="3010" style={monoInput} />
+                  <button onClick={() => removeRow(i)} title="Usuń" style={{ border: 'none', background: 'none', color: C.gray, fontSize: '0.9rem', padding: 2 }}>✕</button>
+                </div>
+              ))}
+            </>
+          )}
+          <button onClick={addRow} style={{ width: '100%', padding: '0.6rem', borderRadius: 10, border: `1.5px dashed ${C.gray}`, background: C.white, color: C.navy, fontWeight: 700, fontSize: '0.82rem', marginTop: 4 }}>
+            ＋ Dodaj ćwiczenie ręcznie
+          </button>
+        </div>
+
+        <div style={{ padding: '0.875rem 1.25rem', borderTop: `1.5px solid ${C.grayLight}`, display: 'flex', gap: 10, flexShrink: 0 }}>
+          <button onClick={onClose} style={{ padding: '0.8rem 1.1rem', border: `1.5px solid ${C.grayLight}`, borderRadius: 12, background: C.white, color: C.gray, fontWeight: 700 }}>Anuluj</button>
+          <button onClick={handleCreate} disabled={creating || rowsData.filter(r => r.name.trim()).length === 0}
+            style={{ flex: 1, padding: '0.8rem', border: 'none', borderRadius: 12, background: rowsData.some(r => r.name.trim()) ? C.navy : C.grayLight, color: rowsData.some(r => r.name.trim()) ? C.gold : C.gray, fontWeight: 900, fontSize: '0.92rem' }}>
+            {creating ? 'Tworzę trening...' : `Utwórz trening (${rowsData.filter(r => r.name.trim()).length} ćw.)`}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function ManagedGroupClient({ group, athletes, trainings }: Props) {
   const router = useRouter()
   const supabase = createClient()
   const [addOpen, setAddOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState('')
   const [deletingId, setDeletingId] = useState<number | null>(null)
@@ -152,6 +320,12 @@ export default function ManagedGroupClient({ group, athletes, trainings }: Props
       icon: '🏋️',
       onClick: handleStartTraining,
       primary: true,
+    },
+    {
+      label: 'Wgraj trening z archiwum',
+      desc: 'Wgraj plik Excel/CSV — system rozpisze ćwiczenia do edytowalnej tabeli i utworzy trening z wybraną datą',
+      icon: '📥',
+      onClick: () => setImportOpen(true),
     },
     {
       label: 'Podsumowanie',
@@ -303,6 +477,13 @@ export default function ManagedGroupClient({ group, athletes, trainings }: Props
           group={group}
           onClose={() => setAddOpen(false)}
           onAdded={() => router.refresh()}
+        />
+      )}
+
+      {importOpen && (
+        <ImportTrainingModal
+          group={group}
+          onClose={() => setImportOpen(false)}
         />
       )}
     </>
