@@ -94,7 +94,7 @@ function SetsSummary({ sets, ex }: { sets: SetRow[]; ex: Exercise }) {
             {s.skipped ? (
               <span style={{ fontFamily: mono, fontSize: '0.72rem', color: C.red, textDecoration: 'line-through' }}>nie zrob.</span>
             ) : (
-              <span style={{ fontFamily: mono, fontSize: '0.74rem', color: C.navy, whiteSpace: 'nowrap' }}>
+              <span style={{ fontFamily: mono, fontSize: '0.74rem', color: C.navy }}>
                 {s.reps || '—'}
                 {s.weight !== '' ? <> × <strong style={{ fontWeight: 700 }}>{fmtWeight(s.weight)}</strong></> : null}
                 {tempoMod ? <span style={{ color: C.gray }}> · {s.tempo}</span> : null}
@@ -199,12 +199,11 @@ export default function GroupSummaryClient({ group, athletes, trainings }: Props
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: ${C.offWhite}; }
         button { cursor: pointer; font-family: inherit; }
-        .gs-table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; }
+        .gs-table { border-collapse: separate; border-spacing: 0; width: 100%; table-layout: fixed; }
         .gs-table th, .gs-table td { border-bottom: 1px solid ${C.grayLight}; border-right: 1px solid ${C.grayLight}; vertical-align: top; }
+        .gs-table th:last-child, .gs-table td:last-child { border-right: none; }
         .gs-table tbody tr:last-child td { border-bottom: none; }
-        .gs-sticky { position: sticky; left: 0; z-index: 2; background: ${C.white}; box-shadow: 3px 0 8px rgba(13,27,42,0.05); }
-        .gs-table thead th { position: sticky; top: 0; z-index: 4; box-shadow: 0 2px 6px rgba(13,27,42,0.05); }
-        .gs-table thead th.gs-sticky { z-index: 5; }
+        .gs-sticky { background: ${C.white}; }
         .gs-row td { transition: background 0.12s ease; }
         .gs-row:nth-child(even) td, .gs-row:nth-child(even) .gs-sticky { background: #FBFCFE; }
         .gs-row:hover td, .gs-row:hover .gs-sticky { background: #EFF4FB; }
@@ -257,15 +256,15 @@ export default function GroupSummaryClient({ group, athletes, trainings }: Props
                   Ten trening nie ma jeszcze wpisanych ćwiczeń.
                 </div>
               ) : (
-                <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, overflow: 'auto', maxHeight: '65vh', marginBottom: '1.5rem', boxShadow: '0 4px 20px rgba(13,27,42,0.06)' }}>
+                <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, overflow: 'hidden', marginBottom: '1.5rem', boxShadow: '0 4px 20px rgba(13,27,42,0.06)' }}>
                   <table className="gs-table">
                     <thead>
                       <tr>
-                        <th className="gs-sticky" style={{ minWidth: 150, padding: '0.7rem 0.85rem', textAlign: 'left', fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', background: C.offWhite, zIndex: 5 }}>
+                        <th className="gs-sticky" style={{ width: 168, padding: '0.7rem 0.85rem', textAlign: 'left', fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', background: C.offWhite }}>
                           Zawodniczka
                         </th>
                         {exercises.map(ex => (
-                          <th key={ex.id} style={{ minWidth: 150, padding: '0.6rem 0.75rem', fontWeight: 800, fontSize: '0.82rem', color: C.navy, background: C.offWhite, textAlign: 'left' }}>
+                          <th key={ex.id} style={{ padding: '0.6rem 0.75rem', fontWeight: 800, fontSize: '0.82rem', color: C.navy, background: C.offWhite, textAlign: 'left' }}>
                             {ex.name}
                             {(ex.sets_planned || ex.reps || ex.tempo) && (
                               <div style={{ fontFamily: mono, fontSize: '0.6rem', fontWeight: 400, color: C.gray, marginTop: 3 }}>
@@ -284,7 +283,7 @@ export default function GroupSummaryClient({ group, athletes, trainings }: Props
                     <tbody>
                       {athletes.map(athlete => (
                         <tr key={athlete.id} className="gs-row">
-                          <td className="gs-sticky" style={{ padding: '0.6rem 0.85rem', fontWeight: 700, fontSize: '0.84rem', whiteSpace: 'nowrap' }}>
+                          <td className="gs-sticky" style={{ padding: '0.6rem 0.85rem', fontWeight: 700, fontSize: '0.84rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             {athlete.full_name}
                           </td>
                           {exercises.map(ex => {
