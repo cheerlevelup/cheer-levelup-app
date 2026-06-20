@@ -104,7 +104,77 @@ function AddAthleteModal({ group, onClose, onAdded }: { group: Group; onClose: (
   )
 }
 
-type ParsedRow = { name: string; sets: string; reps: string; tempo: string }
+type MatrixEntry = { athleteId: number; weights: string[] }
+type ParsedRow = { name: string; sets: string; reps: string; tempo: string; entries?: MatrixEntry[] }
+
+function normName(s: any) {
+  return String(s ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/ł/g, 'l')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+
+// Komórka z ciężarami → tablica ciężarów serii: „10/12/15”, „10 12 15”, „10, 12” → [10,12,15]
+function parseWeights(cell: any): string[] {
+  const s = String(cell ?? '').trim()
+  if (!s) return []
+  return s.split(/[,;/|\s]+/).map(t => t.trim()).filter(Boolean)
+}
+
+// Wiersz nagłówka = w kolumnach (od 2.) są nazwy ćwiczeń (tekst), nie liczby
+function isHeaderRow(r: any[]) {
+  const cells = (r || []).slice(1).map(c => String(c ?? '').trim()).filter(Boolean)
+  if (cells.length < 2) return false
+  const textCells = cells.filter(c => /[a-ząćęłńóśźż]/i.test(c))
+  return textCells.length >= Math.ceil(cells.length * 0.6)
+}
+
+// Format siatki: imiona w wierszach × ćwiczenia w kolumnach, ciężary w komórkach
+function detectMatrix(rows: any[][], athletes: Athlete[]):
+  { exercises: ParsedRow[]; matched: string[]; unmatched: string[] } | null {
+  const athleteMap = new Map<string, number>()
+  for (const a of athletes) athleteMap.set(normName(a.full_name), a.id)
+
+  let headerIdx = -1
+  for (let i = 0; i < Math.min(rows.length, 12); i++) {
+    if (isHeaderRow(rows[i])) { headerIdx = i; break }
+  }
+  if (headerIdx < 0) return null
+
+  const header = rows[headerIdx] || []
+  const exCols: { col: number; name: string }[] = []
+  for (let c = 1; c < header.length; c++) {
+    const nm = String(header[c] ?? '').trim()
+    if (nm) exCols.push({ col: c, name: nm })
+  }
+  if (exCols.length === 0) return null
+
+  const perEx: MatrixEntry[][] = exCols.map(() => [])
+  const matched: string[] = []
+  const unmatched: string[] = []
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const r = rows[i] || []
+    const rawName = String(r[0] ?? '').trim()
+    if (!rawName) continue
+    const id = athleteMap.get(normName(rawName))
+    if (!id) { unmatched.push(rawName); continue }
+    matched.push(rawName)
+    exCols.forEach((ec, ei) => {
+      const weights = parseWeights(r[ec.col])
+      if (weights.length) perEx[ei].push({ athleteId: id, weights })
+    })
+  }
+  if (matched.length === 0) return null
+
+  const exercises: ParsedRow[] = exCols.map((ec, ei) => {
+    const maxSets = Math.max(1, ...perEx[ei].map(e => e.weights.length))
+    return { name: ec.name, sets: String(maxSets), reps: '', tempo: '', entries: perEx[ei] }
+  })
+  return { exercises, matched, unmatched }
+}
 
 // Heurystyka: znajdź ćwiczenia w arkuszu (wiersz = ćwiczenie, kolumny:
 // nazwa / serie / powtórzenia / tempo). Wynik i tak jest edytowalny.
@@ -140,7 +210,7 @@ function extractExercises(rows: any[][]): ParsedRow[] {
   return out
 }
 
-function ImportTrainingModal({ group, onClose }: { group: Group; onClose: () => void }) {
+function ImportTrainingModal({ group, athletes, onClose }: { group: Group; athletes: Athlete[]; onClose: () => void }) {
   const router = useRouter()
   const supabase = createClient()
   const [date, setDate] = useState(localDateStr())
@@ -149,19 +219,28 @@ function ImportTrainingModal({ group, onClose }: { group: Group; onClose: () => 
   const [parsing, setParsing] = useState(false)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
+  // Raport dopasowania imion (format siatki: imiona × ćwiczenia)
+  const [matchReport, setMatchReport] = useState<{ matched: number; unmatched: string[] } | null>(null)
 
   async function handleFile(file?: File | null) {
     if (!file) return
-    setError(''); setParsing(true); setFileName(file.name)
+    setError(''); setParsing(true); setFileName(file.name); setMatchReport(null)
     try {
       const XLSX = await import('xlsx')
       const buf = await file.arrayBuffer()
       const wb = XLSX.read(buf, { type: 'array' })
       const ws = wb.Sheets[wb.SheetNames[0]]
       const rows = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: '' }) as any[][]
-      const parsed = extractExercises(rows)
-      if (parsed.length === 0) setError('Nie znalazłem ćwiczeń w pliku. Sprawdź układ (kolumny: Ćwiczenie, Serie, Powtórzenia, Tempo) albo dodaj wiersze ręcznie poniżej.')
-      setRowsData(parsed)
+      // Najpierw spróbuj siatki (imiona × ćwiczenia z ciężarami), potem listy ćwiczeń
+      const matrix = detectMatrix(rows, athletes)
+      if (matrix) {
+        setRowsData(matrix.exercises)
+        setMatchReport({ matched: matrix.matched.length, unmatched: matrix.unmatched })
+      } else {
+        const parsed = extractExercises(rows)
+        if (parsed.length === 0) setError('Nie rozpoznałem układu pliku. Oczekiwany: imiona w 1. kolumnie, ćwiczenia w nagłówku, ciężary w komórkach — albo lista ćwiczeń (Ćwiczenie / Serie / Powt. / Tempo).')
+        setRowsData(parsed)
+      }
     } catch (e: any) {
       setError(`Nie udało się odczytać pliku: ${e?.message || e}`)
     }
@@ -198,8 +277,32 @@ function ImportTrainingModal({ group, onClose }: { group: Group; onClose: () => 
       reps: r.reps.trim() || null,
       tempo: r.tempo.trim() || null,
     }))
-    const { error: e2 } = await supabase.from('group_training_exercises').insert(exRows)
-    if (e2) { setCreating(false); setError(e2.message); return }
+    const { data: insertedEx, error: e2 } = await supabase
+      .from('group_training_exercises')
+      .insert(exRows)
+      .select()
+    if (e2 || !insertedEx) { setCreating(false); setError(e2?.message || 'Błąd zapisu ćwiczeń'); return }
+
+    // Ciężary zawodniczek (gdy plik był siatką imiona × ćwiczenia)
+    const idByOrder = new Map<number, number>(insertedEx.map((x: any) => [x.exercise_order, x.id]))
+    const entryRows: any[] = []
+    valid.forEach((r, i) => {
+      const exId = idByOrder.get(i + 1)
+      if (!exId || !r.entries) return
+      for (const e of r.entries) {
+        if (!e.weights.length) continue
+        entryRows.push({
+          training_id: tr.id,
+          exercise_id: exId,
+          athlete_id: e.athleteId,
+          sets: e.weights.map(w => ({ weight: w })),
+        })
+      }
+    })
+    if (entryRows.length) {
+      const { error: e3 } = await supabase.from('group_training_entries').insert(entryRows)
+      if (e3) { setCreating(false); setError(`Trening utworzony, ale ciężary się nie zapisały: ${e3.message}`); return }
+    }
     router.push(`/coach/groups/${group.id}/training/${tr.id}`)
   }
 
@@ -215,7 +318,7 @@ function ImportTrainingModal({ group, onClose }: { group: Group; onClose: () => 
         <div style={{ background: C.navy, padding: '1rem 1.25rem', flexShrink: 0 }}>
           <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>{group.name}</div>
           <div style={{ fontWeight: 800, fontSize: '1.15rem', color: C.white }}>Wgraj trening z archiwum</div>
-          <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: 4 }}>Plik Excel (.xlsx/.csv) — wiersz = ćwiczenie, kolumny: nazwa, serie, powtórzenia, tempo.</div>
+          <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: 4 }}>Plik Excel (.xlsx/.csv). Rozpozna siatkę (imiona w wierszach × ćwiczenia w nagłówku, ciężary w komórkach) albo listę ćwiczeń.</div>
         </div>
 
         <div style={{ overflowY: 'auto', flex: 1, padding: '1.1rem 1.25rem' }}>
@@ -234,6 +337,17 @@ function ImportTrainingModal({ group, onClose }: { group: Group; onClose: () => 
           </label>
 
           {error && <div style={{ color: C.red, fontSize: '0.82rem', marginBottom: '0.9rem', background: '#FEF2F2', border: `1.5px solid ${C.red}`, borderRadius: 10, padding: '0.6rem 0.75rem' }}>❌ {error}</div>}
+
+          {matchReport && (
+            <div style={{ marginBottom: '0.9rem', background: '#F0FDF4', border: '1.5px solid #86EFAC', borderRadius: 10, padding: '0.6rem 0.75rem', fontSize: '0.8rem', color: '#15803D' }}>
+              ✅ Wykryto siatkę z ciężarami — dopasowano <strong>{matchReport.matched}</strong> zawodniczek do grupy.
+              {matchReport.unmatched.length > 0 && (
+                <div style={{ marginTop: 5, color: '#92600A' }}>
+                  ⚠ Nie dopasowano (sprawdź pisownię lub dodaj do grupy): {matchReport.unmatched.join(', ')}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Edytowalna lista ćwiczeń */}
           {rowsData.length > 0 && (
@@ -483,6 +597,7 @@ export default function ManagedGroupClient({ group, athletes, trainings }: Props
       {importOpen && (
         <ImportTrainingModal
           group={group}
+          athletes={athletes}
           onClose={() => setImportOpen(false)}
         />
       )}
