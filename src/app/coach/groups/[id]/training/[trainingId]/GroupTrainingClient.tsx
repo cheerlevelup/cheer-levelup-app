@@ -426,6 +426,50 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     })
   }
 
+  // Zapis całej tablicy serii (dodanie/usunięcie serii tej zawodniczce)
+  async function persistEntrySets(athlete: Athlete, ex: Exercise, sets: SetRow[]) {
+    const key = entryKey(ex.id, athlete.id)
+    const current = entryMap.get(key)
+    latestSetsRef.current.set(key, sets)
+    const payload = {
+      training_id: training.id,
+      exercise_id: ex.id,
+      athlete_id: athlete.id,
+      sets,
+      pain_vas: current?.pain_vas ?? null,
+      pain_comment: current?.pain_comment ?? null,
+      comment: current?.comment ?? null,
+      exercise_override: current?.exercise_override ?? null,
+      updated_at: new Date().toISOString(),
+    }
+    const { data, error: err } = await supabase
+      .from('group_training_entries')
+      .upsert(payload, { onConflict: 'exercise_id,athlete_id' })
+      .select()
+      .single()
+    if (err || !data) { setError(err?.message || 'Błąd zapisu'); return }
+    setEntryMap(prev => {
+      const next = new Map(prev)
+      next.set(key, data as Entry)
+      return next
+    })
+  }
+
+  function addInlineSet(athlete: Athlete, ex: Exercise) {
+    const key = entryKey(ex.id, athlete.id)
+    const sets = (latestSetsRef.current.get(key) ?? effectiveSets(ex, entryMap.get(key))).map(s => ({ ...s }))
+    sets.push({ reps: ex.reps || '', tempo: ex.tempo || '', weight: '' })
+    persistEntrySets(athlete, ex, sets)
+  }
+
+  function removeInlineSet(athlete: Athlete, ex: Exercise) {
+    const key = entryKey(ex.id, athlete.id)
+    const sets = (latestSetsRef.current.get(key) ?? effectiveSets(ex, entryMap.get(key))).map(s => ({ ...s }))
+    if (sets.length <= 1) return
+    sets.pop()
+    persistEntrySets(athlete, ex, sets)
+  }
+
   async function handleDeleteExercise(ex: Exercise) {
     if (!confirm(`Usunąć ćwiczenie „${ex.name}” i wszystkie wpisane do niego serie?`)) return
     const { error: err } = await supabase.from('group_training_exercises').delete().eq('id', ex.id)
@@ -699,6 +743,22 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                     </div>
                                   )
                                 })}
+                                <button
+                                  onClick={() => addInlineSet(athlete, ex)}
+                                  title="Dodaj serię tej zawodniczce"
+                                  style={{ border: `1.5px solid ${C.grayLight}`, background: C.white, color: C.navy, borderRadius: 7, padding: '0.28rem 0.42rem', fontSize: '0.82rem', fontWeight: 800, flexShrink: 0, lineHeight: 1 }}
+                                >
+                                  ＋
+                                </button>
+                                {sets.length > Math.max(ex.sets_planned ?? 0, 1) && (
+                                  <button
+                                    onClick={() => removeInlineSet(athlete, ex)}
+                                    title="Usuń ostatnią serię tej zawodniczce"
+                                    style={{ border: `1.5px solid ${C.grayLight}`, background: C.white, color: C.gray, borderRadius: 7, padding: '0.28rem 0.42rem', fontSize: '0.82rem', fontWeight: 800, flexShrink: 0, lineHeight: 1 }}
+                                  >
+                                    －
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => setOpenCell({ athlete, exercise: ex })}
                                   title="Szczegóły: powtórzenia, tempo, ból, komentarz"
