@@ -133,12 +133,15 @@ function detectMatrix(rows: any[][], athletes: Athlete[]):
   const labelArr = rows[labelRow] || []
   const presArr = rows[presRow] || []
 
-  // 2. Nazwy ćwiczeń: scalony nagłówek w wierszu 0 — uzupełniamy w prawo
-  const maxCol = Math.max(...rows.slice(0, presRow + 1).map(r => (r || []).length), 0)
+  // 2. Nazwy ćwiczeń: scalony nagłówek bezpośrednio NAD etykietami — uzupełniamy w prawo.
+  // (Na górze pliku może być wiersz z datą — dlatego nie bierzemy sztywno wiersza 0.)
+  const nameArr = rows[Math.max(0, labelRow - 1)] || []
+  const maxCol = Math.max((rows[labelRow] || []).length, (rows[presRow] || []).length, nameArr.length, 0)
   const colName: string[] = []
   let cur = '', started = false
   for (let c = 0; c < maxCol; c++) {
-    const v = String((rows[0] || [])[c] ?? '').trim()
+    let v = String(nameArr[c] ?? '').trim()
+    if (/^\d{4,}$/.test(v)) v = '' // liczba seryjna / data, nie nazwa
     if (v) { cur = v; started = true }
     colName[c] = started ? cur : ''
   }
@@ -195,15 +198,16 @@ function detectMatrix(rows: any[][], athletes: Athlete[]):
   })
   dataRows.forEach((d, idx) => {
     if (assigned[idx]) return
-    const lt = normName(d.last)
-    if (!lt) return
-    const cand = pool.filter(p => !consumed.has(p.id) && p.tokens.includes(lt))
+    const lastTokens = normName(d.last).split(' ').filter(Boolean)
+    if (!lastTokens.length) return
+    const cand = pool.filter(p => !consumed.has(p.id) && lastTokens.some(t => p.tokens.includes(t)))
     if (cand.length === 1) tryAssign(idx, cand[0].id)
   })
   dataRows.forEach((d, idx) => {
     if (assigned[idx]) return
-    const ft = normName(d.first), lt = normName(d.last)
-    const cand = pool.filter(p => !consumed.has(p.id) && (ft ? p.tokens.includes(ft) : false) && (lt ? p.tokens.includes(lt) : true))
+    const toks = [...normName(d.first).split(' '), ...normName(d.last).split(' ')].filter(Boolean)
+    if (!toks.length) return
+    const cand = pool.filter(p => !consumed.has(p.id) && toks.some(t => p.tokens.includes(t)))
     if (cand.length === 1) tryAssign(idx, cand[0].id)
   })
 
@@ -279,6 +283,9 @@ function ImportTrainingModal({ group, athletes, onClose }: { group: Group; athle
   const [error, setError] = useState('')
   // Raport dopasowania imion (format siatki: imiona × ćwiczenia)
   const [matchReport, setMatchReport] = useState<{ matched: number; unmatched: string[] } | null>(null)
+  // Podgląd surowych danych (diagnostyka układu pliku)
+  const [rawRows, setRawRows] = useState<any[][]>([])
+  const [showRaw, setShowRaw] = useState(false)
 
   async function handleFile(file?: File | null) {
     if (!file) return
@@ -289,6 +296,7 @@ function ImportTrainingModal({ group, athletes, onClose }: { group: Group; athle
       const wb = XLSX.read(buf, { type: 'array' })
       const ws = wb.Sheets[wb.SheetNames[0]]
       const rows = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: '' }) as any[][]
+      setRawRows(rows.slice(0, 6).map(r => (r || []).slice(0, 14)))
       // Najpierw spróbuj siatki (imiona × ćwiczenia z ciężarami), potem listy ćwiczeń
       const matrix = detectMatrix(rows, athletes)
       if (matrix) {
@@ -403,6 +411,31 @@ function ImportTrainingModal({ group, athletes, onClose }: { group: Group; athle
               {matchReport.unmatched.length > 0 && (
                 <div style={{ marginTop: 5, color: '#92600A' }}>
                   ⚠ Nie dopasowano (sprawdź pisownię lub dodaj do grupy): {matchReport.unmatched.join(', ')}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Podgląd surowych danych z pliku — diagnostyka układu */}
+          {rawRows.length > 0 && (
+            <div style={{ marginBottom: '1rem' }}>
+              <button onClick={() => setShowRaw(v => !v)} style={{ border: 'none', background: 'none', color: C.gray, fontFamily: mono, fontSize: '0.62rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, padding: 0 }}>
+                {showRaw ? '▾' : '▸'} Podgląd odczytu z pliku (pierwsze wiersze)
+              </button>
+              {showRaw && (
+                <div style={{ marginTop: 6, overflowX: 'auto', border: `1.5px solid ${C.grayLight}`, borderRadius: 8 }}>
+                  <table style={{ borderCollapse: 'collapse', fontFamily: mono, fontSize: '0.62rem' }}>
+                    <tbody>
+                      {rawRows.map((r, ri) => (
+                        <tr key={ri}>
+                          <td style={{ padding: '2px 6px', color: C.gray, borderRight: `1px solid ${C.grayLight}`, borderBottom: `1px solid ${C.grayLight}`, background: C.offWhite }}>{ri}</td>
+                          {r.map((c, ci) => (
+                            <td key={ci} style={{ padding: '2px 6px', color: C.navy, borderRight: `1px solid ${C.grayLight}`, borderBottom: `1px solid ${C.grayLight}`, whiteSpace: 'nowrap', maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis' }} title={String(c ?? '')}>{String(c ?? '')}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
