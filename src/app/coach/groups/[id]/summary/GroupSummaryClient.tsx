@@ -107,6 +107,59 @@ function SetsSummary({ sets, ex }: { sets: SetRow[]; ex: Exercise }) {
   )
 }
 
+// Suma liczb w tekście serii: „1+1” → 2, „5” → 5
+function sumNumbers(s?: string | null) {
+  const m = (s || '').match(/\d+(?:[.,]\d+)?/g)
+  return m ? m.reduce((a, x) => a + parseFloat(x.replace(',', '.')), 0) : 0
+}
+
+// Czas tempa w sekundach na powtórzenie: „3010” → 4, „5010” → 6,
+// dla zapisu opisowego („5'' ecc”) sumujemy znalezione liczby → 5
+function tempoSeconds(tempo?: string | null) {
+  const t = (tempo || '').trim()
+  if (!t) return 0
+  if (/^\d{3,4}$/.test(t)) return t.split('').reduce((a, d) => a + parseInt(d, 10), 0)
+  const m = t.match(/\d+/g)
+  return m ? m.reduce((a, x) => a + parseInt(x, 10), 0) : 0
+}
+
+// Objętość (Σ powt.×ciężar), suma powtórzeń i TUT (Σ powt.×czas tempa) dla ćwiczenia
+function exerciseMetrics(sets: SetRow[] | undefined, ex: Exercise) {
+  let loadVol = 0, totalReps = 0, tut = 0
+  for (const s of sets || []) {
+    if (s.skipped) continue
+    const reps = sumNumbers(s.reps) || sumNumbers(ex.reps)
+    const weight = parseFloat((s.weight || '').replace(',', '.')) || 0
+    const tsec = tempoSeconds((s.tempo || '').trim() || ex.tempo)
+    totalReps += reps
+    loadVol += reps * weight
+    tut += reps * tsec
+  }
+  return { loadVol, totalReps, tut }
+}
+
+function fmtTut(sec: number) {
+  if (sec <= 0) return ''
+  const s = Math.round(sec)
+  if (s < 60) return `${s} s`
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')} min`
+}
+
+// Komórka „Objętość i TUT” dla jednej zawodniczki × ćwiczenie
+function VolumeTut({ sets, ex }: { sets: SetRow[] | undefined; ex: Exercise }) {
+  const hasAny = (sets || []).some(s => !s.skipped && (s.reps || s.weight || ex.reps))
+  if (!hasAny) return <span style={{ fontFamily: mono, fontSize: '0.72rem', color: C.grayLight }}>—</span>
+  const { loadVol, totalReps, tut } = exerciseMetrics(sets, ex)
+  const volText = loadVol > 0 ? `${Math.round(loadVol * 10) / 10} kg` : totalReps > 0 ? `${totalReps} powt.` : '—'
+  const tutText = fmtTut(tut)
+  return (
+    <div style={{ fontFamily: mono, fontSize: '0.72rem', color: C.navy, lineHeight: 1.5 }}>
+      <div><span style={{ color: C.gray }}>obj.</span> <strong style={{ fontWeight: 700 }}>{volText}</strong></div>
+      {tutText && <div><span style={{ color: C.gray }}>TUT</span> {tutText}</div>}
+    </div>
+  )
+}
+
 // Kolumny siatki gotowości (nazwa + 5 metryk + uwagi)
 const WELLNESS_COLS = 'minmax(130px, 1.2fr) repeat(5, minmax(60px, 0.8fr)) minmax(150px, 1.8fr)'
 
@@ -325,6 +378,46 @@ export default function GroupSummaryClient({ group, athletes, trainings }: Props
                     </tbody>
                   </table>
                 </div>
+              )}
+
+              {/* ── OBJĘTOŚĆ I TUT ── */}
+              {exercises.length > 0 && (
+                <>
+                  <div style={sectionLabel}>Objętość i TUT</div>
+                  <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, overflow: 'hidden', marginBottom: '1.5rem', boxShadow: '0 4px 20px rgba(13,27,42,0.06)' }}>
+                    <table className="gs-table">
+                      <thead>
+                        <tr>
+                          <th className="gs-sticky" style={{ width: 168, padding: '0.7rem 0.85rem', textAlign: 'left', fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', background: C.offWhite }}>
+                            Zawodniczka
+                          </th>
+                          {exercises.map(ex => (
+                            <th key={ex.id} style={{ padding: '0.6rem 0.75rem', fontWeight: 800, fontSize: '0.82rem', color: C.navy, background: C.offWhite, textAlign: 'left' }}>
+                              {ex.name}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {athletes.map(athlete => (
+                          <tr key={athlete.id} className="gs-row">
+                            <td className="gs-sticky" style={{ padding: '0.6rem 0.85rem', fontWeight: 700, fontSize: '0.84rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {athlete.full_name}
+                            </td>
+                            {exercises.map(ex => (
+                              <td key={ex.id} style={{ padding: '0.5rem 0.7rem' }}>
+                                <VolumeTut sets={entryMap.get(entryKey(ex.id, athlete.id))?.sets} ex={ex} />
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, margin: '-0.75rem 0 1.5rem' }}>
+                    obj. = Σ powtórzeń × ciężar (przy masie ciała: suma powtórzeń) · TUT = Σ powtórzeń × czas tempa
+                  </div>
+                </>
               )}
 
               {/* ── GOTOWOŚĆ ── */}
