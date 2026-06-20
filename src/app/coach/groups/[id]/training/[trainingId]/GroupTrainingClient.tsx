@@ -51,9 +51,9 @@ interface Props {
 
 const entryKey = (exerciseId: number, athleteId: number) => `${exerciseId}_${athleteId}`
 
-// Ćwiczenie „na maksa" — w polu POWT. wpisano max/maks/amrap.
+// Ćwiczenie „na maksa" — w polu POWT. wpisano max/maks/amrap/do upadku.
 // Wtedy w komórkach zawodniczek wpisujemy wykonane powtórzenia, nie ciężar.
-const isMaxReps = (reps?: string | null) => /^(max|maks|amrap)/i.test((reps || '').trim())
+const isMaxReps = (reps?: string | null) => /(amrap|maks|max|upad)/i.test((reps || '').trim())
 
 // Serie do wyświetlenia: wpis zawodniczki dopełniony do liczby serii z rozpiski,
 // puste serie dziedziczą powtórzenia i tempo z nagłówka kolumny

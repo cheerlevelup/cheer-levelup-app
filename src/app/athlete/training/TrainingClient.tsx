@@ -546,6 +546,10 @@ function WarmupSetRow({ warmup, setNum, existingLog, sessionId, athleteId, block
   )
 }
 
+// Ćwiczenie „na maksa": AMRAP / max / do upadku — zawodniczka wpisuje
+// wykonane powtórzenia (masa własna), a nie ciężar.
+const isFailureReps = (r: unknown) => typeof r === 'string' && /(amrap|maks|max|upad)/i.test(r)
+
 // ─── SET ROW ──────────────────────────────────────────────────────────────────
 
 function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, athleteId, blockExerciseId, onComplete, onLogSaved }: {
@@ -574,13 +578,13 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
     return data?.id ?? null
   }
 
-  async function doSaveSet(nextDone: boolean, currentWeight: string) {
+  async function doSaveSet(nextDone: boolean, currentWeight: string, currentReps: string) {
     setSaveError('')
     const payload = {
       workout_session_id: sessionId, block_exercise_id: blockExerciseId,
       athlete_id: athleteId, set_number: setNum,
       weight: currentWeight ? parseFloat(currentWeight.replace(',', '.')) : null,
-      reps_completed: actualReps ? parseInt(actualReps) : null,
+      reps_completed: currentReps ? parseInt(currentReps) : null,
       is_warmup: false, completed: nextDone,
     }
 
@@ -616,8 +620,8 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
   }
 
   // Wszystkie zapisy tej serii idą po kolei (jeden po drugim)
-  function saveSet(nextDone: boolean, currentWeight: string) {
-    const run = () => doSaveSet(nextDone, currentWeight)
+  function saveSet(nextDone: boolean, currentWeight: string, currentReps: string = actualReps) {
+    const run = () => doSaveSet(nextDone, currentWeight, currentReps)
     saveChainRef.current = saveChainRef.current.then(run, run)
     return saveChainRef.current
   }
@@ -648,6 +652,21 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
     saveTimerRef.current = setTimeout(() => {
       const nextDone = hasWeight ? true : (!hasWeight && done ? false : done)
       saveSet(nextDone, cleaned)
+    }, 350)
+  }
+
+  // Tryb „na maksa" (do upadku / AMRAP / max): wpisujemy wykonane powtórzenia
+  function handleRepsChange(val: string) {
+    setActualReps(val)
+    const hasReps = val.trim() !== ''
+
+    if (hasReps && !done) { setDone(true); onComplete(true) }
+    else if (!hasReps && done) { setDone(false); onComplete(false) }
+
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      const nextDone = hasReps ? true : (!hasReps && done ? false : done)
+      saveSet(nextDone, weight, val)
     }, 350)
   }
 
@@ -683,15 +702,18 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
         {/* Na krótkich repsach — inputy i przycisk w tym samym rzędzie */}
         {!isLongReps && (
           <>
-            <div style={{ width: 72 }}>
-              <input inputMode="decimal" placeholder="kg" value={weight}
-                onChange={e => handleWeightChange(e.target.value)}
-                style={{ width: '100%', padding: '0.4rem 0.5rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.9rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center' }} />
-            </div>
-            {isAmrap && (
-              <input type="number" inputMode="numeric" placeholder="powt." value={actualReps}
-                onChange={e => setActualReps(e.target.value)} onBlur={() => saveSet(done, weight)}
-                style={{ width: 60, padding: '0.4rem 0.5rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.9rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center' }} />
+            {isAmrap ? (
+              <div style={{ width: 72 }}>
+                <input type="number" inputMode="numeric" placeholder="ile?" value={actualReps}
+                  onChange={e => handleRepsChange(e.target.value)}
+                  style={{ width: '100%', padding: '0.4rem 0.5rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.9rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center' }} />
+              </div>
+            ) : (
+              <div style={{ width: 72 }}>
+                <input inputMode="decimal" placeholder="kg" value={weight}
+                  onChange={e => handleWeightChange(e.target.value)}
+                  style={{ width: '100%', padding: '0.4rem 0.5rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.9rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center' }} />
+              </div>
             )}
             <button onClick={toggle} style={{ width: 36, height: 36, borderRadius: 8, background: done ? C.green : C.grayLight, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s', flexShrink: 0 }}>
               {done && <span style={{ color: '#fff', fontSize: '1rem', fontWeight: 800 }}>✓</span>}
@@ -703,18 +725,21 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
       {/* Dolny rząd: inputy na pełną szerokość (tylko przy długim opisie) */}
       {isLongReps && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <div style={{ flex: 1 }}>
-            <input inputMode="decimal" placeholder="wpisz ciężar (kg)" value={weight}
-              onChange={e => handleWeightChange(e.target.value)}
-              style={{ width: '100%', padding: '0.55rem 0.75rem', border: `1.5px solid ${done ? '#86EFAC' : '#E0E8F0'}`, borderRadius: 8, fontFamily: sans, fontSize: '1rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center', fontWeight: 700 }} />
-            {prevWeight && !weight && (
-              <div style={{ fontSize: '0.6rem', color: C.gray, textAlign: 'center', marginTop: 2 }}>poprzednio: {prevWeight} kg</div>
-            )}
-          </div>
-          {isAmrap && (
-            <input type="number" inputMode="numeric" placeholder="powt." value={actualReps}
-              onChange={e => setActualReps(e.target.value)} onBlur={() => saveSet(done, weight)}
-              style={{ width: 70, padding: '0.55rem 0.5rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '1rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center', fontWeight: 700 }} />
+          {isAmrap ? (
+            <div style={{ flex: 1 }}>
+              <input type="number" inputMode="numeric" placeholder="ile powtórzeń wykonała?" value={actualReps}
+                onChange={e => handleRepsChange(e.target.value)}
+                style={{ width: '100%', padding: '0.55rem 0.75rem', border: `1.5px solid ${done ? '#86EFAC' : '#E0E8F0'}`, borderRadius: 8, fontFamily: sans, fontSize: '1rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center', fontWeight: 700 }} />
+            </div>
+          ) : (
+            <div style={{ flex: 1 }}>
+              <input inputMode="decimal" placeholder="wpisz ciężar (kg)" value={weight}
+                onChange={e => handleWeightChange(e.target.value)}
+                style={{ width: '100%', padding: '0.55rem 0.75rem', border: `1.5px solid ${done ? '#86EFAC' : '#E0E8F0'}`, borderRadius: 8, fontFamily: sans, fontSize: '1rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center', fontWeight: 700 }} />
+              {prevWeight && !weight && (
+                <div style={{ fontSize: '0.6rem', color: C.gray, textAlign: 'center', marginTop: 2 }}>poprzednio: {prevWeight} kg</div>
+              )}
+            </div>
           )}
           <button onClick={toggle} style={{
             width: 48, height: 44, borderRadius: 10,
@@ -962,7 +987,7 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
   )
   const completedSets = localCompleted
   const allDone = completedSets >= effectiveSets
-  const isAmrap = typeof effectiveReps === 'string' && effectiveReps.toUpperCase() === 'AMRAP'
+  const isAmrap = isFailureReps(effectiveReps)
   const exerciseName = getEffectiveName()
 
   const [painError, setPainError] = useState('')
