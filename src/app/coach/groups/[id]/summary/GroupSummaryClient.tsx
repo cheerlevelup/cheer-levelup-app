@@ -176,7 +176,8 @@ function ExternalLoadCell({ entry, ex, red, orange }: { entry: Entry | undefined
   const hasAny = (sets || []).some(s => s.skipped || s.reps || s.weight) || (!!ex.reps && (sets?.length ?? 0) > 0)
   if (!hasAny) return <span style={{ fontFamily: mono, fontSize: '0.72rem', color: C.grayLight }}>—</span>
   const m = exerciseMetrics(sets, ex)
-  const planned = ex.sets_planned ?? 0
+  // Przy modyfikacji liczba serii jest indywidualna — mianownik z jej własnych serii, nie z planu grupy
+  const planned = isModifiedEntry(entry, ex) ? (m.setCount + m.skipped) : (ex.sets_planned ?? 0)
   const accent = red ? '#C81E1E' : orange ? '#B45309' : C.gray
   // Modyfikacja tej zawodniczki — musi być widoczna (inne prawa do load/flag)
   const modLabel = entry?.exercise_override ? entry.exercise_override : entry?.bodyweight ? 'masa własna' : isMaxRepsS(ex.reps) ? 'na maksa' : ''
