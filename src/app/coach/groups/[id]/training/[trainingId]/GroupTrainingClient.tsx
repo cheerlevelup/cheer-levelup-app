@@ -391,6 +391,36 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     if (err) setError(err.message)
   }
 
+  // Wpisz 0 (masa ciała) w ciężar wszystkim zawodniczkom w tym ćwiczeniu
+  async function fillColumnBodyweight(ex: Exercise) {
+    if (!confirm(`Wpisać 0 (masa ciała) w ciężar wszystkim zawodniczkom w „${ex.name || 'tym ćwiczeniu'}”?`)) return
+    setError('')
+    const present = athletes.filter(a => !absentIds.has(a.id))
+    const rows = present.map(a => {
+      const key = entryKey(ex.id, a.id)
+      const current = entryMap.get(key)
+      const sets = (latestSetsRef.current.get(key) ?? effectiveSets(ex, current)).map(s => ({ ...s, weight: '0' }))
+      latestSetsRef.current.set(key, sets)
+      return {
+        training_id: training.id, exercise_id: ex.id, athlete_id: a.id, sets,
+        pain_vas: current?.pain_vas ?? null, pain_comment: current?.pain_comment ?? null,
+        comment: current?.comment ?? null, exercise_override: current?.exercise_override ?? null,
+        updated_at: new Date().toISOString(),
+      }
+    })
+    if (rows.length === 0) return
+    const { data, error: err } = await supabase
+      .from('group_training_entries')
+      .upsert(rows, { onConflict: 'exercise_id,athlete_id' })
+      .select()
+    if (err || !data) { setError(err?.message || 'Błąd zapisu'); return }
+    setEntryMap(prev => {
+      const next = new Map(prev)
+      for (const d of data as Entry[]) next.set(entryKey(d.exercise_id, d.athlete_id), d)
+      return next
+    })
+  }
+
   // Przełącz całą kolumnę na masę własną (powtórzenia zamiast kg) — dla całej drużyny
   async function toggleExerciseBodyweight(exerciseId: number) {
     const ex = exercises.find(e => e.id === exerciseId)
@@ -678,7 +708,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
               Trening · {formatDatePl(trainingDate)}
             </h1>
             <p style={{ color: C.gray, fontSize: '0.8rem', marginTop: 3 }}>
-              W nagłówku kolumny: serie, powtórzenia i tempo dla całej grupy. Przeciągnij ⠿, by zmienić kolejność ćwiczeń; przycisk „kg/BW" przełącza całą kolumnę na masę własną (powtórzenia zamiast kg). W wierszu zawodniczki wpisujesz ciężar, „+ ból"/„+ notatka" dają szybki wpis bez ✎. Kliknij numer serii (S1, S2…), by oznaczyć „nie zrobiła", a ✕ przy nazwisku wykreśla nieobecną.
+              W nagłówku kolumny: serie, powtórzenia i tempo dla całej grupy. Przeciągnij ⠿, by zmienić kolejność. „BW" wpisuje 0 (masa ciała) w ciężar wszystkim, „P" przełącza kolumnę na wpisywanie powtórzeń zamiast kg. W wierszu zawodniczki wpisujesz ciężar, „+ ból"/„+ notatka" dają szybki wpis bez ✎. Kliknij numer serii (S1, S2…), by oznaczyć „nie zrobiła", a ✕ przy nazwisku wykreśla nieobecną.
             </p>
           </div>
         </header>
@@ -746,12 +776,21 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 style={{ flex: 1, minWidth: 0, border: `1.5px solid transparent`, borderRadius: 7, background: 'transparent', fontWeight: 800, fontSize: '0.82rem', color: C.navy, padding: '0.3rem 0.35rem', outline: 'none', fontFamily: sans }}
                                 onFocus={e => { e.target.style.background = C.white; e.target.style.borderColor = C.gold }}
                               />
+                              {!ex.bodyweight && (
+                                <button
+                                  onClick={() => fillColumnBodyweight(ex)}
+                                  title="Wpisz 0 (masa ciała) w ciężar wszystkim zawodniczkom"
+                                  style={{ flexShrink: 0, fontFamily: mono, fontSize: '0.5rem', fontWeight: 700, border: `1px solid ${C.grayLight}`, background: C.white, color: C.navy, borderRadius: 5, padding: '2px 4px', lineHeight: 1 }}
+                                >
+                                  BW
+                                </button>
+                              )}
                               <button
                                 onClick={() => toggleExerciseBodyweight(ex.id)}
-                                title={ex.bodyweight ? 'Masa własna — kliknij, by wrócić do kg' : 'Bez ciężaru (masa własna) dla całej drużyny — powtórzenia zamiast kg'}
+                                title={ex.bodyweight ? 'Tryb powtórzeń włączony — kliknij, by wrócić do kg' : 'Cała kolumna: wpisuj powtórzenia zamiast kg'}
                                 style={{ flexShrink: 0, fontFamily: mono, fontSize: '0.5rem', fontWeight: 700, border: `1px solid ${ex.bodyweight ? C.gold : C.grayLight}`, background: ex.bodyweight ? '#FFFBEB' : C.white, color: ex.bodyweight ? '#92600A' : C.gray, borderRadius: 5, padding: '2px 4px', lineHeight: 1 }}
                               >
-                                {ex.bodyweight ? 'BW' : 'kg'}
+                                P
                               </button>
                               <button onClick={() => handleDeleteExercise(ex)} title="Usuń ćwiczenie" style={{ border: 'none', background: 'none', color: C.gray, fontSize: '0.78rem', padding: 2, flexShrink: 0 }}>✕</button>
                             </div>
