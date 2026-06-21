@@ -311,6 +311,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     () => new Map(initialEntries.map(e => [entryKey(e.exercise_id, e.athlete_id), e]))
   )
   const [openCell, setOpenCell] = useState<{ athlete: Athlete; exercise: Exercise } | null>(null)
+  const [noteOpen, setNoteOpen] = useState<string | null>(null) // entryKey z otwartym polem notatki
   const [trainingDate, setTrainingDate] = useState(training.training_date)
   const [absentIds, setAbsentIds] = useState<Set<number>>(() => new Set(training.absent_athlete_ids || []))
   const [error, setError] = useState('')
@@ -491,6 +492,38 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     if (sets.length <= 1) return
     sets.pop()
     persistEntrySets(athlete, ex, sets)
+  }
+
+  // Zapis pojedynczego pola wpisu (ból/komentarz) wprost z tabeli — upsert tylko tej kolumny,
+  // pozostałe (serie itd.) zostają nietknięte.
+  async function saveEntryMeta(athlete: Athlete, ex: Exercise, patch: Record<string, any>) {
+    const key = entryKey(ex.id, athlete.id)
+    const payload = { training_id: training.id, exercise_id: ex.id, athlete_id: athlete.id, ...patch, updated_at: new Date().toISOString() }
+    const { data, error: err } = await supabase
+      .from('group_training_entries')
+      .upsert(payload, { onConflict: 'exercise_id,athlete_id' })
+      .select()
+      .single()
+    if (err || !data) {
+      setError('pain' in patch && /'pain'/.test(err?.message || '')
+        ? 'Aby oznaczać ból w tabeli, uruchom migrację 202606200002 (kolumna pain).'
+        : (err?.message || 'Błąd zapisu'))
+      return
+    }
+    setEntryMap(prev => { const next = new Map(prev); next.set(key, data as Entry); return next })
+  }
+
+  function toggleInlinePain(athlete: Athlete, ex: Exercise) {
+    const entry = entryMap.get(entryKey(ex.id, athlete.id))
+    const on = !!entry?.pain || entry?.pain_vas != null
+    saveEntryMeta(athlete, ex, on ? { pain: false, pain_vas: null } : { pain: true })
+  }
+
+  function saveInlineComment(athlete: Athlete, ex: Exercise, value: string) {
+    const key = entryKey(ex.id, athlete.id)
+    const val = value.trim() || null
+    if ((entryMap.get(key)?.comment ?? null) === val) return
+    saveEntryMeta(athlete, ex, { comment: val })
   }
 
   async function handleDeleteExercise(ex: Exercise) {
@@ -790,16 +823,42 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                   ✎
                                 </button>
                               </div>
-                              {(entry?.pain || entry?.pain_vas != null || entry?.pain_comment || entry?.comment) && (
-                                <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap', alignItems: 'center' }}>
-                                  {(entry?.pain || entry?.pain_vas != null) && (
-                                    <span title={entry?.pain_comment || undefined} style={{ fontFamily: mono, fontSize: '0.6rem', fontWeight: 700, color: C.white, background: (entry?.pain_vas != null && entry.pain_vas >= 5) ? C.red : C.orange, borderRadius: 6, padding: '1px 6px' }}>
-                                      ból{entry?.pain_vas != null ? ` ${entry.pain_vas}` : ''}
-                                    </span>
-                                  )}
-                                  {entry?.comment && <span style={{ fontSize: '0.7rem' }} title={entry.comment}>💬</span>}
-                                </div>
-                              )}
+                              <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap', alignItems: 'center' }}>
+                                {(() => {
+                                  const painActive = !!entry?.pain || entry?.pain_vas != null
+                                  return (
+                                    <button
+                                      onClick={() => toggleInlinePain(athlete, ex)}
+                                      title={painActive ? (entry?.pain_comment ? `Ból: ${entry.pain_comment} (kliknij, by odznaczyć)` : 'Odznacz ból') : 'Zaznacz ból'}
+                                      style={painActive
+                                        ? { fontFamily: mono, fontSize: '0.6rem', fontWeight: 700, color: C.white, background: (entry?.pain_vas != null && entry.pain_vas >= 5) ? C.red : C.orange, border: 'none', borderRadius: 6, padding: '2px 7px', lineHeight: 1.3 }
+                                        : { fontFamily: mono, fontSize: '0.56rem', fontWeight: 700, color: C.gray, background: C.white, border: `1px solid ${C.grayLight}`, borderRadius: 6, padding: '2px 6px', lineHeight: 1.3 }}
+                                    >
+                                      {painActive ? `ból${entry?.pain_vas != null ? ` ${entry.pain_vas}` : ''}` : '+ ból'}
+                                    </button>
+                                  )
+                                })()}
+                                {noteOpen === entryKey(ex.id, athlete.id) ? (
+                                  <input
+                                    autoFocus
+                                    defaultValue={entry?.comment || ''}
+                                    placeholder="notatka..."
+                                    onBlur={e => { saveInlineComment(athlete, ex, e.target.value); setNoteOpen(null) }}
+                                    onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); else if (e.key === 'Escape') setNoteOpen(null) }}
+                                    style={{ flex: 1, minWidth: 96, border: `1.5px solid ${C.gold}`, borderRadius: 6, background: C.white, fontFamily: sans, fontSize: '0.7rem', color: C.navy, padding: '2px 6px', outline: 'none' }}
+                                  />
+                                ) : entry?.comment ? (
+                                  <button onClick={() => setNoteOpen(entryKey(ex.id, athlete.id))} title={entry.comment}
+                                    style={{ maxWidth: 140, fontFamily: sans, fontSize: '0.62rem', color: C.navy, background: '#F4F6F9', border: `1px solid ${C.grayLight}`, borderRadius: 6, padding: '2px 7px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3 }}>
+                                    💬 {entry.comment}
+                                  </button>
+                                ) : (
+                                  <button onClick={() => setNoteOpen(entryKey(ex.id, athlete.id))}
+                                    style={{ fontFamily: mono, fontSize: '0.56rem', fontWeight: 700, color: C.gray, background: C.white, border: `1px solid ${C.grayLight}`, borderRadius: 6, padding: '2px 6px', lineHeight: 1.3 }}>
+                                    + notatka
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           )
                         })}
