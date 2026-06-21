@@ -194,7 +194,7 @@ function ExternalLoadCell({ entry, ex, red, orange }: { entry: Entry | undefined
       )}
       {(red || orange) && (
         <div style={{ fontSize: '0.52rem', fontWeight: 700, color: accent, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 2 }}>
-          {red ? '● najniższy load' : '● niepełne'}
+          {red ? (isMaxRepsS(ex.reps) ? '● najmniej powt.' : '● najniższy load') : '● niepełne'}
         </div>
       )}
       {Row('serie', `${m.setCount}${planned ? `/${planned}` : ''}${m.skipped ? ` (−${m.skipped})` : ''}`)}
@@ -253,18 +253,31 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
   const redByExercise = useMemo(() => {
     const map = new Map<number, number>()
     for (const ex of exercises) {
-      let best: { id: number; rel: number } | null = null
+      let best: { id: number; val: number } | null = null
       let count = 0
-      for (const a of athletes) {
-        const bw = weightOf(a.id)
-        if (!bw || bw <= 0) continue
-        const entry = entryMap.get(entryKey(ex.id, a.id))
-        if (isModifiedEntry(entry, ex)) continue
-        const m = exerciseMetrics(entry?.sets, ex)
-        if (m.loadVol <= 0) continue
-        count++
-        const rel = m.loadVol / bw
-        if (!best || rel < best.rel) best = { id: a.id, rel }
+      if (isMaxRepsS(ex.reps)) {
+        // „na maksa” / AMRAP → najmniej powtórzeń (bez ćwiczeń zamienionych na inne)
+        for (const a of athletes) {
+          const entry = entryMap.get(entryKey(ex.id, a.id))
+          if (entry?.exercise_override) continue
+          const m = exerciseMetrics(entry?.sets, ex)
+          if (m.totalReps <= 0) continue
+          count++
+          if (!best || m.totalReps < best.val) best = { id: a.id, val: m.totalReps }
+        }
+      } else {
+        // ćwiczenie z obciążeniem → najniższy relative load (ciężar zewn. / masa ciała)
+        for (const a of athletes) {
+          const bw = weightOf(a.id)
+          if (!bw || bw <= 0) continue
+          const entry = entryMap.get(entryKey(ex.id, a.id))
+          if (isModifiedEntry(entry, ex)) continue
+          const m = exerciseMetrics(entry?.sets, ex)
+          if (m.loadVol <= 0) continue
+          count++
+          const rel = m.loadVol / bw
+          if (!best || rel < best.val) best = { id: a.id, val: rel }
+        }
       }
       if (best && count >= 2) map.set(ex.id, best.id)
     }
@@ -505,7 +518,7 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
                     </table>
                   </div>
                   <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, margin: '0 0 0.4rem', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                    <span><span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: '#C81E1E', verticalAlign: 'middle' }} /> najniższy relative load (ciężar zewn./masa ciała)</span>
+                    <span><span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: '#C81E1E', verticalAlign: 'middle' }} /> najniższy relative load (ciężar zewn./masa ciała); przy „na maksa” — najmniej powtórzeń</span>
                     <span><span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: '#B45309', verticalAlign: 'middle' }} /> niepełne (seria/powt.) — bez ćwiczeń zmodyfikowanych</span>
                   </div>
                   <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, margin: '0 0 1.5rem' }}>
