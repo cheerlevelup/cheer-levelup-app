@@ -37,11 +37,27 @@ export default async function GroupSummaryPage({ params }: Props) {
     .eq('group_id', groupId)
     .order('training_date', { ascending: false })
 
+  // Najnowsza masa ciała każdej zawodniczki (do relative load)
+  const athleteIds = (athletes || []).map(a => a.id)
+  const bodyWeights: Record<number, number> = {}
+  if (athleteIds.length) {
+    const { data: bw } = await supabase
+      .from('wellness_logs')
+      .select('athlete_id, body_weight_kg, created_at')
+      .in('athlete_id', athleteIds)
+      .not('body_weight_kg', 'is', null)
+      .order('created_at', { ascending: false })
+    for (const r of bw || []) {
+      if (bodyWeights[r.athlete_id] == null && r.body_weight_kg != null) bodyWeights[r.athlete_id] = r.body_weight_kg
+    }
+  }
+
   return (
     <GroupSummaryClient
       group={group}
       athletes={athletes || []}
       trainings={trainings || []}
+      bodyWeights={bodyWeights}
     />
   )
 }

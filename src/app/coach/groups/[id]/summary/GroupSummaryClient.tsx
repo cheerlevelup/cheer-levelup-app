@@ -1,7 +1,7 @@
 'use client'
 // src/app/coach/groups/[id]/summary/GroupSummaryClient.tsx
 // Podsumowanie treningu grupy zorganizowanej — wybór po dacie, domyślnie ostatni
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { formatDatePl, dayRangeIso } from '@/lib/groupTraining'
@@ -28,6 +28,7 @@ type Entry = {
   pain_comment?: string | null
   comment?: string | null
   exercise_override?: string | null
+  bodyweight?: boolean | null
 }
 type WellnessRow = {
   athlete_id: number
@@ -37,6 +38,7 @@ type WellnessRow = {
   stress?: number | null
   muscle_sorness?: number | null
   readiness?: number | null
+  body_weight_kg?: number | null
   concerns?: string | null
   created_at: string
 }
@@ -54,6 +56,7 @@ interface Props {
   group: Group
   athletes: Athlete[]
   trainings: Training[]
+  bodyWeights: Record<number, number>
 }
 
 const FEELING_LABELS: Record<string, string> = {
@@ -124,39 +127,72 @@ function tempoSeconds(tempo?: string | null) {
   return m ? m.reduce((a, x) => a + parseInt(x, 10), 0) : 0
 }
 
-// Objętość (Σ powt.×ciężar), suma powtórzeń i TUT (Σ powt.×czas tempa) dla ćwiczenia
+const isMaxRepsS = (r?: string | null) => /(amrap|maks|max|upad)/i.test(String(r ?? ''))
+
+// Ćwiczenie zmodyfikowane „rządzi się innym prawem” (masa własna / zamiana / na maksa)
+function isModifiedEntry(entry: Entry | undefined, ex: Exercise) {
+  return !!entry?.exercise_override || !!entry?.bodyweight || isMaxRepsS(ex.reps)
+}
+
+// Serie, powtórzenia, TUT (Σ powt.×czas tempa) i ciężar zewn. (Σ powt.×ciężar) dla ćwiczenia
 function exerciseMetrics(sets: SetRow[] | undefined, ex: Exercise) {
-  let loadVol = 0, totalReps = 0, tut = 0
+  let loadVol = 0, totalReps = 0, tut = 0, setCount = 0, skipped = 0, repsBelow = false
+  const prescReps = sumNumbers(ex.reps)
   for (const s of sets || []) {
-    if (s.skipped) continue
-    const reps = sumNumbers(s.reps) || sumNumbers(ex.reps)
+    if (s.skipped) { skipped++; continue }
+    const repsStr = (s.reps || '').trim()
+    const reps = sumNumbers(repsStr) || sumNumbers(ex.reps)
     const weight = parseFloat((s.weight || '').replace(',', '.')) || 0
     const tsec = tempoSeconds((s.tempo || '').trim() || ex.tempo)
+    if (repsStr || (s.weight || '').trim()) setCount++
     totalReps += reps
     loadVol += reps * weight
     tut += reps * tsec
+    if (prescReps > 0 && repsStr && sumNumbers(repsStr) < prescReps) repsBelow = true
   }
-  return { loadVol, totalReps, tut }
+  return { loadVol, totalReps, tut, setCount, skipped, repsBelow }
+}
+
+type Metrics = ReturnType<typeof exerciseMetrics>
+
+// Pomarańczowo: niewykonana seria / mniej powtórzeń — ale NIE dla ćwiczeń zmodyfikowanych
+function isUnderdone(entry: Entry | undefined, ex: Exercise, m: Metrics) {
+  if (isModifiedEntry(entry, ex)) return false
+  const planned = ex.sets_planned ?? 0
+  if (m.skipped > 0) return true
+  if (planned > 0 && m.setCount < planned) return true
+  return m.repsBelow
 }
 
 function fmtTut(sec: number) {
-  if (sec <= 0) return ''
+  if (sec <= 0) return '—'
   const s = Math.round(sec)
   if (s < 60) return `${s} s`
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')} min`
 }
 
-// Komórka „Objętość i TUT” dla jednej zawodniczki × ćwiczenie
-function VolumeTut({ sets, ex }: { sets: SetRow[] | undefined; ex: Exercise }) {
-  const hasAny = (sets || []).some(s => !s.skipped && (s.reps || s.weight || ex.reps))
+// Komórka „External Load”: serie / powtórzenia / TUT / ciężar zewn. + kolor (czerwony/pomarańczowy)
+function ExternalLoadCell({ entry, ex, red, orange }: { entry: Entry | undefined; ex: Exercise; red: boolean; orange: boolean }) {
+  const sets = entry?.sets
+  const hasAny = (sets || []).some(s => s.skipped || s.reps || s.weight) || (!!ex.reps && (sets?.length ?? 0) > 0)
   if (!hasAny) return <span style={{ fontFamily: mono, fontSize: '0.72rem', color: C.grayLight }}>—</span>
-  const { loadVol, totalReps, tut } = exerciseMetrics(sets, ex)
-  const volText = loadVol > 0 ? `${Math.round(loadVol * 10) / 10} kg` : totalReps > 0 ? `${totalReps} powt.` : '—'
-  const tutText = fmtTut(tut)
+  const m = exerciseMetrics(sets, ex)
+  const planned = ex.sets_planned ?? 0
+  const accent = red ? '#C81E1E' : orange ? '#B45309' : C.gray
+  const Row = (label: string, val: string) => (
+    <div><span style={{ color: C.gray }}>{label}</span> <strong style={{ fontWeight: 700 }}>{val}</strong></div>
+  )
   return (
-    <div style={{ fontFamily: mono, fontSize: '0.72rem', color: C.navy, lineHeight: 1.5 }}>
-      <div><span style={{ color: C.gray }}>obj.</span> <strong style={{ fontWeight: 700 }}>{volText}</strong></div>
-      {tutText && <div><span style={{ color: C.gray }}>TUT</span> {tutText}</div>}
+    <div style={{ fontFamily: mono, fontSize: '0.7rem', color: C.navy, lineHeight: 1.5 }}>
+      {(red || orange) && (
+        <div style={{ fontSize: '0.52rem', fontWeight: 700, color: accent, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 2 }}>
+          {red ? '● najniższy load' : '● niepełne'}
+        </div>
+      )}
+      {Row('serie', `${m.setCount}${planned ? `/${planned}` : ''}${m.skipped ? ` (−${m.skipped})` : ''}`)}
+      {Row('powt.', `${m.totalReps}`)}
+      {Row('TUT', fmtTut(m.tut))}
+      {Row('zew.', m.loadVol > 0 ? `${Math.round(m.loadVol * 10) / 10} kg` : '—')}
     </div>
   )
 }
@@ -186,7 +222,7 @@ function Score({ value, kind }: { value?: number | null; kind: 'good-high' | 'go
   )
 }
 
-export default function GroupSummaryClient({ group, athletes, trainings }: Props) {
+export default function GroupSummaryClient({ group, athletes, trainings, bodyWeights }: Props) {
   const router = useRouter()
   const supabase = createClient()
 
@@ -198,6 +234,34 @@ export default function GroupSummaryClient({ group, athletes, trainings }: Props
   const [feedbackByAthlete, setFeedbackByAthlete] = useState<Map<number, FeedbackRow>>(new Map())
 
   const selected = trainings.find(t => t.id === selectedId) || null
+
+  // Masa ciała: najpierw z gotowości wybranego treningu, w razie braku — najnowsza znana
+  const weightOf = (athleteId: number) =>
+    wellnessByAthlete.get(athleteId)?.body_weight_kg ?? bodyWeights[athleteId] ?? null
+
+  // Czerwono: zawodniczka z NAJNIŻSZYM relative load (ciężar zewn. / masa ciała) w danym ćwiczeniu.
+  // Liczymy tylko ćwiczenia z obciążeniem zewn., pomijamy zmodyfikowane i bez masy ciała.
+  const redByExercise = useMemo(() => {
+    const map = new Map<number, number>()
+    for (const ex of exercises) {
+      let best: { id: number; rel: number } | null = null
+      let count = 0
+      for (const a of athletes) {
+        const bw = weightOf(a.id)
+        if (!bw || bw <= 0) continue
+        const entry = entryMap.get(entryKey(ex.id, a.id))
+        if (isModifiedEntry(entry, ex)) continue
+        const m = exerciseMetrics(entry?.sets, ex)
+        if (m.loadVol <= 0) continue
+        count++
+        const rel = m.loadVol / bw
+        if (!best || rel < best.rel) best = { id: a.id, rel }
+      }
+      if (best && count >= 2) map.set(ex.id, best.id)
+    }
+    return map
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exercises, athletes, entryMap, wellnessByAthlete, bodyWeights])
 
   useEffect(() => {
     if (!selected) return
@@ -381,11 +445,11 @@ export default function GroupSummaryClient({ group, athletes, trainings }: Props
                 </div>
               )}
 
-              {/* ── OBJĘTOŚĆ I TUT ── */}
+              {/* ── EXTERNAL LOAD ── */}
               {exercises.length > 0 && (
                 <>
-                  <div style={sectionLabel}>Objętość i TUT</div>
-                  <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, overflow: 'hidden', marginBottom: '1.5rem', boxShadow: '0 4px 20px rgba(13,27,42,0.06)' }}>
+                  <div style={sectionLabel}>External Load</div>
+                  <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, overflow: 'hidden', marginBottom: '0.75rem', boxShadow: '0 4px 20px rgba(13,27,42,0.06)' }}>
                     <table className="gs-table">
                       <thead>
                         <tr>
@@ -405,18 +469,28 @@ export default function GroupSummaryClient({ group, athletes, trainings }: Props
                             <td className="gs-sticky" style={{ padding: '0.6rem 0.85rem', fontWeight: 700, fontSize: '0.84rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               {athlete.full_name}
                             </td>
-                            {exercises.map(ex => (
-                              <td key={ex.id} style={{ padding: '0.5rem 0.7rem' }}>
-                                <VolumeTut sets={entryMap.get(entryKey(ex.id, athlete.id))?.sets} ex={ex} />
-                              </td>
-                            ))}
+                            {exercises.map(ex => {
+                              const entry = entryMap.get(entryKey(ex.id, athlete.id))
+                              const m = exerciseMetrics(entry?.sets, ex)
+                              const red = redByExercise.get(ex.id) === athlete.id
+                              const orange = !red && isUnderdone(entry, ex, m)
+                              return (
+                                <td key={ex.id} style={{ padding: '0.5rem 0.7rem', background: red ? '#FDEDED' : orange ? '#FEF3E2' : undefined }}>
+                                  <ExternalLoadCell entry={entry} ex={ex} red={red} orange={orange} />
+                                </td>
+                              )
+                            })}
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                  <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, margin: '-0.75rem 0 1.5rem' }}>
-                    obj. = Σ powtórzeń × ciężar (przy masie ciała: suma powtórzeń) · TUT = Σ powtórzeń × czas tempa
+                  <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, margin: '0 0 0.4rem', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                    <span><span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: '#C81E1E', verticalAlign: 'middle' }} /> najniższy relative load (ciężar zewn./masa ciała)</span>
+                    <span><span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: '#B45309', verticalAlign: 'middle' }} /> niepełne (seria/powt.) — bez ćwiczeń zmodyfikowanych</span>
+                  </div>
+                  <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, margin: '0 0 1.5rem' }}>
+                    zew. = Σ powtórzeń × ciężar · TUT = Σ powtórzeń × czas tempa
                   </div>
                 </>
               )}
