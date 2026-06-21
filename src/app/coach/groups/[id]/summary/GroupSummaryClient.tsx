@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { formatDatePl, dayRangeIso } from '@/lib/groupTraining'
+import { StimulusBadge, StimulusSection } from './StimulusAnalysis'
+import type { ExerciseInput } from '@/lib/stimulus'
 
 const C = {
   navy: '#0D1B2A', navyLight: '#1A2E45', navyBorder: '#243652',
@@ -423,6 +425,7 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
                                 ].filter(Boolean).join(' · ')}
                               </div>
                             )}
+                            <StimulusBadge ex={{ name: ex.name, sets: ex.sets_planned, reps: ex.reps, tempo: ex.tempo, bodyweight: ex.bodyweight }} />
                           </th>
                         ))}
                       </tr>
@@ -477,6 +480,17 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
                     </tbody>
                   </table>
                 </div>
+              )}
+
+              {/* ── ANALIZA BODŹCA TRENINGOWEGO ── */}
+              {exercises.length > 0 && (
+                <>
+                  <div style={sectionLabel}>Analiza bodźca treningowego</div>
+                  <StimulusSection exercises={exercises.map((ex): ExerciseInput => ({ name: ex.name, sets: ex.sets_planned, reps: ex.reps, tempo: ex.tempo, bodyweight: ex.bodyweight }))} />
+                  <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, margin: '0 0 1.5rem', lineHeight: 1.5 }}>
+                    Na podstawie liczby powtórzeń, tempa i TUT system szacuje, jaki bodziec został zaprogramowany przez trenera. To analiza konstrukcji programu, nie pomiar rzeczywistej odpowiedzi organizmu.
+                  </div>
+                </>
               )}
 
               {/* ── EXTERNAL LOAD ── */}
