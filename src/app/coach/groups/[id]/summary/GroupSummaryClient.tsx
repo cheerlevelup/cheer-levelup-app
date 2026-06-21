@@ -16,7 +16,7 @@ const mono = "'Space Mono', monospace"
 
 type Group = { id: number; name: string }
 type Athlete = { id: number; full_name: string }
-type Training = { id: number; group_id: number; training_date: string }
+type Training = { id: number; group_id: number; training_date: string; absent_athlete_ids?: number[] | null }
 type SetRow = { reps?: string; tempo?: string; weight?: string; skipped?: boolean }
 type Exercise = { id: number; name: string; exercise_order: number; sets_planned?: number | null; reps?: string | null; tempo?: string | null }
 type Entry = {
@@ -158,6 +158,7 @@ type Metrics = ReturnType<typeof exerciseMetrics>
 // Pomarańczowo: niewykonana seria / mniej powtórzeń — ale NIE dla ćwiczeń zmodyfikowanych
 function isUnderdone(entry: Entry | undefined, ex: Exercise, m: Metrics) {
   if (isModifiedEntry(entry, ex)) return false
+  if (m.setCount === 0 && m.skipped === 0) return false // brak danych — nie flagujemy
   const planned = ex.sets_planned ?? 0
   if (m.skipped > 0) return true
   if (planned > 0 && m.setCount < planned) return true
@@ -234,6 +235,7 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
   const [feedbackByAthlete, setFeedbackByAthlete] = useState<Map<number, FeedbackRow>>(new Map())
 
   const selected = trainings.find(t => t.id === selectedId) || null
+  const absentIds = useMemo(() => new Set<number>((selected?.absent_athlete_ids || []).map(Number)), [selected])
 
   // Masa ciała: najpierw z gotowości wybranego treningu, w razie braku — najnowsza znana
   const weightOf = (athleteId: number) =>
@@ -399,12 +401,16 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
                       </tr>
                     </thead>
                     <tbody>
-                      {athletes.map(athlete => (
+                      {athletes.map(athlete => {
+                        const absent = absentIds.has(athlete.id)
+                        return (
                         <tr key={athlete.id} className="gs-row">
-                          <td className="gs-sticky" style={{ padding: '0.6rem 0.85rem', fontWeight: 700, fontSize: '0.84rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          <td className="gs-sticky" style={{ padding: '0.6rem 0.85rem', fontWeight: 700, fontSize: '0.84rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: absent ? C.gray : C.navy, textDecoration: absent ? 'line-through' : 'none' }}>
                             {athlete.full_name}
                           </td>
-                          {exercises.map(ex => {
+                          {absent ? (
+                            <td colSpan={exercises.length} style={{ padding: '0.5rem 0.85rem', fontFamily: mono, fontSize: '0.68rem', color: C.gray, fontStyle: 'italic' }}>nieobecna</td>
+                          ) : exercises.map(ex => {
                             const entry = entryMap.get(entryKey(ex.id, athlete.id))
                             const hasContent = entry && (entry.sets?.length || entry.pain || entry.pain_vas != null || entry.pain_comment || entry.comment || entry.exercise_override)
                             return (
@@ -439,7 +445,8 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
                             )
                           })}
                         </tr>
-                      ))}
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -464,12 +471,16 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
                         </tr>
                       </thead>
                       <tbody>
-                        {athletes.map(athlete => (
+                        {athletes.map(athlete => {
+                          const absent = absentIds.has(athlete.id)
+                          return (
                           <tr key={athlete.id} className="gs-row">
-                            <td className="gs-sticky" style={{ padding: '0.6rem 0.85rem', fontWeight: 700, fontSize: '0.84rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <td className="gs-sticky" style={{ padding: '0.6rem 0.85rem', fontWeight: 700, fontSize: '0.84rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: absent ? C.gray : C.navy, textDecoration: absent ? 'line-through' : 'none' }}>
                               {athlete.full_name}
                             </td>
-                            {exercises.map(ex => {
+                            {absent ? (
+                              <td colSpan={exercises.length} style={{ padding: '0.5rem 0.85rem', fontFamily: mono, fontSize: '0.68rem', color: C.gray, fontStyle: 'italic' }}>nieobecna</td>
+                            ) : exercises.map(ex => {
                               const entry = entryMap.get(entryKey(ex.id, athlete.id))
                               const m = exerciseMetrics(entry?.sets, ex)
                               const red = redByExercise.get(ex.id) === athlete.id
@@ -481,7 +492,8 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
                               )
                             })}
                           </tr>
-                        ))}
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
