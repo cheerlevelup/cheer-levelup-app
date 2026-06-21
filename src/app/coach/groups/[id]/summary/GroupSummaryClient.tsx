@@ -167,9 +167,7 @@ function isUnderdone(entry: Entry | undefined, ex: Exercise, m: Metrics) {
 
 function fmtTut(sec: number) {
   if (sec <= 0) return '—'
-  const s = Math.round(sec)
-  if (s < 60) return `${s} s`
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')} min`
+  return `${Math.round(sec)} s`
 }
 
 // Komórka „External Load”: serie / powtórzenia / TUT / ciężar zewn. + kolor (czerwony/pomarańczowy)
@@ -180,11 +178,19 @@ function ExternalLoadCell({ entry, ex, red, orange }: { entry: Entry | undefined
   const m = exerciseMetrics(sets, ex)
   const planned = ex.sets_planned ?? 0
   const accent = red ? '#C81E1E' : orange ? '#B45309' : C.gray
+  // Modyfikacja tej zawodniczki — musi być widoczna (inne prawa do load/flag)
+  const modLabel = entry?.exercise_override ? entry.exercise_override : entry?.bodyweight ? 'masa własna' : isMaxRepsS(ex.reps) ? 'na maksa' : ''
   const Row = (label: string, val: string) => (
     <div><span style={{ color: C.gray }}>{label}</span> <strong style={{ fontWeight: 700 }}>{val}</strong></div>
   )
   return (
     <div style={{ fontFamily: mono, fontSize: '0.7rem', color: C.navy, lineHeight: 1.5 }}>
+      {modLabel && (
+        <div title={`Modyfikacja: ${modLabel}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%', fontFamily: sans, fontSize: '0.58rem', fontWeight: 700, color: '#854F0B', background: '#FEF6E0', border: '1px solid #F7D27A', borderRadius: 999, padding: '1px 7px 1px 2px', marginBottom: 3 }}>
+          <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, borderRadius: '50%', background: C.gold, color: C.navy, fontFamily: mono, fontSize: '0.56rem', fontWeight: 700, lineHeight: 1 }}>⇄</span>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{modLabel}</span>
+        </div>
+      )}
       {(red || orange) && (
         <div style={{ fontSize: '0.52rem', fontWeight: 700, color: accent, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 2 }}>
           {red ? '● najniższy load' : '● niepełne'}
@@ -502,7 +508,7 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
                     <span><span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: '#B45309', verticalAlign: 'middle' }} /> niepełne (seria/powt.) — bez ćwiczeń zmodyfikowanych</span>
                   </div>
                   <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, margin: '0 0 1.5rem' }}>
-                    zew. = Σ powtórzeń × ciężar · TUT = Σ powtórzeń × czas tempa
+                    zew. = Σ powtórzeń × ciężar · TUT = Σ powtórzeń × czas tempa (w sekundach) · ⇄ = modyfikacja
                   </div>
                 </>
               )}
