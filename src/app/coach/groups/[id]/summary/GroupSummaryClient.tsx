@@ -70,15 +70,15 @@ const entryKey = (exerciseId: number, athleteId: number) => `${exerciseId}_${ath
 // – ciężar 0 / pusty traktujemy jak masę ciała (bez „× 0 kg”),
 // – serie identyczne zwijamy w jedną linię (np. „3 ser. · 5 × 10 kg”),
 // – tempo wspólne dla wszystkich serii pokazujemy raz, nie przy każdej.
-function SetsSummary({ sets, ex }: { sets: SetRow[]; ex: Exercise }) {
+function SetsSummary({ sets, ex, modified }: { sets: SetRow[]; ex: Exercise; modified: boolean }) {
   const prescTempo = (ex.tempo || '').trim()
-  // Jednolity zapis per seria (S1, S2…). Powtórzenia dziedziczą z rozpiski,
-  // gdy nie zapisano ich przy serii. Tempo pokazujemy TYLKO gdy różni się od
-  // rozpiski (modyfikacja) — standardowe i tak widać w nagłówku kolumny.
+  // Jednolity zapis per seria (S1, S2…). Bez modyfikacji powt./tempo bierzemy z aktualnej
+  // rozpiski grupy (ignorujemy stare wartości zapisane przy serii). Tempo per-seria pokazujemy
+  // tylko przy modyfikacji i gdy różni się od rozpiski — standardowe widać w nagłówku kolumny.
   const ss = (sets || [])
     .map(s => ({
-      reps: (s.reps || '').trim() || (ex.reps || '').trim(),
-      tempo: (s.tempo || '').trim(),
+      reps: modified ? ((s.reps || '').trim() || (ex.reps || '').trim()) : (ex.reps || '').trim(),
+      tempo: modified ? (s.tempo || '').trim() : '',
       weight: (s.weight || '').trim(),
       skipped: !!s.skipped,
     }))
@@ -134,21 +134,24 @@ function isModifiedEntry(entry: Entry | undefined, ex: Exercise) {
   return !!entry?.exercise_override || !!entry?.bodyweight || isMaxRepsS(ex.reps)
 }
 
-// Serie, powtórzenia, TUT (Σ powt.×czas tempa) i ciężar zewn. (Σ powt.×ciężar) dla ćwiczenia
-function exerciseMetrics(sets: SetRow[] | undefined, ex: Exercise) {
+// Serie, powtórzenia, TUT (Σ powt.×czas tempa) i ciężar zewn. (Σ powt.×ciężar) dla ćwiczenia.
+// Bez modyfikacji powt./tempo bierzemy z AKTUALNEJ rozpiski grupy (ignorujemy stare wartości
+// zapisane przy serii — np. tempo zmienione później w nagłówku). Przy modyfikacji — indywidualne.
+function exerciseMetrics(sets: SetRow[] | undefined, ex: Exercise, modified: boolean) {
   let loadVol = 0, totalReps = 0, tut = 0, setCount = 0, skipped = 0, repsBelow = false
   const prescReps = sumNumbers(ex.reps)
+  const prescTempoSec = tempoSeconds(ex.tempo)
   for (const s of sets || []) {
     if (s.skipped) { skipped++; continue }
     const repsStr = (s.reps || '').trim()
-    const reps = sumNumbers(repsStr) || sumNumbers(ex.reps)
+    const reps = modified ? (sumNumbers(repsStr) || prescReps) : prescReps
+    const tsec = modified ? tempoSeconds((s.tempo || '').trim() || ex.tempo) : prescTempoSec
     const weight = parseFloat((s.weight || '').replace(',', '.')) || 0
-    const tsec = tempoSeconds((s.tempo || '').trim() || ex.tempo)
     if (repsStr || (s.weight || '').trim()) setCount++
     totalReps += reps
     loadVol += reps * weight
     tut += reps * tsec
-    if (prescReps > 0 && repsStr && sumNumbers(repsStr) < prescReps) repsBelow = true
+    if (modified && prescReps > 0 && repsStr && sumNumbers(repsStr) < prescReps) repsBelow = true
   }
   return { loadVol, totalReps, tut, setCount, skipped, repsBelow }
 }
@@ -175,12 +178,13 @@ function ExternalLoadCell({ entry, ex, red, orange }: { entry: Entry | undefined
   const sets = entry?.sets
   const hasAny = (sets || []).some(s => s.skipped || s.reps || s.weight) || (!!ex.reps && (sets?.length ?? 0) > 0)
   if (!hasAny) return <span style={{ fontFamily: mono, fontSize: '0.72rem', color: C.grayLight }}>—</span>
-  const m = exerciseMetrics(sets, ex)
+  const modified = isModifiedEntry(entry, ex)
+  const m = exerciseMetrics(sets, ex, modified)
   // Przy modyfikacji liczba serii jest indywidualna — mianownik z jej własnych serii, nie z planu grupy
-  const planned = isModifiedEntry(entry, ex) ? (m.setCount + m.skipped) : (ex.sets_planned ?? 0)
+  const planned = modified ? (m.setCount + m.skipped) : (ex.sets_planned ?? 0)
   const accent = red ? '#C81E1E' : orange ? '#B45309' : C.gray
-  // Modyfikacja tej zawodniczki — musi być widoczna (inne prawa do load/flag)
-  const modLabel = entry?.exercise_override ? entry.exercise_override : entry?.bodyweight ? 'masa własna' : isMaxRepsS(ex.reps) ? 'na maksa' : ''
+  // Modyfikacja TEJ zawodniczki (zamiana / masa własna) — „na maksa” to cecha kolumny, nie modyfikacja
+  const modLabel = entry?.exercise_override ? entry.exercise_override : entry?.bodyweight ? 'masa własna' : ''
   const Row = (label: string, val: string) => (
     <div><span style={{ color: C.gray }}>{label}</span> <strong style={{ fontWeight: 700 }}>{val}</strong></div>
   )
@@ -260,7 +264,7 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
         for (const a of athletes) {
           const entry = entryMap.get(entryKey(ex.id, a.id))
           if (entry?.exercise_override) continue
-          const m = exerciseMetrics(entry?.sets, ex)
+          const m = exerciseMetrics(entry?.sets, ex, true)
           if (m.totalReps <= 0) continue
           count++
           if (!best || m.totalReps < best.val) best = { id: a.id, val: m.totalReps }
@@ -272,7 +276,7 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
           if (!bw || bw <= 0) continue
           const entry = entryMap.get(entryKey(ex.id, a.id))
           if (isModifiedEntry(entry, ex)) continue
-          const m = exerciseMetrics(entry?.sets, ex)
+          const m = exerciseMetrics(entry?.sets, ex, false)
           if (m.loadVol <= 0) continue
           count++
           const rel = m.loadVol / bw
@@ -443,7 +447,7 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
                                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry!.exercise_override}</span>
                                       </div>
                                     )}
-                                    <SetsSummary sets={entry!.sets || []} ex={ex} />
+                                    <SetsSummary sets={entry!.sets || []} ex={ex} modified={isModifiedEntry(entry, ex)} />
                                     {(entry!.pain || entry!.pain_vas != null || entry!.pain_comment) && (
                                       <div style={{ marginTop: 5 }}>
                                         <span style={{ fontFamily: mono, fontSize: '0.6rem', fontWeight: 700, color: C.white, background: (entry!.pain_vas != null && entry!.pain_vas! >= 5) ? C.red : C.orange, borderRadius: 6, padding: '1px 6px' }}>
@@ -502,7 +506,7 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
                               <td colSpan={exercises.length} style={{ padding: '0.5rem 0.85rem', fontFamily: mono, fontSize: '0.68rem', color: C.gray, fontStyle: 'italic' }}>nieobecna</td>
                             ) : exercises.map(ex => {
                               const entry = entryMap.get(entryKey(ex.id, athlete.id))
-                              const m = exerciseMetrics(entry?.sets, ex)
+                              const m = exerciseMetrics(entry?.sets, ex, isModifiedEntry(entry, ex))
                               const red = redByExercise.get(ex.id) === athlete.id
                               const orange = !red && isUnderdone(entry, ex, m)
                               return (
