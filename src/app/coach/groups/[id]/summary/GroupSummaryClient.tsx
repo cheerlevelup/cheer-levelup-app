@@ -18,7 +18,7 @@ type Group = { id: number; name: string }
 type Athlete = { id: number; full_name: string }
 type Training = { id: number; group_id: number; training_date: string; absent_athlete_ids?: number[] | null }
 type SetRow = { reps?: string; tempo?: string; weight?: string; skipped?: boolean }
-type Exercise = { id: number; name: string; exercise_order: number; sets_planned?: number | null; reps?: string | null; tempo?: string | null }
+type Exercise = { id: number; name: string; exercise_order: number; sets_planned?: number | null; reps?: string | null; tempo?: string | null; bodyweight?: boolean | null }
 type Entry = {
   exercise_id: number
   athlete_id: number
@@ -129,10 +129,13 @@ function tempoSeconds(tempo?: string | null) {
 
 const isMaxRepsS = (r?: string | null) => /(amrap|maks|max|upad)/i.test(String(r ?? ''))
 
-// Ćwiczenie zmodyfikowane „rządzi się innym prawem” (masa własna / zamiana / na maksa)
+// Ćwiczenie „rządzi się innym prawem” — powtórzenia są indywidualne (masa własna kolumny/zawodniczki,
+// zamiana na inne ćwiczenie, na maksa). Decyduje o tym, czy używamy powt. per-seria zamiast rozpiski.
 function isModifiedEntry(entry: Entry | undefined, ex: Exercise) {
-  return !!entry?.exercise_override || !!entry?.bodyweight || isMaxRepsS(ex.reps)
+  return !!entry?.exercise_override || !!entry?.bodyweight || !!ex.bodyweight || isMaxRepsS(ex.reps)
 }
+// Ćwiczenie na powtórzenia (brak ciężaru zewn.) — czerwony liczy najmniej powtórzeń
+const isRepsExercise = (ex: Exercise) => isMaxRepsS(ex.reps) || !!ex.bodyweight
 
 // Serie, powtórzenia, TUT (Σ powt.×czas tempa) i ciężar zewn. (Σ powt.×ciężar) dla ćwiczenia.
 // Bez modyfikacji powt./tempo bierzemy z AKTUALNEJ rozpiski grupy (ignorujemy stare wartości
@@ -198,7 +201,7 @@ function ExternalLoadCell({ entry, ex, red, orange }: { entry: Entry | undefined
       )}
       {(red || orange) && (
         <div style={{ fontSize: '0.52rem', fontWeight: 700, color: accent, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 2 }}>
-          {red ? (isMaxRepsS(ex.reps) ? '● najmniej powt.' : '● najniższy load') : '● niepełne'}
+          {red ? (isRepsExercise(ex) ? '● najmniej powt.' : '● najniższy load') : '● niepełne'}
         </div>
       )}
       {Row('serie', `${m.setCount}${planned ? `/${planned}` : ''}${m.skipped ? ` (−${m.skipped})` : ''}`)}
@@ -259,8 +262,8 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
     for (const ex of exercises) {
       let best: { id: number; val: number } | null = null
       let count = 0
-      if (isMaxRepsS(ex.reps)) {
-        // „na maksa” / AMRAP → najmniej powtórzeń (bez ćwiczeń zamienionych na inne)
+      if (isRepsExercise(ex)) {
+        // „na maksa” / masa własna kolumny → najmniej powtórzeń (bez ćwiczeń zamienionych na inne)
         for (const a of athletes) {
           const entry = entryMap.get(entryKey(ex.id, a.id))
           if (entry?.exercise_override) continue

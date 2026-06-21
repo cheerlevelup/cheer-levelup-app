@@ -26,6 +26,8 @@ type Exercise = {
   sets_planned?: number | null
   reps?: string | null
   tempo?: string | null
+  // cała kolumna na masie własnej — wpisujemy powtórzenia zamiast ciężaru dla całej drużyny
+  bodyweight?: boolean | null
 }
 type SetRow = { reps?: string; tempo?: string; weight?: string; skipped?: boolean }
 type Entry = {
@@ -321,6 +323,8 @@ export default function GroupTrainingClient({ group, training, athletes, initial
   // Najnowsze serie per komórka — chroni przed zgubieniem ciężaru przy szybkim
   // przechodzeniu między polami (zapis async może nie zdążyć przed kolejnym blur)
   const latestSetsRef = useRef<Map<string, SetRow[]>>(new Map())
+  const dragExId = useRef<number | null>(null) // ćwiczenie przeciągane (zmiana kolejności)
+  const [dragOverExId, setDragOverExId] = useState<number | null>(null)
 
   // Po dodaniu kolumny kursor wskakuje w pole nazwy nowego ćwiczenia
   useEffect(() => {
@@ -385,6 +389,48 @@ export default function GroupTrainingClient({ group, training, athletes, initial
       .update({ name: ex.name.trim(), sets_planned: ex.sets_planned ?? null, reps: ex.reps?.trim() || null, tempo: ex.tempo?.trim() || null })
       .eq('id', ex.id)
     if (err) setError(err.message)
+  }
+
+  // Przełącz całą kolumnę na masę własną (powtórzenia zamiast kg) — dla całej drużyny
+  async function toggleExerciseBodyweight(exerciseId: number) {
+    const ex = exercises.find(e => e.id === exerciseId)
+    if (!ex) return
+    const next = !ex.bodyweight
+    setExercises(prev => prev.map(e => e.id === exerciseId ? { ...e, bodyweight: next } : e))
+    const { error: err } = await supabase
+      .from('group_training_exercises')
+      .update({ bodyweight: next })
+      .eq('id', exerciseId)
+    if (err) {
+      setExercises(prev => prev.map(e => e.id === exerciseId ? { ...e, bodyweight: !next } : e))
+      setError(/'bodyweight'/.test(err.message)
+        ? 'Aby wyłączyć ciężar dla kolumny, uruchom migrację 202606200003 (kolumna bodyweight w ćwiczeniach).'
+        : err.message)
+    }
+  }
+
+  // Zmiana kolejności ćwiczeń (przeciągnięcie) — przenosi i zapisuje nowe exercise_order
+  async function reorderExercise(targetId: number) {
+    const fromId = dragExId.current
+    dragExId.current = null
+    setDragOverExId(null)
+    if (!fromId || fromId === targetId) return
+    const ordered = [...sortedExercises]
+    const fromIdx = ordered.findIndex(e => e.id === fromId)
+    const toIdx = ordered.findIndex(e => e.id === targetId)
+    if (fromIdx < 0 || toIdx < 0) return
+    const [moved] = ordered.splice(fromIdx, 1)
+    ordered.splice(toIdx, 0, moved)
+    const updates = ordered.map((e, i) => ({ id: e.id, exercise_order: i }))
+    setExercises(prev => prev.map(e => {
+      const u = updates.find(x => x.id === e.id)
+      return u ? { ...e, exercise_order: u.exercise_order } : e
+    }))
+    const results = await Promise.all(updates.map(u =>
+      supabase.from('group_training_exercises').update({ exercise_order: u.exercise_order }).eq('id', u.id)
+    ))
+    const failed = results.find(r => r.error)
+    if (failed?.error) setError(failed.error.message)
   }
 
   // Szybki zapis wartości wpisanej w komórce tabeli (ciężar albo wykonane powtórzenia)
@@ -632,7 +678,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
               Trening · {formatDatePl(trainingDate)}
             </h1>
             <p style={{ color: C.gray, fontSize: '0.8rem', marginTop: 3 }}>
-              W nagłówku kolumny: serie, powtórzenia i tempo dla całej grupy. W wierszu zawodniczki wpisujesz ciężar, a ✎ otwiera ból i komentarz. Kliknij numer serii (S1, S2…), by oznaczyć „nie zrobiła", a ✕ przy nazwisku wykreśla nieobecną na koniec listy.
+              W nagłówku kolumny: serie, powtórzenia i tempo dla całej grupy. Przeciągnij ⠿, by zmienić kolejność ćwiczeń; przycisk „kg/BW" przełącza całą kolumnę na masę własną (powtórzenia zamiast kg). W wierszu zawodniczki wpisujesz ciężar, „+ ból"/„+ notatka" dają szybki wpis bez ✎. Kliknij numer serii (S1, S2…), by oznaczyć „nie zrobiła", a ✕ przy nazwisku wykreśla nieobecną.
             </p>
           </div>
         </header>
@@ -670,8 +716,22 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                           padding: '0.28rem 0.15rem', outline: 'none', textAlign: 'center',
                         }
                         return (
-                          <th key={ex.id} style={{ width: 178, minWidth: 178, maxWidth: 178, padding: '0.4rem 0.45rem', background: C.offWhite }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <th
+                            key={ex.id}
+                            onDragOver={e => { if (dragExId.current != null) { e.preventDefault(); if (dragOverExId !== ex.id) setDragOverExId(ex.id) } }}
+                            onDrop={e => { e.preventDefault(); reorderExercise(ex.id) }}
+                            style={{ width: 178, minWidth: 178, maxWidth: 178, padding: '0.4rem 0.45rem', background: C.offWhite, boxShadow: dragOverExId === ex.id ? `inset 3px 0 0 ${C.gold}` : undefined }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                              <span
+                                draggable
+                                onDragStart={e => { dragExId.current = ex.id; e.dataTransfer.effectAllowed = 'move' }}
+                                onDragEnd={() => { dragExId.current = null; setDragOverExId(null) }}
+                                title="Przeciągnij, by zmienić kolejność ćwiczeń"
+                                style={{ cursor: 'grab', color: C.gray, fontSize: '0.82rem', lineHeight: 1, flexShrink: 0, padding: '0 1px', userSelect: 'none' }}
+                              >
+                                ⠿
+                              </span>
                               <input
                                 ref={el => { if (el) nameInputRefs.current.set(ex.id, el); else nameInputRefs.current.delete(ex.id) }}
                                 value={ex.name}
@@ -686,6 +746,13 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 style={{ flex: 1, minWidth: 0, border: `1.5px solid transparent`, borderRadius: 7, background: 'transparent', fontWeight: 800, fontSize: '0.82rem', color: C.navy, padding: '0.3rem 0.35rem', outline: 'none', fontFamily: sans }}
                                 onFocus={e => { e.target.style.background = C.white; e.target.style.borderColor = C.gold }}
                               />
+                              <button
+                                onClick={() => toggleExerciseBodyweight(ex.id)}
+                                title={ex.bodyweight ? 'Masa własna — kliknij, by wrócić do kg' : 'Bez ciężaru (masa własna) dla całej drużyny — powtórzenia zamiast kg'}
+                                style={{ flexShrink: 0, fontFamily: mono, fontSize: '0.5rem', fontWeight: 700, border: `1px solid ${ex.bodyweight ? C.gold : C.grayLight}`, background: ex.bodyweight ? '#FFFBEB' : C.white, color: ex.bodyweight ? '#92600A' : C.gray, borderRadius: 5, padding: '2px 4px', lineHeight: 1 }}
+                              >
+                                {ex.bodyweight ? 'BW' : 'kg'}
+                              </button>
                               <button onClick={() => handleDeleteExercise(ex)} title="Usuń ćwiczenie" style={{ border: 'none', background: 'none', color: C.gray, fontSize: '0.78rem', padding: 2, flexShrink: 0 }}>✕</button>
                             </div>
                             {/* Rozpiska dla całej grupy: serie / powtórzenia / tempo */}
@@ -710,9 +777,9 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 </div>
                               ))}
                             </div>
-                            {isMaxReps(ex.reps) && (
+                            {(isMaxReps(ex.reps) || ex.bodyweight) && (
                               <div style={{ fontFamily: mono, fontSize: '0.5rem', fontWeight: 700, color: '#854F0B', background: '#FEF6E0', border: '1px solid #F7D27A', borderRadius: 6, padding: '2px 5px', marginTop: 4, textAlign: 'center' }}>
-                                ↓ wpisuj wykonane powt.
+                                {ex.bodyweight ? '↓ masa własna — wpisuj powt.' : '↓ wpisuj wykonane powt.'}
                               </div>
                             )}
                           </th>
@@ -755,7 +822,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                           const entry = entryMap.get(entryKey(ex.id, athlete.id)) || null
                           const sets = effectiveSets(ex, entry)
                           // Tryb powtórzeń: kolumna „max" dla całej grupy ALBO „bez ciężaru” dla tej zawodniczki
-                          const repsMode = isMaxReps(ex.reps) || !!entry?.bodyweight
+                          const repsMode = isMaxReps(ex.reps) || !!ex.bodyweight || !!entry?.bodyweight
                           return (
                             <td key={ex.id} style={{ padding: '0.45rem 0.5rem', ...(absent ? { opacity: 0.35, pointerEvents: 'none' as const } : {}) }}>
                               {entry?.exercise_override && (
