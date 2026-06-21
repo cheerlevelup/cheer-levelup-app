@@ -28,6 +28,10 @@ type Exercise = {
   tempo?: string | null
   // cała kolumna na masie własnej — wpisujemy powtórzenia zamiast ciężaru dla całej drużyny
   bodyweight?: boolean | null
+  // jedno zadanie, kilka wariantów wykonania (Podciąganie / Negatywne / z gumą)
+  variants?: string[] | null
+  // tryb indywidualny — serie/powt./tempo per zawodniczka; pusty nagłówek to nie błąd
+  individual?: boolean | null
 }
 type SetRow = { reps?: string; tempo?: string; weight?: string; skipped?: boolean }
 type Entry = {
@@ -44,6 +48,8 @@ type Entry = {
   exercise_override?: string | null
   // masa własna — w komórce wpisujemy powtórzenia zamiast ciężaru
   bodyweight?: boolean | null
+  // wybrany wariant ćwiczenia dla tej zawodniczki
+  variant?: string | null
 }
 
 interface Props {
@@ -325,6 +331,8 @@ export default function GroupTrainingClient({ group, training, athletes, initial
   const latestSetsRef = useRef<Map<string, SetRow[]>>(new Map())
   const dragExId = useRef<number | null>(null) // ćwiczenie przeciągane (zmiana kolejności)
   const [dragOverExId, setDragOverExId] = useState<number | null>(null)
+  const [variantsOpenExId, setVariantsOpenExId] = useState<number | null>(null) // edytor wariantów
+  const [newVariant, setNewVariant] = useState('')
 
   // Po dodaniu kolumny kursor wskakuje w pole nazwy nowego ćwiczenia
   useEffect(() => {
@@ -437,6 +445,61 @@ export default function GroupTrainingClient({ group, training, athletes, initial
         ? 'Aby wyłączyć ciężar dla kolumny, uruchom migrację 202606200003 (kolumna bodyweight w ćwiczeniach).'
         : err.message)
     }
+  }
+
+  // Przełącz tryb indywidualny — dane liczone z wierszy zawodniczek, nie z nagłówka
+  async function toggleIndividual(exerciseId: number) {
+    const ex = exercises.find(e => e.id === exerciseId)
+    if (!ex) return
+    const next = !ex.individual
+    setExercises(prev => prev.map(e => e.id === exerciseId ? { ...e, individual: next } : e))
+    const { error: err } = await supabase
+      .from('group_training_exercises')
+      .update({ individual: next })
+      .eq('id', exerciseId)
+    if (err) {
+      setExercises(prev => prev.map(e => e.id === exerciseId ? { ...e, individual: !next } : e))
+      setError(/'individual'/.test(err.message)
+        ? 'Aby używać trybu indywidualnego, uruchom migrację 202606220001 (kolumny variants/individual/variant).'
+        : err.message)
+    }
+  }
+
+  // Zapis listy wariantów ćwiczenia (jedno zadanie, kilka wersji wykonania)
+  async function persistVariants(exerciseId: number, variants: string[]) {
+    const prev = exercises.find(e => e.id === exerciseId)?.variants ?? []
+    setExercises(p => p.map(e => e.id === exerciseId ? { ...e, variants } : e))
+    const { error: err } = await supabase
+      .from('group_training_exercises')
+      .update({ variants })
+      .eq('id', exerciseId)
+    if (err) {
+      setExercises(p => p.map(e => e.id === exerciseId ? { ...e, variants: prev } : e))
+      setError(/'variants'/.test(err.message)
+        ? 'Aby dodawać warianty, uruchom migrację 202606220001 (kolumny variants/individual/variant).'
+        : err.message)
+    }
+  }
+
+  function addVariant(exerciseId: number) {
+    const name = newVariant.trim()
+    if (!name) return
+    const ex = exercises.find(e => e.id === exerciseId)
+    const current = ex?.variants ?? []
+    if (current.some(v => v.toLowerCase() === name.toLowerCase())) { setNewVariant(''); return }
+    persistVariants(exerciseId, [...current, name])
+    setNewVariant('')
+  }
+
+  function removeVariant(exerciseId: number, name: string) {
+    const ex = exercises.find(e => e.id === exerciseId)
+    const current = ex?.variants ?? []
+    persistVariants(exerciseId, current.filter(v => v !== name))
+  }
+
+  // Wybór wariantu dla konkretnej zawodniczki (zapisywany przy jej wpisie)
+  async function saveVariant(athlete: Athlete, ex: Exercise, variant: string | null) {
+    await saveEntryMeta(athlete, ex, { variant: variant || null })
   }
 
   // Zmiana kolejności ćwiczeń (przeciągnięcie) — przenosi i zapisuje nowe exercise_order
@@ -581,9 +644,12 @@ export default function GroupTrainingClient({ group, training, athletes, initial
       .select()
       .single()
     if (err || !data) {
-      setError('pain' in patch && /'pain'/.test(err?.message || '')
+      const msg = err?.message || ''
+      setError('pain' in patch && /'pain'/.test(msg)
         ? 'Aby oznaczać ból w tabeli, uruchom migrację 202606200002 (kolumna pain).'
-        : (err?.message || 'Błąd zapisu'))
+        : 'variant' in patch && /'variant'/.test(msg)
+        ? 'Aby przypisywać warianty, uruchom migrację 202606220001 (kolumny variants/individual/variant).'
+        : (msg || 'Błąd zapisu'))
       return
     }
     setEntryMap(prev => { const next = new Map(prev); next.set(key, data as Entry); return next })
@@ -792,6 +858,13 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                               >
                                 P
                               </button>
+                              <button
+                                onClick={() => toggleIndividual(ex.id)}
+                                title={ex.individual ? 'Tryb indywidualny — dane liczone z wierszy zawodniczek (kliknij, by wrócić do grupowego)' : 'Tryb indywidualny: serie/powt./tempo różne per zawodniczka, nagłówek może być pusty'}
+                                style={{ flexShrink: 0, fontFamily: mono, fontSize: '0.5rem', fontWeight: 700, border: `1px solid ${ex.individual ? C.gold : C.grayLight}`, background: ex.individual ? '#FFFBEB' : C.white, color: ex.individual ? '#92600A' : C.gray, borderRadius: 5, padding: '2px 4px', lineHeight: 1 }}
+                              >
+                                I
+                              </button>
                               <button onClick={() => handleDeleteExercise(ex)} title="Usuń ćwiczenie" style={{ border: 'none', background: 'none', color: C.gray, fontSize: '0.78rem', padding: 2, flexShrink: 0 }}>✕</button>
                             </div>
                             {/* Rozpiska dla całej grupy: serie / powtórzenia / tempo */}
@@ -821,6 +894,44 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 {ex.bodyweight ? '↓ masa własna — wpisuj powt.' : '↓ wpisuj wykonane powt.'}
                               </div>
                             )}
+                            {ex.individual && (
+                              <div style={{ fontFamily: mono, fontSize: '0.5rem', fontWeight: 700, color: '#854F0B', background: '#FEF6E0', border: '1px solid #F7D27A', borderRadius: 6, padding: '2px 5px', marginTop: 4, textAlign: 'center' }}>
+                                tryb indywidualny — dane z zawodniczek
+                              </div>
+                            )}
+                            {/* ── WARIANTY ZADANIA ── */}
+                            <div style={{ marginTop: 4 }}>
+                              <button
+                                onClick={() => { setVariantsOpenExId(variantsOpenExId === ex.id ? null : ex.id); setNewVariant('') }}
+                                title="Warianty wykonania tego zadania (np. Podciąganie / Negatywne / z gumą)"
+                                style={{ width: '100%', fontFamily: mono, fontSize: '0.5rem', fontWeight: 700, border: `1px solid ${(ex.variants?.length ?? 0) > 0 ? C.gold : C.grayLight}`, background: (ex.variants?.length ?? 0) > 0 ? '#FFFBEB' : C.white, color: (ex.variants?.length ?? 0) > 0 ? '#92600A' : C.gray, borderRadius: 6, padding: '2px 5px', lineHeight: 1.3 }}
+                              >
+                                ⋔ warianty{(ex.variants?.length ?? 0) > 0 ? ` (${ex.variants!.length})` : ''} {variantsOpenExId === ex.id ? '▴' : '▾'}
+                              </button>
+                              {variantsOpenExId === ex.id && (
+                                <div style={{ marginTop: 4, padding: 5, background: C.white, border: `1px solid ${C.grayLight}`, borderRadius: 8 }}>
+                                  {(ex.variants ?? []).length === 0 && (
+                                    <div style={{ fontFamily: mono, fontSize: '0.5rem', color: C.gray, marginBottom: 4, textAlign: 'center' }}>brak — dodaj wersje wykonania</div>
+                                  )}
+                                  {(ex.variants ?? []).map(v => (
+                                    <div key={v} style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 3 }}>
+                                      <span style={{ flex: 1, fontFamily: sans, fontSize: '0.62rem', fontWeight: 700, color: C.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</span>
+                                      <button onClick={() => removeVariant(ex.id, v)} title="Usuń wariant" style={{ border: 'none', background: 'none', color: C.gray, fontSize: '0.72rem', padding: 0, lineHeight: 1 }}>✕</button>
+                                    </div>
+                                  ))}
+                                  <div style={{ display: 'flex', gap: 3, marginTop: 4 }}>
+                                    <input
+                                      value={variantsOpenExId === ex.id ? newVariant : ''}
+                                      onChange={e => setNewVariant(e.target.value)}
+                                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addVariant(ex.id) } }}
+                                      placeholder="nazwa wariantu"
+                                      style={{ flex: 1, minWidth: 0, border: `1px solid ${C.grayLight}`, borderRadius: 6, background: C.offWhite, fontFamily: sans, fontSize: '0.62rem', color: C.navy, padding: '0.25rem 0.35rem', outline: 'none' }}
+                                    />
+                                    <button onClick={() => addVariant(ex.id)} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 6, padding: '0.25rem 0.45rem', fontWeight: 800, fontSize: '0.7rem', lineHeight: 1 }}>＋</button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           </th>
                         )
                       })}
@@ -864,6 +975,17 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                           const repsMode = isMaxReps(ex.reps) || !!ex.bodyweight || !!entry?.bodyweight
                           return (
                             <td key={ex.id} style={{ padding: '0.45rem 0.5rem', ...(absent ? { opacity: 0.35, pointerEvents: 'none' as const } : {}) }}>
+                              {(ex.variants?.length ?? 0) > 0 && (
+                                <select
+                                  value={entry?.variant || ''}
+                                  onChange={e => saveVariant(athlete, ex, e.target.value || null)}
+                                  title="Wariant wykonania dla tej zawodniczki"
+                                  style={{ width: '100%', marginBottom: 5, border: `1.5px solid ${entry?.variant ? C.gold : C.grayLight}`, background: entry?.variant ? '#FFFBEB' : C.white, color: entry?.variant ? '#92600A' : C.gray, fontFamily: sans, fontSize: '0.62rem', fontWeight: 700, borderRadius: 6, padding: '3px 4px', outline: 'none' }}
+                                >
+                                  <option value="">— wariant —</option>
+                                  {ex.variants!.map(v => <option key={v} value={v}>{v}</option>)}
+                                </select>
+                              )}
                               {entry?.exercise_override && (
                                 <div title={`Zamiana ćwiczenia: ${entry.exercise_override}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%', fontFamily: sans, fontSize: '0.64rem', fontWeight: 700, color: '#854F0B', background: '#FEF6E0', border: '1px solid #F7D27A', borderRadius: 999, padding: '2px 9px 2px 2px', marginBottom: 5 }}>
                                   <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, borderRadius: '50%', background: C.gold, color: C.navy, fontFamily: mono, fontSize: '0.62rem', fontWeight: 700, lineHeight: 1 }}>⇄</span>

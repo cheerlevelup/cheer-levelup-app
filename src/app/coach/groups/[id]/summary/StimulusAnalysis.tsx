@@ -73,6 +73,12 @@ export function StimulusBadge({ ex }: { ex: ExerciseInput }) {
       <div style={{ fontFamily: mono, fontSize: '0.5rem', color: C.gray, marginTop: 3 }}>
         TUT {fmtSeconds(a.tutPerSet)}/seria · pewność {CONFIDENCE_LABEL[a.confidence]}
       </div>
+      {(a.mode === 'individual' || a.variantsDefined.length > 0) && (
+        <div style={{ fontFamily: mono, fontSize: '0.5rem', fontWeight: 700, color: '#92600A', marginTop: 2 }}>
+          {a.mode === 'individual' ? 'tryb indyw.' : ''}
+          {a.variantsDefined.length > 0 ? `${a.mode === 'individual' ? ' · ' : ''}${a.variantsDefined.length} war.` : ''}
+        </div>
+      )}
     </div>
   )
 }
@@ -90,16 +96,57 @@ function TagPills({ items, map, color }: { items: string[]; map: Record<string, 
   )
 }
 
+function VariantBlock({ a }: { a: ExerciseAnalysis }) {
+  const hasVariants = a.variantsDefined.length > 0 || a.variantUsage.length > 0
+  if (a.mode !== 'individual' && !hasVariants) return null
+  return (
+    <div style={{ margin: '7px 0 2px', padding: '7px 9px', background: C.offWhite, border: `1px solid ${C.grayLight}`, borderRadius: 9 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontFamily: mono, fontSize: '0.56rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tryb</span>
+        <span style={{ fontFamily: sans, fontSize: '0.66rem', fontWeight: 700, color: a.mode === 'individual' ? '#6B4E0B' : C.navy, background: a.mode === 'individual' ? '#FEF6E0' : C.white, border: `1px solid ${a.mode === 'individual' ? '#F7D27A' : C.grayLight}`, borderRadius: 6, padding: '1px 7px' }}>
+          {a.mode === 'individual' ? 'indywidualny — analiza z danych zawodniczek' : 'grupowy — analiza z nagłówka'}
+        </span>
+      </div>
+      {hasVariants && (
+        <div style={{ marginTop: 6 }}>
+          <div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>
+            Warianty{a.variantUsage.length > 0 ? ' użyte' : ''}
+          </div>
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+            {a.variantUsage.length > 0
+              ? a.variantUsage.map(v => (
+                <span key={v.variant} style={{ fontFamily: sans, fontSize: '0.66rem', color: C.navy, background: C.white, border: `1px solid ${C.grayLight}`, borderRadius: 6, padding: '1px 7px' }}>
+                  {v.variant} <strong>· {v.count} {v.count === 1 ? 'zawodniczka' : 'zawodniczki'}</strong>
+                </span>
+              ))
+              : a.variantsDefined.map(v => (
+                <span key={v} style={{ fontFamily: sans, fontSize: '0.66rem', color: C.gray, background: C.white, border: `1px solid ${C.grayLight}`, borderRadius: 6, padding: '1px 7px' }}>
+                  {v}
+                </span>
+              ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ExerciseCard({ a }: { a: ExerciseAnalysis }) {
+  const repsLabel = a.repsPerSet != null
+    ? `${a.repsPerSet % 1 === 0 ? a.repsPerSet : a.repsPerSet.toFixed(1)} powt.${a.mode === 'individual' ? '/seria (śr.)' : ''}`
+    : a.isMax ? 'na maksa' : '—'
   return (
     <div style={{ padding: '0.85rem 1rem', borderTop: `1px solid ${C.grayLight}` }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
         <span style={{ fontWeight: 800, fontSize: '0.92rem', color: C.navy }}>{a.name}</span>
         <span style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray }}>
-          {a.sets ? `${a.sets} ser. · ` : ''}{a.repsPerSet != null ? `${a.repsPerSet % 1 === 0 ? a.repsPerSet : a.repsPerSet.toFixed(1)} powt.` : a.isMax ? 'na maksa' : '—'}
-          {a.perRepSeconds > 0 ? ` · ${a.perRepSeconds}s/powt.` : ''}
+          {a.mode === 'individual'
+            ? `${a.athleteCount} ${a.athleteCount === 1 ? 'zawodniczka' : 'zawodniczek'} · ${repsLabel}`
+            : `${a.sets ? `${a.sets} ser. · ` : ''}${repsLabel}${a.perRepSeconds > 0 ? ` · ${a.perRepSeconds}s/powt.` : ''}`}
         </span>
       </div>
+
+      <VariantBlock a={a} />
 
       {a.dominant ? (
         <>
@@ -131,7 +178,11 @@ function ExerciseCard({ a }: { a: ExerciseAnalysis }) {
         </>
       ) : (
         <div style={{ fontFamily: mono, fontSize: '0.66rem', color: C.gray, marginTop: 6 }}>
-          Bodziec nieokreślony{a.isMax ? ' — ćwiczenie „na maksa” (liczba powtórzeń zależy od zawodniczki).' : ' — brak liczby powtórzeń.'}
+          Bodziec nieokreślony{
+            a.mode === 'individual' ? ' — brak danych indywidualnych zawodniczek.'
+            : a.isMax ? ' — ćwiczenie „na maksa” (liczba powtórzeń zależy od zawodniczki).'
+            : ' — brak liczby powtórzeń.'
+          }
         </div>
       )}
 

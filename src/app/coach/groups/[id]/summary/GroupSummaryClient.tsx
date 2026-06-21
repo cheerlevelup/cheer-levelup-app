@@ -20,7 +20,7 @@ type Group = { id: number; name: string }
 type Athlete = { id: number; full_name: string }
 type Training = { id: number; group_id: number; training_date: string; absent_athlete_ids?: number[] | null }
 type SetRow = { reps?: string; tempo?: string; weight?: string; skipped?: boolean }
-type Exercise = { id: number; name: string; exercise_order: number; sets_planned?: number | null; reps?: string | null; tempo?: string | null; bodyweight?: boolean | null }
+type Exercise = { id: number; name: string; exercise_order: number; sets_planned?: number | null; reps?: string | null; tempo?: string | null; bodyweight?: boolean | null; variants?: string[] | null; individual?: boolean | null }
 type Entry = {
   exercise_id: number
   athlete_id: number
@@ -31,6 +31,7 @@ type Entry = {
   comment?: string | null
   exercise_override?: string | null
   bodyweight?: boolean | null
+  variant?: string | null
 }
 type WellnessRow = {
   athlete_id: number
@@ -257,6 +258,24 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
   const weightOf = (athleteId: number) =>
     wellnessByAthlete.get(athleteId)?.body_weight_kg ?? bodyWeights[athleteId] ?? null
 
+  // Dane wejściowe analizy bodźca: nagłówek grupy + dane indywidualne zawodniczek
+  // (potrzebne w trybie indywidualnym i do zliczania użytych wariantów).
+  const toStimulusInput = (ex: Exercise): ExerciseInput => ({
+    name: ex.name,
+    sets: ex.sets_planned, reps: ex.reps, tempo: ex.tempo, bodyweight: ex.bodyweight,
+    individual: ex.individual, variants: ex.variants,
+    athletes: athletes
+      .filter(a => !absentIds.has(a.id))
+      .map(a => {
+        const e = entryMap.get(entryKey(ex.id, a.id))
+        return {
+          athleteId: a.id,
+          variant: e?.variant ?? null,
+          sets: (e?.sets || []).map(s => ({ reps: s.reps, tempo: s.tempo })),
+        }
+      }),
+  })
+
   // Czerwono: zawodniczka z NAJNIŻSZYM relative load (ciężar zewn. / masa ciała) w danym ćwiczeniu.
   // Liczymy tylko ćwiczenia z obciążeniem zewn., pomijamy zmodyfikowane i bez masy ciała.
   const redByExercise = useMemo(() => {
@@ -425,7 +444,7 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
                                 ].filter(Boolean).join(' · ')}
                               </div>
                             )}
-                            <StimulusBadge ex={{ name: ex.name, sets: ex.sets_planned, reps: ex.reps, tempo: ex.tempo, bodyweight: ex.bodyweight }} />
+                            <StimulusBadge ex={toStimulusInput(ex)} />
                           </th>
                         ))}
                       </tr>
@@ -486,7 +505,7 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
               {exercises.length > 0 && (
                 <>
                   <div style={sectionLabel}>Analiza bodźca treningowego</div>
-                  <StimulusSection exercises={exercises.map((ex): ExerciseInput => ({ name: ex.name, sets: ex.sets_planned, reps: ex.reps, tempo: ex.tempo, bodyweight: ex.bodyweight }))} />
+                  <StimulusSection exercises={exercises.map(toStimulusInput)} />
                   <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, margin: '0 0 1.5rem', lineHeight: 1.5 }}>
                     Na podstawie liczby powtórzeń, tempa i TUT system szacuje, jaki bodziec został zaprogramowany przez trenera. To analiza konstrukcji programu, nie pomiar rzeczywistej odpowiedzi organizmu.
                   </div>

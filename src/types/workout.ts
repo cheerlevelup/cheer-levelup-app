@@ -167,6 +167,9 @@ export interface GroupTrainingExercise {
   sets_planned?: number | null
   reps?: string | null
   tempo?: string | null
+  bodyweight?: boolean | null
+  variants?: string[] | null
+  individual?: boolean | null
 }
 
 export interface GroupTrainingEntry {
@@ -179,6 +182,8 @@ export interface GroupTrainingEntry {
   pain_comment?: string | null
   comment?: string | null
   exercise_override?: string | null
+  bodyweight?: boolean | null
+  variant?: string | null
 }
 
 export interface TrainingView {

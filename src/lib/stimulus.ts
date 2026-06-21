@@ -200,32 +200,99 @@ export function tagsFromName(name: string, bodyweight?: boolean): { patterns: st
   return { patterns, characteristics }
 }
 
-// ── Analiza pojedynczego ćwiczenia ────────────────────────────────
+// ── Agregacja serii ───────────────────────────────────────────────
+// Wspólny rdzeń: bierze listę serii (każda z własnymi powt./tempo) i sumuje
+// je w jeden profil, ważąc każdą serię ilością pracy. Używany zarówno dla
+// nagłówka grupy (N kopii tej samej serii), jak i dla serii zawodniczki.
+export interface SetInput {
+  reps?: string | null
+  tempo?: string | null
+}
+
+interface Aggregate {
+  profile: StimulusProfile
+  totalTut: number
+  totalReps: number
+  tutPerSet: number          // średni TUT na serię
+  repsPerSet: number | null  // reprezentatywne powt. (ważone pracą)
+  explosive: boolean
+  isMax: boolean
+  setCount: number           // ile serii dało się sklasyfikować
+  work: number
+}
+
+function aggregateSets(sets: SetInput[]): Aggregate {
+  const acc = emptyProfile()
+  let totalTut = 0, totalReps = 0, work = 0
+  let explosive = false, isMax = false, setCount = 0
+  let repsWeighted = 0, repsWeightSum = 0, tutSum = 0
+  for (const s of sets) {
+    const { reps, isMax: m } = parseReps(s.reps)
+    const tempo = parseTempo(s.tempo)
+    if (m) isMax = true
+    if (tempo.explosive) explosive = true
+    if (reps == null) continue
+    setCount++
+    const tut = reps * tempo.perRepSeconds
+    const w = tut > 0 ? tut : reps
+    totalTut += tut; tutSum += tut; totalReps += reps; work += w
+    const p = repsProfile(reps)
+    for (const c of CATEGORY_ORDER) acc[c] += p[c] * w
+    repsWeighted += reps * w; repsWeightSum += w
+  }
+  return {
+    profile: normalize(acc),
+    totalTut, totalReps,
+    tutPerSet: setCount > 0 ? tutSum / setCount : 0,
+    repsPerSet: repsWeightSum > 0 ? repsWeighted / repsWeightSum : null,
+    explosive, isMax, setCount, work,
+  }
+}
+
+// ── Analiza pojedynczego ćwiczenia / zadania ──────────────────────
+export interface AthleteSetsInput {
+  athleteId: number
+  variant?: string | null
+  sets: SetInput[]
+}
+
 export interface ExerciseInput {
   name: string
+  // tryb grupowy (nagłówek kolumny) — obowiązuje całą grupę
   sets?: number | null     // liczba serii (sets_planned)
   reps?: string | null     // np. „8”, „8-10”, „AMRAP”
   tempo?: string | null    // np. „3010”, „30X0”
   bodyweight?: boolean | null
+  // zadanie z wariantami / tryb indywidualny
+  individual?: boolean | null
+  variants?: string[] | null
+  athletes?: AthleteSetsInput[]  // dane zawodniczek (wymagane w trybie indywidualnym)
 }
+
+export interface VariantUsage { variant: string; count: number }
 
 export interface ExerciseAnalysis {
   name: string
+  mode: 'group' | 'individual'
   // metryki konstrukcji
-  sets: number
+  sets: number               // liczba serii (grupowo) lub 0 (indywidualnie)
   repsPerSet: number | null
   isMax: boolean
-  perRepSeconds: number
+  perRepSeconds: number       // grupowo: czas powt. z nagłówka; indywid.: 0
   tempoValid: boolean
-  tutPerSet: number        // TUT jednej serii (s)
-  totalTut: number         // całkowity TUT ćwiczenia (s)
-  totalReps: number        // całkowita liczba powtórzeń
+  tutPerSet: number          // TUT jednej serii / średni TUT serii (s)
+  totalTut: number           // całkowity TUT (s)
+  totalReps: number          // całkowita liczba powtórzeń
   // klasyfikacja
   profile: StimulusProfile
   dominant: StimulusCategory | null
   character: StimulusCharacter
   explosive: boolean
   confidence: Confidence
+  // warianty
+  variantsDefined: string[]
+  variantUsage: VariantUsage[]
+  athleteCount: number       // ile zawodniczek dostarczyło dane (tryb indyw.)
   // tagi
   patterns: string[]
   characteristics: string[]
@@ -242,43 +309,99 @@ function dominantOf(p: StimulusProfile): { cat: StimulusCategory | null; share: 
   return { cat, share }
 }
 
+function confidenceFrom(share: number, hasReps: boolean, tempoValid: boolean): Confidence {
+  if (!hasReps) return 'niska'
+  if (share >= 0.75) return tempoValid ? 'wysoka' : 'srednia'
+  if (share >= 0.55) return 'srednia'
+  return 'niska'
+}
+
+// Zlicza użycie wariantów wśród zawodniczek (każda wybrany wariant = +1).
+function countVariants(athletes: AthleteSetsInput[] | undefined, defined: string[]): VariantUsage[] {
+  const map = new Map<string, number>()
+  for (const a of athletes || []) {
+    const v = (a.variant || '').trim()
+    if (v) map.set(v, (map.get(v) || 0) + 1)
+  }
+  // najpierw warianty w kolejności zdefiniowanej, potem ewentualne spoza listy
+  const out: VariantUsage[] = []
+  for (const v of defined) if (map.has(v)) { out.push({ variant: v, count: map.get(v)! }); map.delete(v) }
+  for (const [variant, count] of map) out.push({ variant, count })
+  return out.sort((a, b) => b.count - a.count)
+}
+
 export function analyzeExercise(ex: ExerciseInput): ExerciseAnalysis {
-  const sets = Math.max(0, Math.round(ex.sets ?? 0)) || 0
-  const { reps: repsPerSet, isMax } = parseReps(ex.reps)
-  const tempo = parseTempo(ex.tempo)
-
-  const effReps = repsPerSet ?? 0
-  const tutPerSet = effReps * tempo.perRepSeconds
-  const totalReps = effReps * (sets || 1) * (repsPerSet != null ? 1 : 0)
-  const totalTut = tutPerSet * (sets || 1)
-
-  const profile = repsPerSet != null ? repsProfile(repsPerSet) : emptyProfile()
-  const { cat: dominant, share } = dominantOf(profile)
-
-  // Pewność: jak wyraźny jest dominujący kierunek + czy znamy tempo i powt.
-  let confidence: Confidence
-  if (repsPerSet == null) confidence = 'niska'
-  else if (share >= 0.75) confidence = tempo.valid ? 'wysoka' : 'srednia'
-  else if (share >= 0.55) confidence = 'srednia'
-  else confidence = 'niska'
-
+  const variantsDefined = (ex.variants || []).map(v => (v || '').trim()).filter(Boolean)
+  const variantUsage = countVariants(ex.athletes, variantsDefined)
   const { patterns, characteristics } = tagsFromName(ex.name, ex.bodyweight ?? undefined)
+  const individual = !!ex.individual
 
-  // Waga (ilość pracy) — preferujemy TUT; gdy brak tempa, bierzemy same powtórzenia.
-  const work = totalTut > 0 ? totalTut : totalReps
-
-  return {
+  const base = {
     name: ex.name,
-    sets, repsPerSet, isMax,
+    variantsDefined, variantUsage,
+    patterns, characteristics,
+  }
+
+  if (individual) {
+    // Tryb indywidualny — agregujemy profile zawodniczek, każdą ważąc jej pracą.
+    const acc = emptyProfile()
+    let totalTut = 0, totalReps = 0, work = 0, tutSum = 0, setCountAll = 0
+    let explosive = false, isMax = false, athleteCount = 0
+    let repsWeighted = 0, repsWeightSum = 0
+    for (const a of ex.athletes || []) {
+      const ag = aggregateSets(a.sets || [])
+      if (ag.isMax) isMax = true
+      if (ag.explosive) explosive = true
+      if (ag.setCount === 0) continue
+      athleteCount++
+      const w = ag.work || 1
+      for (const c of CATEGORY_ORDER) acc[c] += ag.profile[c] * w
+      totalTut += ag.totalTut; totalReps += ag.totalReps; work += w
+      tutSum += ag.totalTut; setCountAll += ag.setCount
+      if (ag.repsPerSet != null) { repsWeighted += ag.repsPerSet * w; repsWeightSum += w }
+    }
+    const profile = normalize(acc)
+    const { cat: dominant, share } = dominantOf(profile)
+    const repsPerSet = repsWeightSum > 0 ? repsWeighted / repsWeightSum : null
+    const tutPerSet = setCountAll > 0 ? tutSum / setCountAll : 0
+    return {
+      ...base,
+      mode: 'individual',
+      sets: 0,
+      repsPerSet, isMax,
+      perRepSeconds: 0,
+      tempoValid: totalTut > 0,
+      tutPerSet, totalTut, totalReps,
+      profile,
+      dominant: athleteCount > 0 ? dominant : null,
+      character: characterFromTut(tutPerSet),
+      explosive,
+      confidence: confidenceFrom(share, athleteCount > 0 && repsPerSet != null, totalTut > 0),
+      athleteCount,
+      work: work || totalReps,
+    }
+  }
+
+  // Tryb grupowy — nagłówek obowiązuje całą grupę (N serii o tych samych powt./tempo).
+  const sets = Math.max(0, Math.round(ex.sets ?? 0)) || 0
+  const n = Math.max(sets, 1)
+  const ag = aggregateSets(Array.from({ length: n }, () => ({ reps: ex.reps, tempo: ex.tempo })))
+  const tempo = parseTempo(ex.tempo)
+  const { cat: dominant, share } = dominantOf(ag.profile)
+  return {
+    ...base,
+    mode: 'group',
+    sets,
+    repsPerSet: ag.repsPerSet, isMax: ag.isMax,
     perRepSeconds: tempo.perRepSeconds,
     tempoValid: tempo.valid,
-    tutPerSet, totalTut, totalReps,
-    profile, dominant,
-    character: characterFromTut(tutPerSet),
+    tutPerSet: ag.tutPerSet, totalTut: ag.totalTut, totalReps: ag.totalReps,
+    profile: ag.profile, dominant,
+    character: characterFromTut(ag.tutPerSet),
     explosive: tempo.explosive,
-    confidence,
-    patterns, characteristics,
-    work,
+    confidence: confidenceFrom(share, ag.repsPerSet != null, tempo.valid),
+    athleteCount: 0,
+    work: ag.work,
   }
 }
 
