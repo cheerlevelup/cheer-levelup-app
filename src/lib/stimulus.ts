@@ -262,6 +262,7 @@ export interface TaskVariant {
   sets?: number | null
   reps?: string | null
   tempo?: string | null
+  bodyweight?: boolean | null  // wariant na masie własnej (nie zmienia profilu bodźca)
 }
 
 export interface ExerciseInput {
