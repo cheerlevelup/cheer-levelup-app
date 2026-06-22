@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { formatDatePl, dayRangeIso } from '@/lib/groupTraining'
 import { StimulusBadge, StimulusSection } from './StimulusAnalysis'
-import type { ExerciseInput } from '@/lib/stimulus'
+import { variantHasPrescription } from '@/lib/stimulus'
+import type { ExerciseInput, TaskVariant } from '@/lib/stimulus'
 
 const C = {
   navy: '#0D1B2A', navyLight: '#1A2E45', navyBorder: '#243652',
@@ -20,7 +21,7 @@ type Group = { id: number; name: string }
 type Athlete = { id: number; full_name: string }
 type Training = { id: number; group_id: number; training_date: string; absent_athlete_ids?: number[] | null }
 type SetRow = { reps?: string; tempo?: string; weight?: string; skipped?: boolean }
-type Exercise = { id: number; name: string; exercise_order: number; sets_planned?: number | null; reps?: string | null; tempo?: string | null; bodyweight?: boolean | null; variants?: string[] | null; individual?: boolean | null }
+type Exercise = { id: number; name: string; exercise_order: number; sets_planned?: number | null; reps?: string | null; tempo?: string | null; bodyweight?: boolean | null; variants?: TaskVariant[] | null; individual?: boolean | null }
 type Entry = {
   exercise_id: number
   athlete_id: number
@@ -258,23 +259,34 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
   const weightOf = (athleteId: number) =>
     wellnessByAthlete.get(athleteId)?.body_weight_kg ?? bodyWeights[athleteId] ?? null
 
-  // Dane wejściowe analizy bodźca: nagłówek grupy + dane indywidualne zawodniczek
-  // (potrzebne w trybie indywidualnym i do zliczania użytych wariantów).
-  const toStimulusInput = (ex: Exercise): ExerciseInput => ({
-    name: ex.name,
-    sets: ex.sets_planned, reps: ex.reps, tempo: ex.tempo, bodyweight: ex.bodyweight,
-    individual: ex.individual, variants: ex.variants,
-    athletes: athletes
-      .filter(a => !absentIds.has(a.id))
-      .map(a => {
-        const e = entryMap.get(entryKey(ex.id, a.id))
-        return {
-          athleteId: a.id,
-          variant: e?.variant ?? null,
-          sets: (e?.sets || []).map(s => ({ reps: s.reps, tempo: s.tempo })),
-        }
-      }),
-  })
+  // Dane wejściowe analizy bodźca: nagłówek grupy + dane indywidualne zawodniczek.
+  // Dla każdej zawodniczki ustalamy rozpiskę: wariant z własną rozpiską > nagłówek,
+  // a wpisane przez nią powt./tempo nadpisują domyślne. To pozwala liczyć bodziec,
+  // gdy zawodniczki wykonują różne warianty tego samego zadania.
+  const toStimulusInput = (ex: Exercise): ExerciseInput => {
+    const variants = ex.variants ?? []
+    return {
+      name: ex.name,
+      sets: ex.sets_planned, reps: ex.reps, tempo: ex.tempo, bodyweight: ex.bodyweight,
+      individual: ex.individual, variants,
+      athletes: athletes
+        .filter(a => !absentIds.has(a.id))
+        .map(a => {
+          const e = entryMap.get(entryKey(ex.id, a.id))
+          const v = e?.variant ? variants.find(x => x.name === e.variant) : undefined
+          const presc = v && variantHasPrescription(v)
+            ? { sets: v.sets ?? null, reps: v.reps ?? null, tempo: v.tempo ?? null }
+            : { sets: ex.sets_planned ?? null, reps: ex.reps ?? null, tempo: ex.tempo ?? null }
+          const raw = e?.sets || []
+          const n = Math.max(raw.length, presc.sets ?? 0, 1)
+          const sets = Array.from({ length: n }, (_, i) => ({
+            reps: (raw[i]?.reps || '').trim() || presc.reps,
+            tempo: (raw[i]?.tempo || '').trim() || presc.tempo,
+          }))
+          return { athleteId: a.id, variant: e?.variant ?? null, sets }
+        }),
+    }
+  }
 
   // Czerwono: zawodniczka z NAJNIŻSZYM relative load (ciężar zewn. / masa ciała) w danym ćwiczeniu.
   // Liczymy tylko ćwiczenia z obciążeniem zewn., pomijamy zmodyfikowane i bez masy ciała.

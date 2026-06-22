@@ -256,6 +256,14 @@ export interface AthleteSetsInput {
   sets: SetInput[]
 }
 
+// Wariant zadania — własna rozpiska (może nadpisywać nagłówek grupy).
+export interface TaskVariant {
+  name: string
+  sets?: number | null
+  reps?: string | null
+  tempo?: string | null
+}
+
 export interface ExerciseInput {
   name: string
   // tryb grupowy (nagłówek kolumny) — obowiązuje całą grupę
@@ -265,8 +273,13 @@ export interface ExerciseInput {
   bodyweight?: boolean | null
   // zadanie z wariantami / tryb indywidualny
   individual?: boolean | null
-  variants?: string[] | null
-  athletes?: AthleteSetsInput[]  // dane zawodniczek (wymagane w trybie indywidualnym)
+  variants?: TaskVariant[] | null
+  athletes?: AthleteSetsInput[]  // dane zawodniczek (tryb indyw. / warianty z rozpiską)
+}
+
+// Czy któryś wariant ma własną rozpiskę (serie/powt./tempo)?
+export function variantHasPrescription(v: TaskVariant): boolean {
+  return v.sets != null || !!(v.reps && v.reps.trim()) || !!(v.tempo && v.tempo.trim())
 }
 
 export interface VariantUsage { variant: string; count: number }
@@ -331,10 +344,13 @@ function countVariants(athletes: AthleteSetsInput[] | undefined, defined: string
 }
 
 export function analyzeExercise(ex: ExerciseInput): ExerciseAnalysis {
-  const variantsDefined = (ex.variants || []).map(v => (v || '').trim()).filter(Boolean)
+  const variants = ex.variants || []
+  const variantsDefined = variants.map(v => (v.name || '').trim()).filter(Boolean)
   const variantUsage = countVariants(ex.athletes, variantsDefined)
   const { patterns, characteristics } = tagsFromName(ex.name, ex.bodyweight ?? undefined)
-  const individual = !!ex.individual
+  // Liczymy per zawodniczka, gdy tryb indywidualny ALBO któryś wariant ma własną
+  // rozpiskę (wtedy zawodniczki mogą wykonywać różne warianty = różny bodziec).
+  const perAthlete = !!ex.individual || variants.some(variantHasPrescription)
 
   const base = {
     name: ex.name,
@@ -342,7 +358,7 @@ export function analyzeExercise(ex: ExerciseInput): ExerciseAnalysis {
     patterns, characteristics,
   }
 
-  if (individual) {
+  if (perAthlete) {
     // Tryb indywidualny — agregujemy profile zawodniczek, każdą ważąc jej pracą.
     const acc = emptyProfile()
     let totalTut = 0, totalReps = 0, work = 0, tutSum = 0, setCountAll = 0
