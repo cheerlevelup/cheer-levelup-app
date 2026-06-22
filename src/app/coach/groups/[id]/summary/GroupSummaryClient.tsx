@@ -181,7 +181,7 @@ function fmtTut(sec: number) {
 }
 
 // Komórka „External Load”: serie / powtórzenia / TUT / ciężar zewn. + kolor (czerwony/pomarańczowy)
-function ExternalLoadCell({ entry, ex, red, orange }: { entry: Entry | undefined; ex: Exercise; red: boolean; orange: boolean }) {
+function ExternalLoadCell({ entry, ex, red, green, orange }: { entry: Entry | undefined; ex: Exercise; red: boolean; green?: boolean; orange: boolean }) {
   const sets = entry?.sets
   const hasAny = (sets || []).some(s => s.skipped || s.reps || s.weight) || (!!ex.reps && (sets?.length ?? 0) > 0)
   if (!hasAny) return <span style={{ fontFamily: mono, fontSize: '0.72rem', color: C.grayLight }}>—</span>
@@ -189,7 +189,7 @@ function ExternalLoadCell({ entry, ex, red, orange }: { entry: Entry | undefined
   const m = exerciseMetrics(sets, ex, modified)
   // Przy modyfikacji liczba serii jest indywidualna — mianownik z jej własnych serii, nie z planu grupy
   const planned = modified ? (m.setCount + m.skipped) : (ex.sets_planned ?? 0)
-  const accent = red ? '#C81E1E' : orange ? '#B45309' : C.gray
+  const accent = red ? '#C81E1E' : green ? '#15803D' : orange ? '#B45309' : C.gray
   // Modyfikacja TEJ zawodniczki (zamiana / masa własna) — „na maksa” to cecha kolumny, nie modyfikacja
   const modLabel = entry?.exercise_override ? entry.exercise_override : entry?.bodyweight ? 'masa własna' : ''
   const Row = (label: string, val: string) => (
@@ -203,9 +203,9 @@ function ExternalLoadCell({ entry, ex, red, orange }: { entry: Entry | undefined
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{modLabel}</span>
         </div>
       )}
-      {(red || orange) && (
+      {(red || green || orange) && (
         <div style={{ fontSize: '0.52rem', fontWeight: 700, color: accent, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 2 }}>
-          {red ? (isRepsExercise(ex) ? '● najmniej powt.' : '● najniższy load') : '● niepełne'}
+          {red ? (isRepsExercise(ex) ? '● najmniej powt.' : '● najniższy load') : green ? '● najwięcej powt.' : '● niepełne'}
         </div>
       )}
       {Row('serie', `${m.setCount}${planned ? `/${planned}` : ''}${m.skipped ? ` (−${m.skipped})` : ''}`)}
@@ -324,6 +324,28 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
     return map
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exercises, athletes, entryMap, wellnessByAthlete, bodyWeights])
+
+  // Zielono: w ćwiczeniu na powtórzenia (AMRAP / masa własna) zawodniczka,
+  // która zrobiła NAJWIĘCEJ powtórzeń — odwrotność czerwonego „najmniej powt.”.
+  const greenByExercise = useMemo(() => {
+    const map = new Map<number, number>()
+    for (const ex of exercises) {
+      if (!isRepsExercise(ex)) continue
+      let best: { id: number; val: number } | null = null
+      let count = 0
+      for (const a of athletes) {
+        const entry = entryMap.get(entryKey(ex.id, a.id))
+        if (entry?.exercise_override) continue
+        const m = exerciseMetrics(entry?.sets, ex, true)
+        if (m.totalReps <= 0) continue
+        count++
+        if (!best || m.totalReps > best.val) best = { id: a.id, val: m.totalReps }
+      }
+      if (best && count >= 2) map.set(ex.id, best.id)
+    }
+    return map
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exercises, athletes, entryMap])
 
   useEffect(() => {
     if (!selected) return
@@ -556,10 +578,11 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
                               const entry = entryMap.get(entryKey(ex.id, athlete.id))
                               const m = exerciseMetrics(entry?.sets, ex, isModifiedEntry(entry, ex))
                               const red = redByExercise.get(ex.id) === athlete.id
-                              const orange = !red && isUnderdone(entry, ex, m)
+                              const green = !red && greenByExercise.get(ex.id) === athlete.id
+                              const orange = !red && !green && isUnderdone(entry, ex, m)
                               return (
-                                <td key={ex.id} style={{ padding: '0.5rem 0.7rem', background: red ? '#FDEDED' : orange ? '#FEF3E2' : undefined }}>
-                                  <ExternalLoadCell entry={entry} ex={ex} red={red} orange={orange} />
+                                <td key={ex.id} style={{ padding: '0.5rem 0.7rem', background: red ? '#FDEDED' : green ? '#E9F7EF' : orange ? '#FEF3E2' : undefined }}>
+                                  <ExternalLoadCell entry={entry} ex={ex} red={red} green={green} orange={orange} />
                                 </td>
                               )
                             })}
@@ -571,6 +594,7 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
                   </div>
                   <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, margin: '0 0 0.4rem', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
                     <span><span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: '#C81E1E', verticalAlign: 'middle' }} /> najniższy relative load (ciężar zewn./masa ciała); przy „na maksa” — najmniej powtórzeń</span>
+                    <span><span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: '#15803D', verticalAlign: 'middle' }} /> ćwiczenie na powtórzenia (AMRAP / masa własna) — najwięcej powtórzeń</span>
                     <span><span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: '#B45309', verticalAlign: 'middle' }} /> niepełne (seria/powt.) — bez ćwiczeń zmodyfikowanych</span>
                   </div>
                   <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, margin: '0 0 1.5rem' }}>
