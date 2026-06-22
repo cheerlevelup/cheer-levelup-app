@@ -33,8 +33,8 @@ type Exercise = {
   // tryb indywidualny — serie/powt./tempo per zawodniczka; pusty nagłówek to nie błąd
   individual?: boolean | null
 }
-// Wariant: nazwa + opcjonalna własna rozpiska (serie/powt./tempo) + tryb masy własnej.
-type Variant = { name: string; sets?: number | null; reps?: string | null; tempo?: string | null; bodyweight?: boolean | null }
+// Wariant: nazwa + opcjonalna własna rozpiska (serie/powt./tempo) + tryb masy własnej + tryb indywidualny.
+type Variant = { name: string; sets?: number | null; reps?: string | null; tempo?: string | null; bodyweight?: boolean | null; individual?: boolean | null }
 type SetRow = { reps?: string; tempo?: string; weight?: string; skipped?: boolean }
 type Entry = {
   id?: number
@@ -68,14 +68,32 @@ const entryKey = (exerciseId: number, athleteId: number) => `${exerciseId}_${ath
 // Wtedy w komórkach zawodniczek wpisujemy wykonane powtórzenia, nie ciężar.
 const isMaxReps = (reps?: string | null) => /(amrap|maks|max|upad)/i.test((reps || '').trim())
 
-// Normalizacja wariantów z bazy: jsonb (obiekty) lub starszy text[] (same nazwy).
+// Normalizacja jednego wariantu z bazy: jsonb (obiekt), starszy text[] (sama nazwa),
+// albo USZKODZONY zapis, gdzie nazwa to zserializowany obiekt wariantu
+// (efekt zapisu obiektów do kolumny text[] przed migracją text[]→jsonb).
+function coerceVariant(x: unknown): Variant | null {
+  if (typeof x === 'string') {
+    const s = x.trim()
+    // string wyglądający jak JSON wariantu — rozpakuj rekurencyjnie
+    if (s.startsWith('{')) { try { return coerceVariant(JSON.parse(s)) } catch { /* nie JSON */ } }
+    return s ? { name: s, sets: null, reps: '', tempo: '', bodyweight: false, individual: false } : null
+  }
+  if (x && typeof x === 'object') {
+    const o = x as Variant
+    // nazwa = zserializowany obiekt wariantu → rozpakuj zamiast pokazywać surowy JSON
+    if (typeof o.name === 'string' && o.name.trim().startsWith('{')) {
+      try { const inner = coerceVariant(JSON.parse(o.name)); if (inner) return inner } catch { /* zostaw */ }
+    }
+    const name = String(o.name ?? '').trim()
+    return name ? { name, sets: o.sets ?? null, reps: o.reps ?? '', tempo: o.tempo ?? '', bodyweight: !!o.bodyweight, individual: !!o.individual } : null
+  }
+  return null
+}
+
+// Normalizacja listy wariantów z bazy.
 function normalizeVariants(raw: unknown): Variant[] {
   if (!Array.isArray(raw)) return []
-  return raw.map(x =>
-    typeof x === 'string'
-      ? { name: x, sets: null, reps: '', tempo: '', bodyweight: false }
-      : { name: String((x as Variant).name ?? ''), sets: (x as Variant).sets ?? null, reps: (x as Variant).reps ?? '', tempo: (x as Variant).tempo ?? '', bodyweight: !!(x as Variant).bodyweight }
-  ).filter(v => v.name)
+  return raw.map(coerceVariant).filter((v): v is Variant => v != null)
 }
 
 const variantHasPresc = (v: Variant) => v.sets != null || !!(v.reps && v.reps.trim()) || !!(v.tempo && v.tempo.trim())
@@ -358,6 +376,18 @@ export default function GroupTrainingClient({ group, training, athletes, initial
   const [variantsOpenExId, setVariantsOpenExId] = useState<number | null>(null) // edytor wariantów
   const [newVariant, setNewVariant] = useState('')
 
+  // Jednorazowe naprawienie uszkodzonych wariantów w bazie (nazwa = zserializowany
+  // obiekt). Po znormalizowaniu zapisujemy czystą wersję, żeby zniknęła też w analizie.
+  useEffect(() => {
+    initialExercises.forEach(e => {
+      const clean = normalizeVariants(e.variants)
+      if (clean.length === 0) return
+      if (JSON.stringify(clean) === JSON.stringify(e.variants)) return
+      supabase.from('group_training_exercises').update({ variants: clean }).eq('id', e.id)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Po dodaniu kolumny kursor wskakuje w pole nazwy nowego ćwiczenia
   useEffect(() => {
     if (focusExerciseId == null) return
@@ -423,11 +453,15 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     if (err) setError(err.message)
   }
 
-  // Wpisz 0 (masa ciała) w ciężar wszystkim zawodniczkom w tym ćwiczeniu
+  // Wpisz 0 (masa ciała) w ciężar zawodniczkom na grupowej rozpisce (bez wybranego
+  // wariantu). Zawodniczki z wariantem mają własny przycisk BW przy wariancie.
   async function fillColumnBodyweight(ex: Exercise) {
-    if (!confirm(`Wpisać 0 (masa ciała) w ciężar wszystkim zawodniczkom w „${ex.name || 'tym ćwiczeniu'}”?`)) return
+    const hasVariants = (ex.variants?.length ?? 0) > 0
+    const present = athletes.filter(a => !absentIds.has(a.id) && !entryMap.get(entryKey(ex.id, a.id))?.variant)
+    if (present.length === 0) { setError(hasVariants ? 'Brak zawodniczek bez wariantu — użyj BW przy wariancie.' : 'Brak obecnych zawodniczek.'); return }
+    const who = hasVariants ? `zawodniczkom bez wariantu (${present.length})` : 'wszystkim zawodniczkom'
+    if (!confirm(`Wpisać 0 (masa ciała) w ciężar ${who} w „${ex.name || 'tym ćwiczeniu'}”?`)) return
     setError('')
-    const present = athletes.filter(a => !absentIds.has(a.id))
     const rows = present.map(a => {
       const key = entryKey(ex.id, a.id)
       const current = entryMap.get(key)
@@ -547,6 +581,12 @@ export default function GroupTrainingClient({ group, training, athletes, initial
   function toggleVariantBodyweight(exerciseId: number, name: string) {
     const current = exercises.find(e => e.id === exerciseId)?.variants ?? []
     persistVariants(exerciseId, current.map(v => v.name === name ? { ...v, bodyweight: !v.bodyweight } : v))
+  }
+
+  // Tryb indywidualny tylko dla tego wariantu — rozpiska liczona z wierszy zawodniczek.
+  function toggleVariantIndividual(exerciseId: number, name: string) {
+    const current = exercises.find(e => e.id === exerciseId)?.variants ?? []
+    persistVariants(exerciseId, current.map(v => v.name === name ? { ...v, individual: !v.individual } : v))
   }
 
   // Wpisz 0 (masa ciała) w ciężar zawodniczkom wykonującym ten wariant
@@ -1019,6 +1059,13 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                         >
                                           P
                                         </button>
+                                        <button
+                                          onClick={() => toggleVariantIndividual(ex.id, v.name)}
+                                          title={v.individual ? 'Wariant indywidualny — rozpiska z wierszy zawodniczek (kliknij, by wrócić do wspólnej)' : 'Ten wariant: serie/powt./tempo różne per zawodniczka'}
+                                          style={{ flexShrink: 0, fontFamily: mono, fontSize: '0.5rem', fontWeight: 700, border: `1px solid ${v.individual ? C.gold : C.grayLight}`, background: v.individual ? '#FFFBEB' : C.white, color: v.individual ? '#92600A' : C.gray, borderRadius: 5, padding: '2px 4px', lineHeight: 1 }}
+                                        >
+                                          I
+                                        </button>
                                         <button onClick={() => removeVariant(ex.id, v.name)} title="Usuń wariant" style={{ flexShrink: 0, border: 'none', background: 'none', color: C.gray, fontSize: '0.72rem', padding: 0, lineHeight: 1 }}>✕</button>
                                       </div>
                                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.3fr', gap: 2 }}>
@@ -1042,6 +1089,11 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                           </div>
                                         ))}
                                       </div>
+                                      {v.individual && (
+                                        <div style={{ fontFamily: mono, fontSize: '0.46rem', fontWeight: 700, color: '#854F0B', background: '#FEF6E0', border: '1px solid #F7D27A', borderRadius: 5, padding: '2px 4px', marginTop: 3, textAlign: 'center' }}>
+                                          tryb indywidualny — dane z zawodniczek
+                                        </div>
+                                      )}
                                     </div>
                                   ))}
                                   <div style={{ fontFamily: mono, fontSize: '0.46rem', color: C.gray, marginBottom: 4, textAlign: 'center' }}>puste pole = jak nagłówek grupy</div>
@@ -1098,8 +1150,10 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                           const entry = entryMap.get(entryKey(ex.id, athlete.id)) || null
                           const sets = effectiveSets(ex, entry)
                           const variant = entry?.variant ? (ex.variants || []).find(v => v.name === entry.variant) : undefined
-                          // Tryb powtórzeń: kolumna/wariant „max" lub „bez ciężaru” dla tej zawodniczki
-                          const repsMode = isMaxReps(resolvePresc(ex, entry).reps) || !!ex.bodyweight || !!entry?.bodyweight || !!variant?.bodyweight
+                          // Tryb powtórzeń: wybrany wariant rządzi się swoim „P" (nie dziedziczy
+                          // z głównego ćwiczenia); bez wariantu obowiązuje „P" kolumny. Plus „max"
+                          // z rozpiski i „bez ciężaru" ustawione tej zawodniczce w szczegółach.
+                          const repsMode = isMaxReps(resolvePresc(ex, entry).reps) || !!entry?.bodyweight || (variant ? !!variant.bodyweight : !!ex.bodyweight)
                           return (
                             <td key={ex.id} style={{ padding: '0.45rem 0.5rem', ...(absent ? { opacity: 0.35, pointerEvents: 'none' as const } : {}) }}>
                               {(ex.variants?.length ?? 0) > 0 && (

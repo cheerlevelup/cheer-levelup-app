@@ -263,6 +263,7 @@ export interface TaskVariant {
   reps?: string | null
   tempo?: string | null
   bodyweight?: boolean | null  // wariant na masie własnej (nie zmienia profilu bodźca)
+  individual?: boolean | null  // wariant indywidualny — rozpiska per zawodniczka (z wierszy)
 }
 
 export interface ExerciseInput {
@@ -351,7 +352,7 @@ export function analyzeExercise(ex: ExerciseInput): ExerciseAnalysis {
   const { patterns, characteristics } = tagsFromName(ex.name, ex.bodyweight ?? undefined)
   // Liczymy per zawodniczka, gdy tryb indywidualny ALBO któryś wariant ma własną
   // rozpiskę (wtedy zawodniczki mogą wykonywać różne warianty = różny bodziec).
-  const perAthlete = !!ex.individual || variants.some(variantHasPrescription)
+  const perAthlete = !!ex.individual || variants.some(v => variantHasPrescription(v) || !!v.individual)
 
   const base = {
     name: ex.name,
