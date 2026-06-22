@@ -47,7 +47,7 @@ export default async function GroupStatsPage({ params }: Props) {
     const [{ data: ex }, { data: en }] = await Promise.all([
       supabase
         .from('group_training_exercises')
-        .select('id, training_id, name, reps, tempo, sets_planned, bodyweight')
+        .select('id, training_id, name, reps, tempo, sets_planned, bodyweight, variants')
         .in('training_id', trainingIds),
       supabase
         .from('group_training_entries')
