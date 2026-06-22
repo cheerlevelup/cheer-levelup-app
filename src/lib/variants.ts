@@ -31,8 +31,20 @@ export function cleanVariantName(x: unknown): string {
   return coerceVariant(x)?.name ?? ''
 }
 
-// Normalizacja nazwy ćwiczenia do grupowania — scala warianty zapisu
-// (NFC, twarda spacja, podwójne spacje), nie scalając naprawdę różnych nazw.
+// Czysta nazwa do WYŚWIETLENIA — NFC, bez znaków zerowej szerokości / miękkiego
+// łącznika, ze scalonymi spacjami (twarda spacja też). Zachowuje wielkość liter
+// i polskie znaki.
 export function normExerciseName(name: string | null | undefined): string {
-  return String(name ?? '').normalize('NFC').replace(/\s+/g, ' ').trim()
+  return String(name ?? '')
+    .normalize('NFC')
+    .replace(/[​-‍⁠﻿­]/g, '') // zero-width space/joiner, word-joiner, BOM, soft hyphen
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+// Klucz do GRUPOWANIA ćwiczeń/wariantów — dodatkowo bez rozróżniania wielkości
+// liter, by „Podciaganie" i „podciaganie" (oraz różnice niewidocznych znaków)
+// były jednym ćwiczeniem. Do wyświetlania używaj normExerciseName.
+export function groupKey(name: string | null | undefined): string {
+  return normExerciseName(name).toLocaleLowerCase('pl-PL')
 }
