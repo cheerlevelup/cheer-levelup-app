@@ -540,6 +540,12 @@ export default function ManagedGroupClient({ group, athletes, trainings }: Props
       onClick: () => router.push(`/coach/groups/${group.id}/summary`),
     },
     {
+      label: 'Statystyki i obecność',
+      desc: 'Wykresy postępu per ćwiczenie (wszystkie zawodniczki) i frekwencja w wybranym okresie',
+      icon: '📈',
+      onClick: () => router.push(`/coach/groups/${group.id}/stats`),
+    },
+    {
       label: 'Uzupełnij gotowość treningową',
       desc: 'Zawodniczki podchodzą do tabletu i wypełniają arkusz przed treningiem',
       icon: '✅',
