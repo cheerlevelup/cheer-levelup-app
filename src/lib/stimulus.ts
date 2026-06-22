@@ -286,6 +286,25 @@ export function variantHasPrescription(v: TaskVariant): boolean {
 
 export interface VariantUsage { variant: string; count: number }
 
+// Rozbicie bodźca na warianty: każdy wariant (oraz grupa „bazowa" bez wybranego
+// wariantu) liczony jak osobne ćwiczenie — bo daje inny bodziec — z informacją,
+// ile zawodniczek go wykonało. W profilu CAŁEGO treningu warianty łączą się
+// z powrotem w jedno ćwiczenie (średnia ważona pracą).
+export interface VariantBreakdown {
+  variant: string | null   // null = grupa bazowa (bez wybranego wariantu)
+  athleteCount: number
+  profile: StimulusProfile
+  dominant: StimulusCategory | null
+  character: StimulusCharacter
+  repsPerSet: number | null
+  tutPerSet: number
+  totalTut: number
+  totalReps: number
+  isMax: boolean
+  explosive: boolean
+  work: number
+}
+
 export interface ExerciseAnalysis {
   name: string
   mode: 'group' | 'individual'
@@ -307,6 +326,7 @@ export interface ExerciseAnalysis {
   // warianty
   variantsDefined: string[]
   variantUsage: VariantUsage[]
+  variantBreakdown: VariantBreakdown[]  // bodziec per wariant (tryb indyw.); puste w trybie grupowym
   athleteCount: number       // ile zawodniczek dostarczyło dane (tryb indyw.)
   // tagi
   patterns: string[]
@@ -345,6 +365,81 @@ function countVariants(athletes: AthleteSetsInput[] | undefined, defined: string
   return out.sort((a, b) => b.count - a.count)
 }
 
+// Agregacja zbioru zawodniczek w jeden profil — każda ważona swoją pracą (TUT/powt.).
+// Używana dla całego ćwiczenia (tryb indyw.) oraz dla pojedynczego wariantu (breakdown).
+interface AthleteAggregate {
+  profile: StimulusProfile
+  dominant: StimulusCategory | null
+  share: number
+  repsPerSet: number | null
+  tutPerSet: number
+  totalTut: number
+  totalReps: number
+  work: number
+  athleteCount: number
+  isMax: boolean
+  explosive: boolean
+  character: StimulusCharacter
+}
+
+function aggregateAthletes(athletes: AthleteSetsInput[]): AthleteAggregate {
+  const acc = emptyProfile()
+  let totalTut = 0, totalReps = 0, work = 0, tutSum = 0, setCountAll = 0
+  let explosive = false, isMax = false, athleteCount = 0
+  let repsWeighted = 0, repsWeightSum = 0
+  for (const a of athletes) {
+    const ag = aggregateSets(a.sets || [])
+    if (ag.isMax) isMax = true
+    if (ag.explosive) explosive = true
+    if (ag.setCount === 0) continue
+    athleteCount++
+    const w = ag.work || 1
+    for (const c of CATEGORY_ORDER) acc[c] += ag.profile[c] * w
+    totalTut += ag.totalTut; totalReps += ag.totalReps; work += w
+    tutSum += ag.totalTut; setCountAll += ag.setCount
+    if (ag.repsPerSet != null) { repsWeighted += ag.repsPerSet * w; repsWeightSum += w }
+  }
+  const profile = normalize(acc)
+  const { cat: dominant, share } = dominantOf(profile)
+  const tutPerSet = setCountAll > 0 ? tutSum / setCountAll : 0
+  return {
+    profile,
+    dominant: athleteCount > 0 ? dominant : null,
+    share,
+    repsPerSet: repsWeightSum > 0 ? repsWeighted / repsWeightSum : null,
+    tutPerSet, totalTut, totalReps, work, athleteCount,
+    isMax, explosive,
+    character: characterFromTut(tutPerSet),
+  }
+}
+
+// Rozbicie zawodniczek na grupy wg wybranego wariantu (null = grupa bazowa),
+// każda grupa policzona osobno. Wariant z własnym bodźcem widać jak osobne
+// ćwiczenie, ale wiemy, ile zawodniczek go wykonało.
+function variantBreakdownOf(athletes: AthleteSetsInput[]): VariantBreakdown[] {
+  const groups = new Map<string | null, AthleteSetsInput[]>()
+  for (const a of athletes) {
+    const key = (a.variant || '').trim() || null
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(a)
+  }
+  const out: VariantBreakdown[] = []
+  for (const [variant, list] of groups) {
+    const agg = aggregateAthletes(list)
+    if (agg.athleteCount === 0) continue
+    out.push({
+      variant, athleteCount: agg.athleteCount,
+      profile: agg.profile, dominant: agg.dominant, character: agg.character,
+      repsPerSet: agg.repsPerSet, tutPerSet: agg.tutPerSet,
+      totalTut: agg.totalTut, totalReps: agg.totalReps,
+      isMax: agg.isMax, explosive: agg.explosive, work: agg.work,
+    })
+  }
+  // nazwane warianty najpierw (wg liczby zawodniczek), grupa bazowa na końcu
+  return out.sort((a, b) =>
+    (a.variant === null ? 1 : 0) - (b.variant === null ? 1 : 0) || b.athleteCount - a.athleteCount)
+}
+
 export function analyzeExercise(ex: ExerciseInput): ExerciseAnalysis {
   const variants = ex.variants || []
   const variantsDefined = variants.map(v => (v.name || '').trim()).filter(Boolean)
@@ -361,42 +456,30 @@ export function analyzeExercise(ex: ExerciseInput): ExerciseAnalysis {
   }
 
   if (perAthlete) {
-    // Tryb indywidualny — agregujemy profile zawodniczek, każdą ważąc jej pracą.
-    const acc = emptyProfile()
-    let totalTut = 0, totalReps = 0, work = 0, tutSum = 0, setCountAll = 0
-    let explosive = false, isMax = false, athleteCount = 0
-    let repsWeighted = 0, repsWeightSum = 0
-    for (const a of ex.athletes || []) {
-      const ag = aggregateSets(a.sets || [])
-      if (ag.isMax) isMax = true
-      if (ag.explosive) explosive = true
-      if (ag.setCount === 0) continue
-      athleteCount++
-      const w = ag.work || 1
-      for (const c of CATEGORY_ORDER) acc[c] += ag.profile[c] * w
-      totalTut += ag.totalTut; totalReps += ag.totalReps; work += w
-      tutSum += ag.totalTut; setCountAll += ag.setCount
-      if (ag.repsPerSet != null) { repsWeighted += ag.repsPerSet * w; repsWeightSum += w }
-    }
-    const profile = normalize(acc)
-    const { cat: dominant, share } = dominantOf(profile)
-    const repsPerSet = repsWeightSum > 0 ? repsWeighted / repsWeightSum : null
-    const tutPerSet = setCountAll > 0 ? tutSum / setCountAll : 0
+    // Tryb indywidualny — liczymy KAŻDĄ zawodniczkę z osobna, a warianty jak osobne
+    // ćwiczenia (breakdown). Profil ćwiczenia to średnia ważona pracą wszystkich
+    // zawodniczek — w profilu treningu ćwiczenie + warianty zostają jedną rzeczą.
+    const all = aggregateAthletes(ex.athletes || [])
+    const variantBreakdown = variantBreakdownOf(ex.athletes || [])
     return {
       ...base,
       mode: 'individual',
       sets: 0,
-      repsPerSet, isMax,
+      repsPerSet: all.repsPerSet, isMax: all.isMax,
       perRepSeconds: 0,
-      tempoValid: totalTut > 0,
-      tutPerSet, totalTut, totalReps,
-      profile,
-      dominant: athleteCount > 0 ? dominant : null,
-      character: characterFromTut(tutPerSet),
-      explosive,
-      confidence: confidenceFrom(share, athleteCount > 0 && repsPerSet != null, totalTut > 0),
-      athleteCount,
-      work: work || totalReps,
+      tempoValid: all.totalTut > 0,
+      tutPerSet: all.tutPerSet, totalTut: all.totalTut, totalReps: all.totalReps,
+      profile: all.profile,
+      dominant: all.dominant,
+      character: all.character,
+      explosive: all.explosive,
+      confidence: confidenceFrom(all.share, all.athleteCount > 0 && all.repsPerSet != null, all.totalTut > 0),
+      variantBreakdown,
+      athleteCount: all.athleteCount,
+      // Waga w profilu treningu = praca JEDNEJ zawodniczki (średnia), nie suma całej
+      // grupy — dzięki temu ćwiczenie + warianty liczą się jak jedno ćwiczenie,
+      // a nie ×liczba zawodniczek. Sumy (TUT/powt. całk.) zostają do wyświetlenia.
+      work: all.athleteCount > 0 ? all.work / all.athleteCount : 0,
     }
   }
 
@@ -418,6 +501,7 @@ export function analyzeExercise(ex: ExerciseInput): ExerciseAnalysis {
     character: characterFromTut(ag.tutPerSet),
     explosive: tempo.explosive,
     confidence: confidenceFrom(share, ag.repsPerSet != null, tempo.valid),
+    variantBreakdown: [],
     athleteCount: 0,
     work: ag.work,
   }
