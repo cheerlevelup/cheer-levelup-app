@@ -141,6 +141,24 @@ function isModifiedEntry(entry: Entry | undefined, ex: Exercise) {
 // Ćwiczenie na powtórzenia (brak ciężaru zewn.) — czerwony liczy najmniej powtórzeń
 const isRepsExercise = (ex: Exercise) => isMaxRepsS(ex.reps) || !!ex.bodyweight
 
+// Rozpiska obowiązująca daną zawodniczkę: jeśli wybrała wariant, jego pola
+// (serie/powt./tempo/masa własna) nadpisują nagłówek grupy — per pole, z fallbackiem.
+// Dzięki temu metryki i kolory w podsumowaniu są liczone dla TEGO, co naprawdę robiła.
+function variantOf(ex: Exercise, entry: Entry | undefined): TaskVariant | undefined {
+  return entry?.variant ? (ex.variants || []).find(v => v.name === entry.variant) : undefined
+}
+function effectiveEx(ex: Exercise, entry: Entry | undefined): Exercise {
+  const v = variantOf(ex, entry)
+  if (!v) return ex
+  return {
+    ...ex,
+    sets_planned: v.sets != null ? v.sets : ex.sets_planned,
+    reps: v.reps != null && v.reps !== '' ? v.reps : ex.reps,
+    tempo: v.tempo != null && v.tempo !== '' ? v.tempo : ex.tempo,
+    bodyweight: v.bodyweight ? true : ex.bodyweight,
+  }
+}
+
 // Serie, powtórzenia, TUT (Σ powt.×czas tempa) i ciężar zewn. (Σ powt.×ciężar) dla ćwiczenia.
 // Bez modyfikacji powt./tempo bierzemy z AKTUALNEJ rozpiski grupy (ignorujemy stare wartości
 // zapisane przy serii — np. tempo zmienione później w nagłówku). Przy modyfikacji — indywidualne.
@@ -183,20 +201,29 @@ function fmtTut(sec: number) {
 // Komórka „External Load”: serie / powtórzenia / TUT / ciężar zewn. + kolor (czerwony/pomarańczowy)
 function ExternalLoadCell({ entry, ex, red, green, orange }: { entry: Entry | undefined; ex: Exercise; red: boolean; green?: boolean; orange: boolean }) {
   const sets = entry?.sets
-  const hasAny = (sets || []).some(s => s.skipped || s.reps || s.weight) || (!!ex.reps && (sets?.length ?? 0) > 0)
+  const exV = effectiveEx(ex, entry)   // rozpiska wg wybranego wariantu (jeśli jest)
+  const hasAny = (sets || []).some(s => s.skipped || s.reps || s.weight) || (!!exV.reps && (sets?.length ?? 0) > 0)
   if (!hasAny) return <span style={{ fontFamily: mono, fontSize: '0.72rem', color: C.grayLight }}>—</span>
-  const modified = isModifiedEntry(entry, ex)
-  const m = exerciseMetrics(sets, ex, modified)
+  const modified = isModifiedEntry(entry, exV)
+  const m = exerciseMetrics(sets, exV, modified)
   // Przy modyfikacji liczba serii jest indywidualna — mianownik z jej własnych serii, nie z planu grupy
-  const planned = modified ? (m.setCount + m.skipped) : (ex.sets_planned ?? 0)
+  const planned = modified ? (m.setCount + m.skipped) : (exV.sets_planned ?? 0)
   const accent = red ? '#C81E1E' : green ? '#15803D' : orange ? '#B45309' : C.gray
-  // Modyfikacja TEJ zawodniczki (zamiana / masa własna) — „na maksa” to cecha kolumny, nie modyfikacja
+  const variant = entry?.variant?.trim() || ''
+  // Modyfikacja TEJ zawodniczki (zamiana / masa własna) — „na maksa” to cecha kolumny, nie modyfikacja.
+  // Masę własną pomijamy w etykiecie, gdy bierze się z wariantu (pokażemy ją przy wariancie).
   const modLabel = entry?.exercise_override ? entry.exercise_override : entry?.bodyweight ? 'masa własna' : ''
-  const Row = (label: string, val: string) => (
-    <div><span style={{ color: C.gray }}>{label}</span> <strong style={{ fontWeight: 700 }}>{val}</strong></div>
+  const Row = (label: string, val: string, dim?: boolean) => (
+    <div><span style={{ color: C.gray }}>{label}</span> <strong style={{ fontWeight: 700, color: dim ? C.grayLight : C.navy }}>{val}</strong></div>
   )
   return (
     <div style={{ fontFamily: mono, fontSize: '0.7rem', color: C.navy, lineHeight: 1.5 }}>
+      {variant && (
+        <div title={`Wariant: ${variant}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%', fontFamily: sans, fontSize: '0.6rem', fontWeight: 700, color: C.white, background: C.navy, borderRadius: 999, padding: '2px 8px 2px 3px', marginBottom: 3 }}>
+          <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 15, height: 15, borderRadius: '50%', background: C.gold, color: C.navy, fontFamily: mono, fontSize: '0.62rem', fontWeight: 700, lineHeight: 1 }}>⋔</span>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{variant}</span>
+        </div>
+      )}
       {modLabel && (
         <div title={`Modyfikacja: ${modLabel}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%', fontFamily: sans, fontSize: '0.58rem', fontWeight: 700, color: '#854F0B', background: '#FEF6E0', border: '1px solid #F7D27A', borderRadius: 999, padding: '1px 7px 1px 2px', marginBottom: 3 }}>
           <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, borderRadius: '50%', background: C.gold, color: C.navy, fontFamily: mono, fontSize: '0.56rem', fontWeight: 700, lineHeight: 1 }}>⇄</span>
@@ -205,13 +232,13 @@ function ExternalLoadCell({ entry, ex, red, green, orange }: { entry: Entry | un
       )}
       {(red || green || orange) && (
         <div style={{ fontSize: '0.52rem', fontWeight: 700, color: accent, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 2 }}>
-          {red ? (isRepsExercise(ex) ? '● najmniej powt.' : '● najniższy load') : green ? '● najwięcej powt.' : '● niepełne'}
+          {red ? (isRepsExercise(exV) ? '● najmniej powt.' : '● najniższy load') : green ? '● najwięcej powt.' : '● niepełne'}
         </div>
       )}
       {Row('serie', `${m.setCount}${planned ? `/${planned}` : ''}${m.skipped ? ` (−${m.skipped})` : ''}`)}
       {Row('powt.', `${m.totalReps}`)}
-      {Row('TUT', fmtTut(m.tut))}
-      {Row('zew.', m.loadVol > 0 ? `${Math.round(m.loadVol * 10) / 10} kg` : '—')}
+      {Row('TUT', fmtTut(m.tut), m.tut <= 0)}
+      {Row('zew.', m.loadVol > 0 ? `${Math.round(m.loadVol * 10) / 10} kg` : '—', m.loadVol <= 0)}
     </div>
   )
 }
@@ -300,7 +327,7 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
         for (const a of athletes) {
           const entry = entryMap.get(entryKey(ex.id, a.id))
           if (entry?.exercise_override) continue
-          const m = exerciseMetrics(entry?.sets, ex, true)
+          const m = exerciseMetrics(entry?.sets, effectiveEx(ex, entry), true)
           if (m.totalReps <= 0) continue
           count++
           if (!best || m.totalReps < best.val) best = { id: a.id, val: m.totalReps }
@@ -311,8 +338,9 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
           const bw = weightOf(a.id)
           if (!bw || bw <= 0) continue
           const entry = entryMap.get(entryKey(ex.id, a.id))
-          if (isModifiedEntry(entry, ex)) continue
-          const m = exerciseMetrics(entry?.sets, ex, false)
+          const exV = effectiveEx(ex, entry)
+          if (isModifiedEntry(entry, exV)) continue
+          const m = exerciseMetrics(entry?.sets, exV, false)
           if (m.loadVol <= 0) continue
           count++
           const rel = m.loadVol / bw
@@ -336,7 +364,7 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
       for (const a of athletes) {
         const entry = entryMap.get(entryKey(ex.id, a.id))
         if (entry?.exercise_override) continue
-        const m = exerciseMetrics(entry?.sets, ex, true)
+        const m = exerciseMetrics(entry?.sets, effectiveEx(ex, entry), true)
         if (m.totalReps <= 0) continue
         count++
         if (!best || m.totalReps > best.val) best = { id: a.id, val: m.totalReps }
@@ -576,10 +604,11 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
                               <td colSpan={exercises.length} style={{ padding: '0.5rem 0.85rem', fontFamily: mono, fontSize: '0.68rem', color: C.gray, fontStyle: 'italic' }}>nieobecna</td>
                             ) : exercises.map(ex => {
                               const entry = entryMap.get(entryKey(ex.id, athlete.id))
-                              const m = exerciseMetrics(entry?.sets, ex, isModifiedEntry(entry, ex))
+                              const exV = effectiveEx(ex, entry)
+                              const m = exerciseMetrics(entry?.sets, exV, isModifiedEntry(entry, exV))
                               const red = redByExercise.get(ex.id) === athlete.id
                               const green = !red && greenByExercise.get(ex.id) === athlete.id
-                              const orange = !red && !green && isUnderdone(entry, ex, m)
+                              const orange = !red && !green && isUnderdone(entry, exV, m)
                               return (
                                 <td key={ex.id} style={{ padding: '0.5rem 0.7rem', background: red ? '#FDEDED' : green ? '#E9F7EF' : orange ? '#FEF3E2' : undefined }}>
                                   <ExternalLoadCell entry={entry} ex={ex} red={red} green={green} orange={orange} />
