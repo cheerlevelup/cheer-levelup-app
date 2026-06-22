@@ -9,6 +9,7 @@ import { StimulusBadge, StimulusSection } from './StimulusAnalysis'
 import { variantHasPrescription } from '@/lib/stimulus'
 import type { ExerciseInput, TaskVariant } from '@/lib/stimulus'
 import { loadPdf, pl, drawHeaderBar, drawFooter, TABLE_STYLES } from '@/lib/groupPdf'
+import { coerceVariant, cleanVariantName, type CleanVariant } from '@/lib/variants'
 
 const C = {
   navy: '#0D1B2A', navyLight: '#1A2E45', navyBorder: '#243652',
@@ -145,8 +146,12 @@ const isRepsExercise = (ex: Exercise) => isMaxRepsS(ex.reps) || !!ex.bodyweight
 // Rozpiska obowiązująca daną zawodniczkę: jeśli wybrała wariant, jego pola
 // (serie/powt./tempo/masa własna) nadpisują nagłówek grupy — per pole, z fallbackiem.
 // Dzięki temu metryki i kolory w podsumowaniu są liczone dla TEGO, co naprawdę robiła.
-function variantOf(ex: Exercise, entry: Entry | undefined): TaskVariant | undefined {
-  return entry?.variant ? (ex.variants || []).find(v => v.name === entry.variant) : undefined
+// Wariant wybrany przez zawodniczkę (czysty — odporny na uszkodzony zapis JSON).
+function variantOf(ex: Exercise, entry: Entry | undefined): CleanVariant | undefined {
+  const name = cleanVariantName(entry?.variant)
+  if (!name) return undefined
+  for (const raw of ex.variants || []) { const cv = coerceVariant(raw); if (cv && cv.name === name) return cv }
+  return undefined
 }
 function effectiveEx(ex: Exercise, entry: Entry | undefined): Exercise {
   const v = variantOf(ex, entry)
@@ -154,8 +159,8 @@ function effectiveEx(ex: Exercise, entry: Entry | undefined): Exercise {
   return {
     ...ex,
     sets_planned: v.sets != null ? v.sets : ex.sets_planned,
-    reps: v.reps != null && v.reps !== '' ? v.reps : ex.reps,
-    tempo: v.tempo != null && v.tempo !== '' ? v.tempo : ex.tempo,
+    reps: v.reps.trim() ? v.reps : ex.reps,
+    tempo: v.tempo.trim() ? v.tempo : ex.tempo,
     bodyweight: v.bodyweight ? true : ex.bodyweight,
   }
 }
@@ -210,7 +215,7 @@ function ExternalLoadCell({ entry, ex, red, green, orange }: { entry: Entry | un
   // Przy modyfikacji liczba serii jest indywidualna — mianownik z jej własnych serii, nie z planu grupy
   const planned = modified ? (m.setCount + m.skipped) : (exV.sets_planned ?? 0)
   const accent = red ? '#C81E1E' : green ? '#15803D' : orange ? '#B45309' : C.gray
-  const variant = entry?.variant?.trim() || ''
+  const variant = cleanVariantName(entry?.variant)
   // Modyfikacja TEJ zawodniczki (zamiana / masa własna) — „na maksa” to cecha kolumny, nie modyfikacja.
   // Masę własną pomijamy w etykiecie, gdy bierze się z wariantu (pokażemy ją przy wariancie).
   const modLabel = entry?.exercise_override ? entry.exercise_override : entry?.bodyweight ? 'masa własna' : ''
@@ -292,7 +297,10 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
   // a wpisane przez nią powt./tempo nadpisują domyślne. To pozwala liczyć bodziec,
   // gdy zawodniczki wykonują różne warianty tego samego zadania.
   const toStimulusInput = (ex: Exercise): ExerciseInput => {
-    const variants = ex.variants ?? []
+    // warianty z czystymi nazwami (odporne na uszkodzony zapis JSON)
+    const variants: TaskVariant[] = (ex.variants ?? [])
+      .map(v => coerceVariant(v))
+      .filter((v): v is CleanVariant => v != null)
     return {
       name: ex.name,
       sets: ex.sets_planned, reps: ex.reps, tempo: ex.tempo, bodyweight: ex.bodyweight,
@@ -301,7 +309,8 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
         .filter(a => !absentIds.has(a.id))
         .map(a => {
           const e = entryMap.get(entryKey(ex.id, a.id))
-          const v = e?.variant ? variants.find(x => x.name === e.variant) : undefined
+          const vName = cleanVariantName(e?.variant)
+          const v = vName ? variants.find(x => x.name === vName) : undefined
           const presc = v && variantHasPrescription(v)
             ? { sets: v.sets ?? null, reps: v.reps ?? null, tempo: v.tempo ?? null }
             : { sets: ex.sets_planned ?? null, reps: ex.reps ?? null, tempo: ex.tempo ?? null }
@@ -311,7 +320,7 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
             reps: (raw[i]?.reps || '').trim() || presc.reps,
             tempo: (raw[i]?.tempo || '').trim() || presc.tempo,
           }))
-          return { athleteId: a.id, name: a.full_name, variant: e?.variant ?? null, sets }
+          return { athleteId: a.id, name: a.full_name, variant: vName || null, sets }
         }),
     }
   }
@@ -431,7 +440,7 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
     const m = exerciseMetrics(sets, exV, modified)
     const planned = modified ? (m.setCount + m.skipped) : (exV.sets_planned ?? 0)
     const lines: string[] = []
-    if (entry?.variant) lines.push(`> ${entry.variant}`)
+    if (entry?.variant) lines.push(`> ${cleanVariantName(entry.variant)}`)
     else if (entry?.exercise_override) lines.push(`> ${entry.exercise_override}`)
     else if (entry?.bodyweight) lines.push('> masa wlasna')
     lines.push(`serie ${m.setCount}${planned ? `/${planned}` : ''}${m.skipped ? ` (-${m.skipped})` : ''}`)
