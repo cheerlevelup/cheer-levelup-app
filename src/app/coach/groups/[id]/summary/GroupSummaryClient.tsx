@@ -8,6 +8,7 @@ import { formatDatePl, dayRangeIso } from '@/lib/groupTraining'
 import { StimulusBadge, StimulusSection } from './StimulusAnalysis'
 import { variantHasPrescription } from '@/lib/stimulus'
 import type { ExerciseInput, TaskVariant } from '@/lib/stimulus'
+import { loadPdf, pl, drawHeaderBar, drawFooter, TABLE_STYLES } from '@/lib/groupPdf'
 
 const C = {
   navy: '#0D1B2A', navyLight: '#1A2E45', navyBorder: '#243652',
@@ -417,6 +418,69 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId])
 
+  // ── Eksport PDF: tabela ciężarów/serii dla wybranego treningu ────────────────
+  const [exportingPdf, setExportingPdf] = useState(false)
+
+  function summaryCellText(athleteId: number, ex: Exercise): string {
+    const entry = entryMap.get(entryKey(ex.id, athleteId))
+    const exV = effectiveEx(ex, entry)
+    const sets = entry?.sets
+    const hasAny = (sets || []).some(s => s.skipped || s.reps || s.weight) || (!!exV.reps && (sets?.length ?? 0) > 0)
+    if (!hasAny) return '-'
+    const modified = isModifiedEntry(entry, exV)
+    const m = exerciseMetrics(sets, exV, modified)
+    const planned = modified ? (m.setCount + m.skipped) : (exV.sets_planned ?? 0)
+    const lines: string[] = []
+    if (entry?.variant) lines.push(`> ${entry.variant}`)
+    else if (entry?.exercise_override) lines.push(`> ${entry.exercise_override}`)
+    else if (entry?.bodyweight) lines.push('> masa wlasna')
+    lines.push(`serie ${m.setCount}${planned ? `/${planned}` : ''}${m.skipped ? ` (-${m.skipped})` : ''}`)
+    lines.push(`powt ${m.totalReps}`)
+    if (m.tut > 0) lines.push(`TUT ${Math.round(m.tut)}s`)
+    if (m.loadVol > 0) lines.push(`zew ${Math.round(m.loadVol * 10) / 10}kg`)
+    return pl(lines.join('\n'))
+  }
+
+  async function exportSummaryPdf() {
+    if (exportingPdf || !selected || exercises.length === 0) return
+    setExportingPdf(true)
+    try {
+      const { jsPDF, autoTable } = await loadPdf()
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+      // obecne na górze, nieobecne na końcu — jak w aplikacji
+      const ordered = [...athletes].sort((a, b) => Number(absentIds.has(a.id)) - Number(absentIds.has(b.id)))
+      const head = [['Zawodniczka', ...exercises.map(ex => {
+        const presc = [ex.sets_planned ?? '', ex.reps ?? '', ex.tempo ?? ''].filter(x => String(x).trim()).join(' x ')
+        return pl(`${ex.name}${presc ? `\n${presc}` : ''}`)
+      })]]
+      const body = ordered.map(a => [
+        pl(a.full_name + (absentIds.has(a.id) ? ' (nieob.)' : '')),
+        ...exercises.map(ex => absentIds.has(a.id) ? '-' : summaryCellText(a.id, ex)),
+      ])
+      // mapy podświetleń: kolumna -> athleteId
+      drawHeaderBar(doc, group.name, 'Podsumowanie treningu', `${formatDatePl(selected.training_date)} · ${selected.training_date}`)
+      autoTable(doc, {
+        startY: 26,
+        head, body,
+        ...TABLE_STYLES,
+        styles: { ...TABLE_STYLES.styles, fontSize: 7, valign: 'top' },
+        columnStyles: { 0: { halign: 'left', fontStyle: 'bold', cellWidth: 34 } },
+        didParseCell: (data: any) => {
+          if (data.section === 'body' && data.column.index > 0) {
+            const ex = exercises[data.column.index - 1]
+            const aId = ordered[data.row.index]?.id
+            if (redByExercise.get(ex.id) === aId) { data.cell.styles.fillColor = [253, 237, 237]; data.cell.styles.textColor = [200, 30, 30] }
+            else if (greenByExercise.get(ex.id) === aId) { data.cell.styles.fillColor = [233, 247, 239]; data.cell.styles.textColor = [21, 128, 61] }
+          }
+        },
+        didDrawPage: () => drawFooter(doc),
+      })
+      doc.save(`podsumowanie_${selected.training_date}.pdf`)
+    } finally {
+      setExportingPdf(false)
+    }
+  }
+
   const sectionLabel: React.CSSProperties = {
     fontFamily: mono, fontSize: '0.64rem', color: C.gray, letterSpacing: '0.08em',
     textTransform: 'uppercase', fontWeight: 700, marginBottom: 8,
@@ -447,17 +511,25 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
               <button onClick={() => router.push(`/coach/groups/${group.id}`)} style={{ border: 'none', background: C.navyLight, color: C.gray, borderRadius: 10, padding: '0.55rem 0.75rem', fontFamily: mono, fontSize: '0.68rem', fontWeight: 700 }}>
                 ← {group.name}
               </button>
-              {trainings.length > 0 && (
-                <select
-                  value={selectedId ?? ''}
-                  onChange={e => setSelectedId(parseInt(e.target.value))}
-                  style={{ border: `1.5px solid ${C.navyBorder}`, background: C.navyLight, color: C.white, borderRadius: 8, padding: '0.45rem 0.6rem', fontFamily: mono, fontSize: '0.78rem', outline: 'none' }}
-                >
-                  {trainings.map(t => (
-                    <option key={t.id} value={t.id}>{t.training_date}</option>
-                  ))}
-                </select>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                {trainings.length > 0 && (
+                  <select
+                    value={selectedId ?? ''}
+                    onChange={e => setSelectedId(parseInt(e.target.value))}
+                    style={{ border: `1.5px solid ${C.navyBorder}`, background: C.navyLight, color: C.white, borderRadius: 8, padding: '0.45rem 0.6rem', fontFamily: mono, fontSize: '0.78rem', outline: 'none' }}
+                  >
+                    {trainings.map(t => (
+                      <option key={t.id} value={t.id}>{t.training_date}</option>
+                    ))}
+                  </select>
+                )}
+                {selected && exercises.length > 0 && (
+                  <button onClick={exportSummaryPdf} disabled={exportingPdf}
+                    style={{ border: 'none', background: exportingPdf ? C.navyBorder : C.gold, color: C.navy, borderRadius: 8, padding: '0.5rem 0.8rem', fontWeight: 800, fontSize: '0.78rem' }}>
+                    ⬇ {exportingPdf ? 'Generuję...' : 'PDF'}
+                  </button>
+                )}
+              </div>
             </div>
             <h1 style={{ color: C.white, fontSize: '1.25rem', fontWeight: 800, marginTop: '0.8rem' }}>
               Podsumowanie treningu
