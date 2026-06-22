@@ -10,7 +10,7 @@ import {
   CHARACTER_LABEL, CONFIDENCE_LABEL,
   fmtSeconds, pct,
   type ExerciseInput, type ExerciseAnalysis, type StimulusProfile, type Confidence,
-  type VariantBreakdown,
+  type VariantBreakdown, type AthleteBreakdown,
 } from '@/lib/stimulus'
 
 const C = {
@@ -169,6 +169,45 @@ function VariantBreakdownBlock({ rows }: { rows: VariantBreakdown[] }) {
   )
 }
 
+// Bodziec każdej zawodniczki z osobna (tryb indywidualny) — z jej własnych serii,
+// z tagiem wykonanego wariantu.
+function AthleteBreakdownBlock({ rows }: { rows: AthleteBreakdown[] }) {
+  if (rows.length === 0) return null
+  return (
+    <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        Bodziec per zawodniczka
+      </div>
+      {rows.map(r => (
+        <div key={r.athleteId} style={{ padding: '6px 8px', background: C.white, border: `1px solid ${C.grayLight}`, borderRadius: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: sans, fontSize: '0.72rem', fontWeight: 700, color: C.navy }}>
+              {r.dominant && <span style={{ width: 8, height: 8, borderRadius: '50%', background: CATEGORY_COLOR[r.dominant] }} />}
+              {r.name}
+              {r.variant && (
+                <span style={{ fontFamily: sans, fontSize: '0.58rem', fontWeight: 700, color: '#6B4E0B', background: '#FEF6E0', border: '1px solid #F7D27A', borderRadius: 5, padding: '0 5px' }}>
+                  {r.variant}
+                </span>
+              )}
+            </span>
+            <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray }}>
+              {r.dominant ? CATEGORY_SHORT[r.dominant] : (r.isMax ? 'na maksa' : '—')}
+              {r.dominant ? ` · ${CHARACTER_LABEL[r.character]}` : ''}
+              {r.explosive ? ' · ⚡' : ''}
+            </span>
+          </div>
+          <ProfileBar profile={r.profile} height={6} />
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 5, fontFamily: mono, fontSize: '0.56rem', color: C.gray }}>
+            <span>TUT/seria <strong style={{ color: C.navy }}>{fmtSeconds(r.tutPerSet)}</strong></span>
+            {r.repsPerSet != null && <span>powt./seria <strong style={{ color: C.navy }}>{r.repsPerSet % 1 === 0 ? r.repsPerSet : r.repsPerSet.toFixed(1)}</strong></span>}
+            <span>powt. całk. <strong style={{ color: C.navy }}>{r.totalReps || '—'}</strong></span>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function ExerciseCard({ a }: { a: ExerciseAnalysis }) {
   const repsLabel = a.repsPerSet != null
     ? `${a.repsPerSet % 1 === 0 ? a.repsPerSet : a.repsPerSet.toFixed(1)} powt.${a.mode === 'individual' ? '/seria (śr.)' : ''}`
@@ -225,6 +264,7 @@ function ExerciseCard({ a }: { a: ExerciseAnalysis }) {
       )}
 
       <VariantBreakdownBlock rows={a.variantBreakdown} />
+      <AthleteBreakdownBlock rows={a.athleteBreakdown} />
 
       <TagPills items={a.patterns} map={PATTERN_LABEL} color="#1A2E45" />
       <TagPills items={a.characteristics} map={CHAR_LABEL} color="#6B4E0B" />

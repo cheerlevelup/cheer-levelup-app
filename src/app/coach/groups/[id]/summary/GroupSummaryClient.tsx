@@ -283,7 +283,7 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
             reps: (raw[i]?.reps || '').trim() || presc.reps,
             tempo: (raw[i]?.tempo || '').trim() || presc.tempo,
           }))
-          return { athleteId: a.id, variant: e?.variant ?? null, sets }
+          return { athleteId: a.id, name: a.full_name, variant: e?.variant ?? null, sets }
         }),
     }
   }
