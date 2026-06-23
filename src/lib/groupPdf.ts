@@ -88,6 +88,27 @@ export async function svgToPng(svgEl: SVGSVGElement, scale = 2): Promise<{ dataU
   return { dataUrl: canvas.toDataURL('image/png'), w, h }
 }
 
+// Renderuje gotowy markup <svg> (string) do PNG — dla wykresów, których nie ma
+// aktualnie na ekranie (eksport kilku wykresów naraz).
+export async function svgMarkupToPng(markup: string, w: number, h: number, scale = 2): Promise<string> {
+  const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(markup)
+  const img = new Image()
+  img.width = w; img.height = h
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve()
+    img.onerror = () => reject(new Error('svg render'))
+    img.src = url
+  })
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(w * scale)
+  canvas.height = Math.round(h * scale)
+  const ctx = canvas.getContext('2d')!
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+  return canvas.toDataURL('image/png')
+}
+
 // Wspólny styl tabel autoTable (granatowy nagłówek, drobna czcionka).
 export const TABLE_STYLES = {
   styles: { font: 'helvetica', fontSize: 8, cellPadding: 1.6, lineColor: [232, 236, 242] as [number, number, number], lineWidth: 0.1, textColor: [13, 27, 42] as [number, number, number] },
