@@ -562,6 +562,40 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     persistVariants(exerciseId, current.filter(v => v.name !== name))
   }
 
+  // Zmiana nazwy wariantu — aktualizuje listę wariantów I przepisuje wybór wariantu
+  // u zawodniczek (po czystej nazwie, więc łapie też uszkodzony zapis). Jeśli nowa
+  // nazwa już istnieje, warianty się scalają.
+  async function renameVariant(exerciseId: number, oldName: string, raw: string) {
+    const newName = raw.trim()
+    const current = exercises.find(e => e.id === exerciseId)?.variants ?? []
+    if (!newName || newName === oldName) return
+    const exists = current.some(v => v.name === newName)
+    const next = exists
+      ? current.filter(v => v.name !== oldName)
+      : current.map(v => v.name === oldName ? { ...v, name: newName } : v)
+    await persistVariants(exerciseId, next)
+    // przepisz wybór wariantu u zawodniczek: oldName (też zapisany jako JSON) -> newName
+    const ids = athletes
+      .filter(a => coerceVariant(entryMap.get(entryKey(exerciseId, a.id))?.variant)?.name === oldName)
+      .map(a => a.id)
+    if (ids.length === 0) return
+    const { error: err } = await supabase
+      .from('group_training_entries')
+      .update({ variant: newName })
+      .eq('exercise_id', exerciseId)
+      .in('athlete_id', ids)
+    if (err) { setError(err.message); return }
+    setEntryMap(prev => {
+      const nextMap = new Map(prev)
+      for (const aid of ids) {
+        const k = entryKey(exerciseId, aid)
+        const e = nextMap.get(k)
+        if (e) nextMap.set(k, { ...e, variant: newName })
+      }
+      return nextMap
+    })
+  }
+
   // Edycja rozpiski wariantu (serie/powt./tempo) — stan lokalny; zapis na blur.
   function updateVariantField(exerciseId: number, name: string, field: 'sets' | 'reps' | 'tempo', value: string) {
     setExercises(p => p.map(e => {
@@ -1051,7 +1085,20 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                   {(ex.variants ?? []).map(v => (
                                     <div key={v.name} style={{ marginBottom: 6, padding: 4, background: C.offWhite, border: `1px solid ${C.grayLight}`, borderRadius: 7 }}>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginBottom: 3 }}>
-                                        <span style={{ flex: 1, minWidth: 0, fontFamily: sans, fontSize: '0.64rem', fontWeight: 700, color: C.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.name}</span>
+                                        <input
+                                          defaultValue={v.name}
+                                          title="Kliknij, by zmienić nazwę wariantu (zaktualizuje też zawodniczki)"
+                                          onFocus={e => { e.currentTarget.style.background = C.white; e.currentTarget.style.borderColor = C.gold }}
+                                          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                                          onBlur={e => {
+                                            e.currentTarget.style.background = 'transparent'
+                                            e.currentTarget.style.borderColor = 'transparent'
+                                            const val = e.target.value.trim()
+                                            if (!val) { e.target.value = v.name; return }
+                                            renameVariant(ex.id, v.name, val)
+                                          }}
+                                          style={{ flex: 1, minWidth: 0, fontFamily: sans, fontSize: '0.64rem', fontWeight: 700, color: C.navy, border: '1px solid transparent', borderRadius: 6, background: 'transparent', padding: '2px 4px', outline: 'none' }}
+                                        />
                                         {!v.bodyweight && (
                                           <button
                                             onClick={() => fillVariantBodyweight(ex, v.name)}
