@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { formatDatePl, dayRangeIso } from '@/lib/groupTraining'
 import { StimulusBadge, StimulusSection } from './StimulusAnalysis'
-import { variantHasPrescription } from '@/lib/stimulus'
+import { variantHasPrescription, analyzeWorkout, CATEGORY_ORDER, CATEGORY_LABEL, CATEGORY_SHORT, fmtSeconds, pct } from '@/lib/stimulus'
 import type { ExerciseInput, TaskVariant } from '@/lib/stimulus'
 import { loadPdf, pl, drawHeaderBar, drawFooter, TABLE_STYLES } from '@/lib/groupPdf'
 import { coerceVariant, cleanVariantName, type CleanVariant } from '@/lib/variants'
@@ -466,10 +466,23 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
         pl(a.full_name + (absentIds.has(a.id) ? ' (nieob.)' : '')),
         ...exercises.map(ex => absentIds.has(a.id) ? '-' : summaryCellText(a.id, ex)),
       ])
-      // mapy podświetleń: kolumna -> athleteId
       drawHeaderBar(doc, group.name, 'Podsumowanie treningu', `${formatDatePl(selected.training_date)} · ${selected.training_date}`)
+      // ── Profil treningu (analiza bodźca) ──
+      let y = 26
+      const w = analyzeWorkout(exercises.map(toStimulusInput))
+      if (w.dominant) {
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(13, 27, 42)
+        doc.text(pl(`Profil treningu: ${CATEGORY_LABEL[w.dominant]}`), 14, y); y += 5
+        const breakdown = CATEGORY_ORDER.filter(c => w.profile[c] > 0.005).map(c => `${CATEGORY_SHORT[c]} ${pct(w.profile[c])}%`).join('  ·  ')
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(80, 90, 110)
+        doc.text(pl(breakdown), 14, y); y += 4.5
+      }
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(80, 90, 110)
+      doc.text(pl(`TUT treningu ${fmtSeconds(w.totalTut)}   ·   powt. razem ${w.totalReps || '-'}   ·   cwiczen sklasyfikowanych ${w.classified}/${w.exercises.length}`), 14, y); y += 5
+      doc.setTextColor(0, 0, 0)
+      // ── Tabela ciężarów/serii ──
       autoTable(doc, {
-        startY: 26,
+        startY: y,
         head, body,
         ...TABLE_STYLES,
         styles: { ...TABLE_STYLES.styles, fontSize: 7, valign: 'top' },
@@ -560,6 +573,14 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
             </div>
           ) : (
             <>
+              {exercises.length > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
+                  <button onClick={exportSummaryPdf} disabled={exportingPdf}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0.7rem 1.1rem', borderRadius: 12, border: 'none', background: exportingPdf ? C.grayLight : C.navy, color: exportingPdf ? C.gray : C.gold, fontWeight: 800, fontSize: '0.88rem', boxShadow: '0 4px 14px rgba(13,27,42,0.12)' }}>
+                    ⬇ {exportingPdf ? 'Generuję PDF...' : 'Pobierz podsumowanie (PDF)'}
+                  </button>
+                </div>
+              )}
               {/* ── TABELA: ZAWODNICZKI × ĆWICZENIA ── */}
               <div style={sectionLabel}>Ćwiczenia i ciężary</div>
               {exercises.length === 0 ? (
