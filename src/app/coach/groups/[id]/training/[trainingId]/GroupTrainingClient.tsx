@@ -127,7 +127,16 @@ function CellModal({ athlete, exercise, entry, training, onClose, onSaved }: {
   onSaved: (saved: Entry) => void
 }) {
   const supabase = createClient()
-  const [sets, setSets] = useState<SetRow[]>(() => effectiveSets(exercise, entry, true))
+  // Rozpiska obowiązująca tę zawodniczkę (wariant > nagłówek) — do podpowiedzi i
+  // dziedziczenia powt./tempa także w seriach, które mają już wpisany ciężar.
+  const presc = resolvePresc(exercise, entry)
+  const [sets, setSets] = useState<SetRow[]>(() =>
+    effectiveSets(exercise, entry, true).map(s => ({
+      ...s,
+      reps: s.reps || (isMaxReps(presc.reps) ? '' : presc.reps),
+      tempo: s.tempo || presc.tempo,
+    }))
+  )
   const [pain, setPain] = useState<boolean>(!!entry?.pain || entry?.pain_vas != null || !!(entry?.pain_comment))
   const [painVas, setPainVas] = useState<number | null>(entry?.pain_vas ?? null)
   const [painComment, setPainComment] = useState(entry?.pain_comment || '')
@@ -264,8 +273,8 @@ function CellModal({ athlete, exercise, entry, training, onClose, onSaved }: {
                 >
                   {idx + 1}
                 </button>
-                <input value={s.reps || ''} onChange={e => updateSet(idx, 'reps', e.target.value)} placeholder="8" style={skipInput} inputMode="text" disabled={s.skipped} />
-                <input value={s.tempo || ''} onChange={e => updateSet(idx, 'tempo', e.target.value)} placeholder="3010" style={skipInput} inputMode="text" disabled={s.skipped} />
+                <input value={s.reps || ''} onChange={e => updateSet(idx, 'reps', e.target.value)} placeholder={presc.reps || '8'} style={skipInput} inputMode="text" disabled={s.skipped} />
+                <input value={s.tempo || ''} onChange={e => updateSet(idx, 'tempo', e.target.value)} placeholder={presc.tempo || '3010'} style={skipInput} inputMode="text" disabled={s.skipped} />
                 {!bodyweight && <input value={s.weight || ''} onChange={e => updateSet(idx, 'weight', e.target.value)} placeholder="kg" style={skipInput} inputMode="text" disabled={s.skipped} />}
                 <button onClick={() => removeSet(idx)} title="Usuń serię" style={{ border: 'none', background: 'none', color: C.gray, fontSize: '0.9rem', padding: 4 }}>✕</button>
               </div>
