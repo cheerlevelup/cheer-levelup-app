@@ -326,7 +326,7 @@ function ImportTrainingModal({ group, athletes, onClose }: { group: Group; athle
     setCreating(true); setError('')
     const { data: tr, error: e1 } = await supabase
       .from('group_trainings')
-      .insert({ group_id: group.id, training_date: date })
+      .insert({ group_id: group.id, training_date: date, roster_athlete_ids: athletes.map(a => a.id) })
       .select()
       .single()
     if (e1 || !tr) {
@@ -497,7 +497,7 @@ export default function ManagedGroupClient({ group, athletes, trainings }: Props
     }
     const { data, error: err } = await supabase
       .from('group_trainings')
-      .insert({ group_id: group.id, training_date: today })
+      .insert({ group_id: group.id, training_date: today, roster_athlete_ids: athletes.map(a => a.id) })
       .select()
       .single()
     if (err || !data) {
