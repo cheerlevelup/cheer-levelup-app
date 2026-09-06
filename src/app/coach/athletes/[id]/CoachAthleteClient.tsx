@@ -254,6 +254,67 @@ function WellnessDetailModal({ wellness, dateLabel, onClose }: { wellness: any; 
   )
 }
 
+function GroupTrainingDetailModal({ training, entries, onClose }: { training: any; entries: any[]; onClose: () => void }) {
+  const dateStr = training.training_date
+    ? new Date(`${training.training_date}T00:00:00`).toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' })
+    : '—'
+  const sorted = [...entries].sort((a, b) => (a.exercise?.exercise_order ?? 0) - (b.exercise?.exercise_order ?? 0))
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(13,27,42,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: sans }}
+      onClick={onClose}>
+      <div style={{ width: '100%', maxWidth: 520, background: C.offWhite, borderRadius: 18, border: `1.5px solid ${C.grayLight}`, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}
+        onClick={e => e.stopPropagation()}>
+        <div style={{ background: C.navy, padding: '1.1rem 1.25rem', borderRadius: '16px 16px 0 0', flexShrink: 0 }}>
+          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>
+            Trening grupowy · {training.group?.name || 'grupa'}
+          </div>
+          <div style={{ color: C.white, fontWeight: 800, fontSize: '1.1rem', textTransform: 'capitalize' }}>{dateStr}</div>
+        </div>
+        <div style={{ overflowY: 'auto', flex: 1, padding: '1rem' }}>
+          {sorted.length === 0 && (
+            <div style={{ padding: '1.5rem', color: C.gray, fontFamily: mono, fontSize: '0.75rem', textAlign: 'center' }}>Brak zapisanych ćwiczeń.</div>
+          )}
+          {sorted.map((e: any) => (
+            <div key={e.id} style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 12, padding: '0.85rem 1rem', marginBottom: '0.75rem' }}>
+              <div style={{ fontWeight: 800, color: C.navy, fontSize: '0.92rem', marginBottom: 8 }}>
+                {e.exercise_override || e.exercise?.name || 'Ćwiczenie'}
+                {e.variant && <span style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, marginLeft: 8, fontWeight: 400 }}>({e.variant})</span>}
+              </div>
+              {(e.sets || []).length === 0 ? (
+                <div style={{ fontFamily: mono, fontSize: '0.68rem', color: C.grayLight, fontStyle: 'italic' }}>brak wpisanych serii</div>
+              ) : (
+                (e.sets || []).map((s: any, i: number) => (
+                  <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '4px 0', opacity: s.skipped ? 0.5 : 1 }}>
+                    <span style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray, minWidth: 20 }}>S{i + 1}</span>
+                    <span style={{ fontFamily: mono, fontSize: '0.85rem', fontWeight: 800, color: (e.bodyweight ? s.reps : s.weight) ? C.navy : C.gray, textDecoration: s.skipped ? 'line-through' : 'none' }}>
+                      {e.bodyweight ? (s.reps ? `${s.reps} powt.` : '—') : (s.weight ? `${s.weight} kg` : '—')}
+                    </span>
+                    {!e.bodyweight && s.reps && <span style={{ fontFamily: mono, fontSize: '0.72rem', color: C.gray }}>{s.reps} powt.</span>}
+                    {s.tempo && <span style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray }}>tempo {s.tempo}</span>}
+                    {s.skipped && <span style={{ fontFamily: mono, fontSize: '0.55rem', color: C.red }}>nie zrobiona</span>}
+                  </div>
+                ))
+              )}
+              {(e.pain || e.pain_vas != null) && (
+                <div style={{ marginTop: 8, padding: '0.5rem 0.7rem', background: '#FEF2F2', borderRadius: 8, fontFamily: mono, fontSize: '0.68rem', color: C.red }}>
+                  Ból{e.pain_vas != null ? ` — VAS ${e.pain_vas}` : ''}{e.pain_comment ? `: ${e.pain_comment}` : ''}
+                </div>
+              )}
+              {e.comment && <div style={{ marginTop: 8, fontSize: '0.8rem', color: C.navy, fontStyle: 'italic' }}>&ldquo;{e.comment}&rdquo;</div>}
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: '0.875rem 1.25rem', borderTop: `1.5px solid ${C.grayLight}`, flexShrink: 0 }}>
+          <button onClick={onClose} style={{ width: '100%', padding: '0.875rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 12, fontWeight: 800, fontFamily: sans }}>
+            Zamknij
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 interface Props {
   athlete: any
   assignment: any
@@ -263,7 +324,7 @@ interface Props {
   wellnessLogs: any[]
   wellnessList: any[]
   dietLogs: any[]
-  groupTrainings: any[]
+  groupTrainingEntries: any[]
   painLogs: any[]
   groupModuleConfigs: any[]
   athleteModuleConfigs: any[]
@@ -582,7 +643,7 @@ function SessionFeedbackModal({ session, onClose }: { session: any; onClose: () 
 
 type MainTab = 'overview' | 'wellness' | 'diet'
 
-export default function CoachAthleteClient({ athlete, assignment, pastAssignments, sessions, feedbacks, wellnessLogs, wellnessList, dietLogs, groupTrainings, painLogs, groupModuleConfigs, athleteModuleConfigs, allGroups, allPlans }: Props) {
+export default function CoachAthleteClient({ athlete, assignment, pastAssignments, sessions, feedbacks, wellnessLogs, wellnessList, dietLogs, groupTrainingEntries, painLogs, groupModuleConfigs, athleteModuleConfigs, allGroups, allPlans }: Props) {
   const router = useRouter()
   const supabase = createClient()
   const [planTab, setPlanTab] = useState<'active' | 'history'>('active')
@@ -595,6 +656,7 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
   const [moduleConfig, setModuleConfig] = useState<'wellness' | 'diet' | null>(null)
   const [localAthleteModuleConfigs, setLocalAthleteModuleConfigs] = useState<any[]>(athleteModuleConfigs)
   const [selectedSessionFeedback, setSelectedSessionFeedback] = useState<{ session: any } | null>(null)
+  const [selectedGroupTraining, setSelectedGroupTraining] = useState<{ training: any; entries: any[] } | null>(null)
   const inheritedModuleConfig = moduleConfig
     ? groupModuleConfigs.find((config: any) => config.module === moduleConfig)
     : null
@@ -687,16 +749,27 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
     if (key) completedByDate[key] = { session: s, num: i + 1 }
   })
 
-  // Dni z treningiem grupy zorganizowanej, w które zawodniczka była obecna.
-  // Klucz liczymy tak samo jak komórkę kalendarza (lokalna północ → ISO),
-  // żeby trening trafił na właściwy dzień.
+  // Historia treningów grup zorganizowanych — po wpisach (athlete_id), nie po
+  // aktualnej grupie, więc zostaje widoczna nawet po zmianie/opuszczeniu grupy.
+  const groupTrainingsById = new Map<number, { training: any; entries: any[] }>()
+  for (const e of (groupTrainingEntries || [])) {
+    const t = e.training
+    if (!t?.id) continue
+    if (!groupTrainingsById.has(t.id)) groupTrainingsById.set(t.id, { training: t, entries: [] })
+    groupTrainingsById.get(t.id)!.entries.push(e)
+  }
+  const groupTrainingsList = Array.from(groupTrainingsById.values())
+    .sort((a, b) => (b.training.training_date || '').localeCompare(a.training.training_date || ''))
+
+  // Klucz liczymy tak samo jak komórkę kalendarza (lokalna północ → ISO), żeby
+  // trening trafił na właściwy dzień.
   const groupTrainingDates = new Set<string>()
-  for (const gt of (groupTrainings || [])) {
-    const absent = Array.isArray(gt.absent_athlete_ids) ? gt.absent_athlete_ids : []
-    const isAbsent = absent.map((x: any) => Number(x)).includes(Number(athlete.id))
-    if (isAbsent || !gt.training_date) continue
-    const key = new Date(`${gt.training_date}T00:00:00`).toISOString().split('T')[0]
+  const groupTrainingsByDateKey = new Map<string, { training: any; entries: any[] }>()
+  for (const gt of groupTrainingsList) {
+    if (!gt.training.training_date) continue
+    const key = new Date(`${gt.training.training_date}T00:00:00`).toISOString().split('T')[0]
     groupTrainingDates.add(key)
+    groupTrainingsByDateKey.set(key, gt)
   }
 
   const todayDate = new Date()
@@ -740,6 +813,13 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
           wellness={selectedWellness.wellness}
           dateLabel={selectedWellness.dateLabel}
           onClose={() => setSelectedWellness(null)}
+        />
+      )}
+      {selectedGroupTraining && (
+        <GroupTrainingDetailModal
+          training={selectedGroupTraining.training}
+          entries={selectedGroupTraining.entries}
+          onClose={() => setSelectedGroupTraining(null)}
         />
       )}
       {moduleConfig && (
@@ -1082,14 +1162,18 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
                                       </div>
                                     </div>
                                   )}
-                                  {/* Trening grupy zorganizowanej — obecna */}
+                                  {/* Trening grupy zorganizowanej — obecna, klikalna jeśli są zapisane dane */}
                                   {!trainingInfo && groupTrainingDates.has(key) && (
-                                    <div title="Trening grupowy — obecna" style={{ position: 'relative', width: 18, height: 18 }}>
+                                    <button
+                                      title="Trening grupowy — kliknij aby zobaczyć"
+                                      onClick={() => setSelectedGroupTraining(groupTrainingsByDateKey.get(key) || null)}
+                                      style={{ position: 'relative', width: 18, height: 18, border: 'none', background: 'none', padding: 0, cursor: 'pointer' }}
+                                    >
                                       <div style={{ width: 18, height: 18, borderRadius: '50%', background: C.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem' }}>🏋️</div>
                                       <div style={{ position: 'absolute', top: -4, right: -5, width: 12, height: 12, borderRadius: '50%', background: C.green, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: mono, fontSize: '0.5rem', fontWeight: 900, color: C.white }}>
                                         ✓
                                       </div>
-                                    </div>
+                                    </button>
                                   )}
                                 </div>
                               </div>
@@ -1210,6 +1294,33 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
               })
             )}
           </Card>
+
+          {/* Historia treningów grupowych — po wpisach, więc widoczna nawet po zmianie grupy */}
+          {groupTrainingsList.length > 0 && (
+            <Card style={{ marginTop: '1rem' }}>
+              <div style={{ padding: '1rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}` }}>
+                <SectionHeader title="Historia treningów grupowych" />
+              </div>
+              {groupTrainingsList.slice(0, 15).map((gt, i, arr) => (
+                <button key={gt.training.id}
+                  onClick={() => setSelectedGroupTraining(gt)}
+                  style={{ width: '100%', background: 'none', border: 'none', textAlign: 'left', padding: '0.875rem 1.25rem', borderBottom: i < arr.length - 1 ? `1.5px solid ${C.grayLight}` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = C.offWhite)}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.9rem', color: C.navy, marginBottom: 2 }}>
+                      {gt.training.group?.name || 'Grupa'}
+                    </div>
+                    <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray }}>
+                      {gt.training.training_date ? new Date(`${gt.training.training_date}T00:00:00`).toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' }) : '—'}
+                      {` · ${gt.entries.length} ćwiczeń`}
+                    </div>
+                  </div>
+                  <span style={{ color: C.gray, fontSize: '0.85rem' }}>›</span>
+                </button>
+              ))}
+            </Card>
+          )}
 
           </>}  {/* end overview tab */}
 

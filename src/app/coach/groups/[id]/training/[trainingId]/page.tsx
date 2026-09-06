@@ -34,13 +34,35 @@ export default async function GroupTrainingPage({ params }: Props) {
     .single()
   if (!training) redirect(`/coach/groups/${groupId}`)
 
-  const { data: rawAthletes } = await supabase
+  // Zawodniczki widoczne w tym treningu: aktualni członkowie grupy (nowy trening —
+  // jeszcze bez wpisów) + każda, kto ma już zapisane dane w TYM treningu, nawet jeśli
+  // od tamtej pory zmieniła grupę — historia zostaje widoczna i edytowalna.
+  // Zarchiwizowane nigdy się nie pokazują.
+  const { data: entryAthleteRows } = await supabase
+    .from('group_training_entries')
+    .select('athlete_id')
+    .eq('training_id', tId)
+
+  const entryAthleteIds = [...new Set((entryAthleteRows || []).map((r: any) => r.athlete_id))]
+
+  const { data: currentMembers } = await supabase
     .from('athletes')
     .select('id, full_name, birth_year, archived')
     .eq('group_id', groupId)
-    .order('full_name', { ascending: true })
 
-  const athletes = (rawAthletes || []).filter((a: any) => !a.archived)
+  const { data: historicalMembers } = entryAthleteIds.length > 0
+    ? await supabase
+        .from('athletes')
+        .select('id, full_name, birth_year, archived')
+        .in('id', entryAthleteIds)
+    : { data: [] }
+
+  const athleteById = new Map<number, any>()
+  for (const a of [...(currentMembers || []), ...(historicalMembers || [])]) athleteById.set(a.id, a)
+
+  const athletes = Array.from(athleteById.values())
+    .filter((a: any) => !a.archived)
+    .sort((a: any, b: any) => a.full_name.localeCompare(b.full_name, 'pl'))
 
   const { data: exercises } = await supabase
     .from('group_training_exercises')

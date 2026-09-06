@@ -74,17 +74,17 @@ export default async function CoachAthletePage({ params }: Props) {
     .gte('date', daysAgo28.toISOString().split('T')[0])
     .order('date', { ascending: false })
 
-  // Treningi grupy zorganizowanej (np. Ultra) — ostatnie 28 dni.
-  // Zawodniczka „zrobiła” trening grupowy, jeśli tego dnia był trening grupy
-  // i nie była oznaczona jako nieobecna.
-  const { data: groupTrainings } = athlete.group_id
-    ? await supabase
-        .from('group_trainings')
-        .select('id, training_date, absent_athlete_ids')
-        .eq('group_id', athlete.group_id)
-        .gte('training_date', daysAgo28.toISOString().split('T')[0])
-        .order('training_date', { ascending: false })
-    : { data: [] }
+  // Historia treningów grup zorganizowanych — po wpisach zawodniczki (athlete_id),
+  // nie po jej aktualnej grupie, więc zostaje widoczna nawet po zmianie/opuszczeniu grupy.
+  const { data: groupTrainingEntries } = await supabase
+    .from('group_training_entries')
+    .select(`
+      id, sets, pain, pain_vas, pain_comment, comment, exercise_override, bodyweight, variant,
+      training:group_trainings(id, training_date, group_id, group:groups(name)),
+      exercise:group_training_exercises(id, name, exercise_order)
+    `)
+    .eq('athlete_id', athleteId)
+    .order('id', { ascending: false })
 
   // Pain logs — przez sesje zawodniczki (tabela nie ma athlete_id)
   const athleteSessionIds = (sessions || []).map((s: any) => s.id).slice(0, 20)
@@ -127,7 +127,7 @@ export default async function CoachAthletePage({ params }: Props) {
       wellnessLogs={wellnessLogs || []}
       wellnessList={wellnessList}
       dietLogs={dietLogs || []}
-      groupTrainings={groupTrainings || []}
+      groupTrainingEntries={groupTrainingEntries || []}
       painLogs={painLogs || []}
       groupModuleConfigs={groupModuleConfigs || []}
       athleteModuleConfigs={athleteModuleConfigs || []}
