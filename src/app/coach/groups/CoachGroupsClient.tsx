@@ -164,6 +164,47 @@ export default function CoachGroupsClient({ groups, athletes }: Props) {
     setPending(group.id, false)
   }
 
+  async function deleteGroup(group: Group) {
+    setPending(group.id, true)
+    const supabase = createClient()
+
+    if (group.group_type === 'managed') {
+      const { count } = await supabase
+        .from('group_trainings')
+        .select('id', { count: 'exact', head: true })
+        .eq('group_id', group.id)
+      if ((count ?? 0) > 0) {
+        alert(`Nie mogę usunąć grupy „${group.name}” — ma zapisaną historię ${count} treningów (serie, ciężary, ból). Usunięcie grupy nieodwracalnie skasowałoby te dane. Zostaw ją bez aktywnych zawodniczek zamiast usuwać.`)
+        setPending(group.id, false)
+        return
+      }
+    }
+
+    if (!confirm(`Usunąć grupę „${group.name}”? Zawodniczki archiwalne, jeśli są, stracą tylko przypisanie do tej nazwy — ich profile, historia treningów i statystyki zostaną w całości zachowane.`)) {
+      setPending(group.id, false)
+      return
+    }
+
+    // Odczep wszystkie zawodniczki (w tym zarchiwizowane) przed usunięciem —
+    // athletes.group_id ma ON DELETE RESTRICT, więc bez tego DELETE i tak by się nie udało.
+    const { error: detachError } = await supabase.from('athletes').update({ group_id: null }).eq('group_id', group.id)
+    if (detachError) {
+      alert(`Błąd: ${detachError.message}`)
+      setPending(group.id, false)
+      return
+    }
+
+    const { error: deleteError } = await supabase.from('groups').delete().eq('id', group.id)
+    if (deleteError) {
+      alert(`Błąd: ${deleteError.message}`)
+      setPending(group.id, false)
+      return
+    }
+
+    router.refresh()
+    setPending(group.id, false)
+  }
+
   function GroupCard({ group }: { group: Group }) {
     const groupAthletes = activeAthletes.filter(a => a.group_id === group.id)
     const isManaged = group.group_type === 'managed'
@@ -207,10 +248,19 @@ export default function CoachGroupsClient({ groups, athletes }: Props) {
           <button
             onClick={() => archiveWholeGroup(group)}
             disabled={groupAthletes.length === 0 || groupPending}
-            style={{ flex: 1, border: 'none', background: 'none', padding: '0.6rem', fontFamily: mono, fontSize: '0.64rem', fontWeight: 700, color: groupAthletes.length === 0 ? C.grayLight : C.red }}
+            style={{ flex: 1, border: 'none', background: 'none', padding: '0.6rem', fontFamily: mono, fontSize: '0.64rem', fontWeight: 700, color: groupAthletes.length === 0 ? C.grayLight : C.red, borderRight: groupAthletes.length === 0 ? `1.5px solid ${C.grayLight}` : 'none' }}
           >
             {groupPending ? 'Przenoszę...' : '🗄 Archiwizuj grupę'}
           </button>
+          {groupAthletes.length === 0 && (
+            <button
+              onClick={() => deleteGroup(group)}
+              disabled={groupPending}
+              style={{ flex: 1, border: 'none', background: 'none', padding: '0.6rem', fontFamily: mono, fontSize: '0.64rem', fontWeight: 700, color: C.red }}
+            >
+              {groupPending ? 'Usuwam...' : '🗑 Usuń grupę'}
+            </button>
+          )}
         </div>
 
         {expanded && (
