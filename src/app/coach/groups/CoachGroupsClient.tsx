@@ -341,7 +341,13 @@ export default function CoachGroupsClient({ groups, athletes }: Props) {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {archivedAthletes.map(athlete => (
                     <Card key={athlete.id}>
-                      <div style={{ padding: '0.85rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                      <div
+                        onClick={() => router.push(`/coach/athletes/${athlete.id}`)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={e => { if (e.key === 'Enter') router.push(`/coach/athletes/${athlete.id}`) }}
+                        style={{ width: '100%', padding: '0.85rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, textAlign: 'left', cursor: 'pointer' }}
+                      >
                         <div style={{ minWidth: 0 }}>
                           <div style={{ fontWeight: 800, fontSize: '0.95rem', color: C.navy }}>{athlete.full_name}</div>
                           <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, marginTop: 3 }}>
@@ -349,7 +355,7 @@ export default function CoachGroupsClient({ groups, athletes }: Props) {
                           </div>
                         </div>
                         <button
-                          onClick={() => restoreAthlete(athlete.id)}
+                          onClick={e => { e.stopPropagation(); restoreAthlete(athlete.id) }}
                           disabled={pendingIds.includes(athlete.id)}
                           style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 10, padding: '0.55rem 0.9rem', fontFamily: mono, fontSize: '0.66rem', fontWeight: 800, whiteSpace: 'nowrap' }}
                         >
