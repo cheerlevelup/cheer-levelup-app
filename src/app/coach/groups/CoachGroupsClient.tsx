@@ -117,12 +117,50 @@ function NewGroupModal({ groups, onClose }: { groups: Group[]; onClose: () => vo
   )
 }
 
+function RestoreToGroupModal({ athlete, groups, saving, onClose, onConfirm }: {
+  athlete: Athlete; groups: Group[]; saving: boolean; onClose: () => void; onConfirm: (groupId: number) => void
+}) {
+  const [targetGroupId, setTargetGroupId] = useState('')
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(13,27,42,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: sans }}>
+      <div style={{ width: '100%', maxWidth: 440, background: C.white, borderRadius: 18, overflow: 'hidden', border: `1.5px solid ${C.grayLight}` }}>
+        <div style={{ background: C.navy, padding: '1rem 1.25rem' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Archiwum</div>
+          <div style={{ fontWeight: 800, fontSize: '1.15rem', color: C.white }}>Przywróć {athlete.full_name}</div>
+          <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: 4 }}>Wybierz grupę, do której wraca zawodniczka.</div>
+        </div>
+        <div style={{ padding: '1.25rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: '1rem', maxHeight: '45vh', overflowY: 'auto' }}>
+            {groups.map(g => (
+              <button key={g.id} onClick={() => setTargetGroupId(String(g.id))}
+                style={{ padding: '0.75rem 1rem', borderRadius: 10, border: `1.5px solid ${targetGroupId === String(g.id) ? C.gold : C.grayLight}`, background: targetGroupId === String(g.id) ? C.navy : C.offWhite, color: targetGroupId === String(g.id) ? C.gold : C.navy, fontWeight: 700, textAlign: 'left', cursor: 'pointer', fontFamily: sans }}>
+                {g.name}
+                {g.group_type === 'managed' && <span style={{ fontFamily: mono, fontSize: '0.6rem', color: targetGroupId === String(g.id) ? C.gold : C.gray, marginLeft: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>zorganizowana</span>}
+              </button>
+            ))}
+            {groups.length === 0 && <div style={{ color: C.gray, fontSize: '0.84rem', fontStyle: 'italic' }}>Brak grup — najpierw utwórz grupę.</div>}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={onClose} style={{ padding: '0.75rem 1rem', borderRadius: 10, border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.gray, fontWeight: 700, cursor: 'pointer', fontFamily: sans }}>Anuluj</button>
+            <button onClick={() => targetGroupId && onConfirm(parseInt(targetGroupId))} disabled={!targetGroupId || saving}
+              style={{ flex: 1, padding: '0.75rem', borderRadius: 10, border: 'none', background: !targetGroupId ? C.grayLight : C.navy, color: !targetGroupId ? C.gray : C.gold, fontWeight: 800, cursor: 'pointer', fontFamily: sans }}>
+              {saving ? 'Przywracam...' : 'Przywróć'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function CoachGroupsClient({ groups, athletes }: Props) {
   const router = useRouter()
   const [newGroupOpen, setNewGroupOpen] = useState(false)
   const [tab, setTab] = useState<'groups' | 'archive'>('groups')
   const [expandedGroupId, setExpandedGroupId] = useState<number | null>(null)
   const [pendingIds, setPendingIds] = useState<number[]>([])
+  const [restoringAthlete, setRestoringAthlete] = useState<Athlete | null>(null)
 
   const activeAthletes = athletes.filter(a => !a.archived)
   const archivedAthletes = athletes
@@ -140,15 +178,15 @@ export default function CoachGroupsClient({ groups, athletes }: Props) {
   async function archiveAthlete(athleteId: number) {
     setPending(athleteId, true)
     const supabase = createClient()
-    await supabase.from('athletes').update({ archived: true }).eq('id', athleteId)
+    await supabase.from('athletes').update({ archived: true, group_id: null }).eq('id', athleteId)
     router.refresh()
     setPending(athleteId, false)
   }
 
-  async function restoreAthlete(athleteId: number) {
+  async function restoreAthlete(athleteId: number, groupId: number) {
     setPending(athleteId, true)
     const supabase = createClient()
-    await supabase.from('athletes').update({ archived: false }).eq('id', athleteId)
+    await supabase.from('athletes').update({ archived: false, group_id: groupId }).eq('id', athleteId)
     router.refresh()
     setPending(athleteId, false)
   }
@@ -159,7 +197,7 @@ export default function CoachGroupsClient({ groups, athletes }: Props) {
     if (!confirm(`Przenieść wszystkie zawodniczki (${count}) z grupy „${group.name}” do archiwum?`)) return
     setPending(group.id, true)
     const supabase = createClient()
-    await supabase.from('athletes').update({ archived: true }).eq('group_id', group.id)
+    await supabase.from('athletes').update({ archived: true, group_id: null }).eq('group_id', group.id)
     router.refresh()
     setPending(group.id, false)
   }
@@ -405,7 +443,7 @@ export default function CoachGroupsClient({ groups, athletes }: Props) {
                           </div>
                         </div>
                         <button
-                          onClick={e => { e.stopPropagation(); restoreAthlete(athlete.id) }}
+                          onClick={e => { e.stopPropagation(); setRestoringAthlete(athlete) }}
                           disabled={pendingIds.includes(athlete.id)}
                           style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 10, padding: '0.55rem 0.9rem', fontFamily: mono, fontSize: '0.66rem', fontWeight: 800, whiteSpace: 'nowrap' }}
                         >
@@ -422,6 +460,15 @@ export default function CoachGroupsClient({ groups, athletes }: Props) {
       </div>
 
       {newGroupOpen && <NewGroupModal groups={groups} onClose={() => setNewGroupOpen(false)} />}
+      {restoringAthlete && (
+        <RestoreToGroupModal
+          athlete={restoringAthlete}
+          groups={groups}
+          saving={pendingIds.includes(restoringAthlete.id)}
+          onClose={() => setRestoringAthlete(null)}
+          onConfirm={async groupId => { await restoreAthlete(restoringAthlete.id, groupId); setRestoringAthlete(null) }}
+        />
+      )}
     </>
   )
 }
