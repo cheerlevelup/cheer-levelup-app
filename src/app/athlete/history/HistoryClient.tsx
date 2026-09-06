@@ -11,7 +11,6 @@ interface Props {
   feedbacks: any[]
   wellnessLogs: any[]
   painLogs: any[]
-  dietLogs: any[]
 }
 
 const C = {
@@ -181,7 +180,7 @@ function MultiLineChart({ series, height = 140 }: { series: { label: string; col
   )
 }
 
-export default function HistoryClient({ athlete, history, feedbacks, wellnessLogs, painLogs, dietLogs }: Props) {
+export default function HistoryClient({ athlete, history, feedbacks, wellnessLogs, painLogs }: Props) {
   const router = useRouter()
   const today = new Date()
   const [tab, setTab] = useState<'historia'|'aktywnosc'|'wellness'|'postery'>('historia')
@@ -225,15 +224,6 @@ export default function HistoryClient({ athlete, history, feedbacks, wellnessLog
     painByDate[d].push(p)
   }
 
-  // Diet po dacie
-  const dietByDate: Record<string, any> = {}
-  for (const d of dietLogs) {
-    const k = d.date || (d.created_at ? isoKey(d.created_at) : null)
-    if (k) dietByDate[k] = d
-  }
-
-  const hasDiet = dietLogs.length > 0
-
   const calDays = buildCalendar(month)
   const monthName = month.toLocaleDateString('pl-PL', { month: 'long', year: 'numeric' })
   const sorted = [...history].sort((a,b) => (b.date_completed||'').localeCompare(a.date_completed||''))
@@ -262,14 +252,6 @@ export default function HistoryClient({ athlete, history, feedbacks, wellnessLog
       hr: toPoints(w => w.resting_hr),
     }
   }, [wellnessLogs])
-
-  const dietChartData = useMemo(() => {
-    const sorted = [...dietLogs].sort((a,b) => (a.date||'').localeCompare(b.date||''))
-    return {
-      water: sorted.flatMap(d => d.water_ml != null ? [{ date: d.date, value: d.water_ml / 1000 }] : []),
-      coffee: sorted.flatMap(d => d.coffee_count != null ? [{ date: d.date, value: d.coffee_count }] : []),
-    }
-  }, [dietLogs])
 
   const TABS = [
     { id: 'historia', label: '📅 Historia' },
@@ -638,7 +620,7 @@ export default function HistoryClient({ athlete, history, feedbacks, wellnessLog
                   <WellnessMonthStats wellnessByDate={wellnessByDate} calDays={calDays} month={month} />
                 </>
               ) : (
-                <WellnessCharts data={wellnessChartData} dietData={dietChartData} hasDiet={hasDiet} />
+                <WellnessCharts data={wellnessChartData} />
               )}
             </>
           )}
@@ -816,7 +798,7 @@ function WellnessMonthStats({ wellnessByDate, calDays, month }: any) {
   )
 }
 
-function WellnessCharts({ data, dietData, hasDiet }: any) {
+function WellnessCharts({ data }: any) {
   const wellnessSeries = [
     { label: 'Sen (h)', color: C.blue, data: data.sleep },
     { label: 'Jakość snu', color: C.teal, data: data.sleepQ },
@@ -846,13 +828,6 @@ function WellnessCharts({ data, dietData, hasDiet }: any) {
     ...(data.hr.length > 0 ? [{
       title: 'HR spoczynkowe',
       series: [{ label: 'HR spoczynkowe (bpm)', color: C.red, data: data.hr }],
-    }] : []),
-    ...(hasDiet ? [{
-      title: 'Nawodnienie i kawa',
-      series: [
-        ...(dietData.water.length > 0 ? [{ label: 'Nawodnienie (L)', color: C.blue, data: dietData.water }] : []),
-        ...(dietData.coffee.length > 0 ? [{ label: 'Kawa (filiż.)', color: '#6B3A2A', data: dietData.coffee }] : []),
-      ],
     }] : []),
   ]
 

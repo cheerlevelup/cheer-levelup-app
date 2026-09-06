@@ -323,7 +323,6 @@ interface Props {
   feedbacks: any[]
   wellnessLogs: any[]
   wellnessList: any[]
-  dietLogs: any[]
   groupTrainingEntries: any[]
   painLogs: any[]
   groupModuleConfigs: any[]
@@ -641,9 +640,9 @@ function SessionFeedbackModal({ session, onClose }: { session: any; onClose: () 
   )
 }
 
-type MainTab = 'overview' | 'wellness' | 'diet'
+type MainTab = 'overview' | 'wellness'
 
-export default function CoachAthleteClient({ athlete, assignment, pastAssignments, sessions, feedbacks, wellnessLogs, wellnessList, dietLogs, groupTrainingEntries, painLogs, groupModuleConfigs, athleteModuleConfigs, allGroups, allPlans }: Props) {
+export default function CoachAthleteClient({ athlete, assignment, pastAssignments, sessions, feedbacks, wellnessLogs, wellnessList, groupTrainingEntries, painLogs, groupModuleConfigs, athleteModuleConfigs, allGroups, allPlans }: Props) {
   const router = useRouter()
   const supabase = createClient()
   const [planTab, setPlanTab] = useState<'active' | 'history'>('active')
@@ -653,7 +652,7 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
   const [localAssignment, setLocalAssignment] = useState(assignment)
   const [selectedWellness, setSelectedWellness] = useState<{ wellness: any; dateLabel: string } | null>(null)
   const [mainTab, setMainTab] = useState<MainTab>('overview')
-  const [moduleConfig, setModuleConfig] = useState<'wellness' | 'diet' | null>(null)
+  const [moduleConfig, setModuleConfig] = useState<'wellness' | null>(null)
   const [localAthleteModuleConfigs, setLocalAthleteModuleConfigs] = useState<any[]>(athleteModuleConfigs)
   const [selectedSessionFeedback, setSelectedSessionFeedback] = useState<{ session: any } | null>(null)
   const [selectedGroupTraining, setSelectedGroupTraining] = useState<{ training: any; entries: any[] } | null>(null)
@@ -662,20 +661,19 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
     : null
 
   const moduleDefaults = {
-    diet: { pre: ['had_breakfast', 'meal_count', 'water_ml'], post: [] },
     wellness: {
       pre: ['sleep_hours', 'sleep_quality', 'readiness', 'energy', 'stress', 'muscle_soreness', 'hydration', 'recovery_score'],
       post: [],
     },
   }
-  const groupConfigFor = (module: 'wellness' | 'diet') => groupModuleConfigs.find((config: any) => config.module === module)
-  const athleteConfigFor = (module: 'wellness' | 'diet') => localAthleteModuleConfigs.find((config: any) => config.module === module)
-  const effectiveConfigFor = (module: 'wellness' | 'diet') => athleteConfigFor(module) || groupConfigFor(module)
-  const isModuleEnabled = (module: 'wellness' | 'diet') => effectiveConfigFor(module)?.enabled !== false
-  const configSource = (module: 'wellness' | 'diet') => athleteConfigFor(module) ? 'indywidualnie' : 'wg grupy'
+  const groupConfigFor = (module: 'wellness') => groupModuleConfigs.find((config: any) => config.module === module)
+  const athleteConfigFor = (module: 'wellness') => localAthleteModuleConfigs.find((config: any) => config.module === module)
+  const effectiveConfigFor = (module: 'wellness') => athleteConfigFor(module) || groupConfigFor(module)
+  const isModuleEnabled = (module: 'wellness') => effectiveConfigFor(module)?.enabled !== false
+  const configSource = (module: 'wellness') => athleteConfigFor(module) ? 'indywidualnie' : 'wg grupy'
   const sameList = (a: string[] = [], b: string[] = []) => a.length === b.length && a.every(item => b.includes(item))
 
-  async function saveModuleAccess(module: 'wellness' | 'diet', enabled: boolean) {
+  async function saveModuleAccess(module: 'wellness', enabled: boolean) {
     const athleteConfig = athleteConfigFor(module)
     const groupConfig = groupConfigFor(module)
     const groupEnabled = groupConfig?.enabled !== false
@@ -735,11 +733,6 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
     const k = toDateKey(w.created_at)
     if (k) wellnessByDate[k] = w
   }
-  const dietByDate: Record<string, any> = {}
-  for (const d of dietLogs) {
-    if (d.date) dietByDate[d.date] = d
-  }
-
   const completedByDate: Record<string, { session: any; num: number }> = {}
   const sortedCompleted = [...completedSessions].sort(
     (a, b) => new Date(a.date_completed || a.date_started || 0).getTime() - new Date(b.date_completed || b.date_started || 0).getTime()
@@ -859,7 +852,6 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
             {([
               { id: 'overview', label: '📊 Przegląd' },
               { id: 'wellness', label: '🩺 Wellness' },
-              { id: 'diet',     label: '🥗 Dieta' },
             ] as { id: MainTab; label: string }[]).map(t => (
               <button key={t.id} onClick={() => setMainTab(t.id)} style={{ padding: '0.7rem 1rem', border: 'none', background: 'transparent', color: mainTab === t.id ? C.gold : C.gray, fontWeight: mainTab === t.id ? 800 : 600, fontFamily: mono, fontSize: '0.7rem', borderBottom: mainTab === t.id ? `2px solid ${C.gold}` : '2px solid transparent', cursor: 'pointer' }}>
                 {t.label}
@@ -920,49 +912,6 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
             </div>
           )}
 
-          {/* ── Diet tab ── */}
-          {mainTab === 'diet' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <Card>
-                <div style={{ padding: '1.25rem' }}>
-                  <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Konfiguracja diety</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: '0.85rem' }}>
-                    <span style={{ border: `1.5px solid ${isModuleEnabled('diet') ? '#86EFAC' : '#FCA5A5'}`, background: isModuleEnabled('diet') ? '#F0FDF4' : '#FEF2F2', color: isModuleEnabled('diet') ? C.green : C.red, borderRadius: 999, padding: '0.35rem 0.7rem', fontFamily: mono, fontSize: '0.62rem', fontWeight: 900 }}>
-                      {isModuleEnabled('diet') ? 'Dieta włączona' : 'Dieta wyłączona'}
-                    </span>
-                    <span style={{ fontFamily: mono, fontSize: '0.62rem', color: athleteConfigFor('diet') ? C.gold : C.gray }}>{configSource('diet')}</span>
-                  </div>
-                  <p style={{ color: C.gray, fontSize: '0.84rem', marginBottom: '1rem' }}>
-                    Wybierz które pola dziennika diety wypełnia ta zawodniczka. Nadpisuje ustawienia grupy.
-                  </p>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button onClick={() => saveModuleAccess('diet', !isModuleEnabled('diet'))} style={{ border: `1.5px solid ${isModuleEnabled('diet') ? '#FCA5A5' : '#86EFAC'}`, background: isModuleEnabled('diet') ? '#FEF2F2' : '#F0FDF4', color: isModuleEnabled('diet') ? C.red : C.green, borderRadius: 10, padding: '0.7rem 1rem', fontWeight: 800, cursor: 'pointer' }}>
-                    {isModuleEnabled('diet') ? 'Wyłącz dietę' : 'Włącz dietę'}
-                  </button>
-                  <button onClick={() => setModuleConfig('diet')} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 10, padding: '0.7rem 1rem', fontWeight: 800, cursor: 'pointer' }}>
-                    🥗 Edytuj parametry diety
-                  </button>
-                  </div>
-                </div>
-              </Card>
-              {dietLogs.length > 0 && (
-                <Card>
-                  <div style={{ padding: '1rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}` }}>
-                    <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Ostatnie wpisy diety</div>
-                  </div>
-                  {dietLogs.slice(0, 7).map((d: any, i: number) => (
-                    <div key={d.id} style={{ padding: '0.75rem 1.25rem', borderBottom: i < Math.min(dietLogs.length, 7) - 1 ? `1.5px solid ${C.grayLight}` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ fontFamily: mono, fontSize: '0.75rem', color: C.navy, fontWeight: 700 }}>{new Date(d.date || d.created_at).toLocaleDateString('pl-PL', { weekday: 'short', day: 'numeric', month: 'short' })}</div>
-                      <div style={{ display: 'flex', gap: 10 }}>
-                        {d.meal_count > 0 && <span style={{ fontFamily: mono, fontSize: '0.7rem', color: C.gray }}>🍽️{d.meal_count}</span>}
-                        {d.water_ml > 0 && <span style={{ fontFamily: mono, fontSize: '0.7rem', color: C.gray }}>💧{d.water_ml}ml</span>}
-                      </div>
-                    </div>
-                  ))}
-                </Card>
-              )}
-            </div>
-          )}
 
           {/* ── Overview tab ── */}
           {mainTab === 'overview' && <>
@@ -1061,12 +1010,11 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
           </Card>
 
           {/* Szybkie statystyki */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: '1rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: '1rem' }}>
             {[
               { label: 'Treningi', value: completedSessions.length + groupTrainingDates.size, color: C.navy },
               { label: 'Śr. RPE', value: avgRpe ?? '—', color: avgRpe ? rpeColor(parseFloat(avgRpe)) : C.gray },
               { label: 'Wellness', value: `${wellnessLogs.length}d`, color: C.green },
-              { label: 'Dieta', value: `${dietLogs.length}d`, color: C.gold },
             ].map(stat => (
               <Card key={stat.label}>
                 <div style={{ padding: '0.875rem' }}>
@@ -1126,7 +1074,6 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
                           const isToday = key === todayKey
                           const wellnessEntry = wellnessByDate[key]
                           const hasWellness = !!wellnessEntry
-                          const hasDiet = !!dietByDate[key]
                           const trainingInfo = completedByDate[key]
                           return (
                             <td key={key} style={{ padding: '3px 4px', textAlign: 'center', verticalAlign: 'top' }}>
@@ -1151,8 +1098,6 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
                                   >
                                     {hasWellness ? '✓' : ''}
                                   </button>
-                                  {/* Dieta */}
-                                  {hasDiet && <div title="Dieta uzupełniona" style={{ fontSize: '0.72rem', lineHeight: 1 }}>🥗</div>}
                                   {/* Trening indywidualny (nr w planie) */}
                                   {trainingInfo && (
                                     <div title={`Trening #${trainingInfo.num}`} style={{ position: 'relative', width: 18, height: 18 }}>
@@ -1189,7 +1134,6 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
                 {[
                   { icon: <div style={{ width: 12, height: 12, borderRadius: '50%', background: C.green }} />, label: 'Wellness ✓ (kliknij aby zobaczyć)' },
                   { icon: <div style={{ width: 12, height: 12, borderRadius: '50%', background: C.red }} />, label: 'Wellness brak' },
-                  { icon: <span style={{ fontSize: '0.7rem' }}>🥗</span>, label: 'Dieta' },
                   { icon: <span style={{ fontSize: '0.7rem' }}>🏋️</span>, label: 'Trening (nr w planie)' },
                   { icon: <div style={{ width: 12, height: 12, borderRadius: '50%', background: C.green, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.white, fontSize: '0.5rem', fontWeight: 900 }}>✓</div>, label: 'Trening grupowy (obecna)' },
                 ].map((item, i) => (

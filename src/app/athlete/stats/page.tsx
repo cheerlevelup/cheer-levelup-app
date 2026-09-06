@@ -17,7 +17,6 @@ export default async function AthleteStatsPage() {
   const since90 = new Date()
   since90.setDate(since90.getDate() - 90)
   const since90iso = since90.toISOString()
-  const since90date = since90.toISOString().split('T')[0]
 
   const [
     { data: wellnessLogs },
@@ -25,7 +24,6 @@ export default async function AthleteStatsPage() {
     { data: painLogs },
     { data: setLogs },
     { data: sessions },
-    { data: dietLogs },
   ] = await Promise.all([
     supabase.from('wellness_logs').select('*').eq('athlete_id', athlete.id)
       .gte('created_at', since90iso).order('date', { ascending: true }),
@@ -39,8 +37,6 @@ export default async function AthleteStatsPage() {
     supabase.from('workout_sessions').select('*, workout_day:workout_days(day_name, week:workout_weeks(week_number, plan:workout_plans(name, is_archived)))')
       .eq('athlete_id', athlete.id).eq('completed', true)
       .order('date_completed', { ascending: true }).limit(90),
-    supabase.from('diet_logs').select('*').eq('athlete_id', athlete.id)
-      .gte('date', since90date).order('date', { ascending: true }),
   ])
 
   return (
@@ -51,7 +47,6 @@ export default async function AthleteStatsPage() {
       painLogs={painLogs || []}
       setLogs={setLogs || []}
       sessions={sessions || []}
-      dietLogs={dietLogs || []}
     />
   )
 }

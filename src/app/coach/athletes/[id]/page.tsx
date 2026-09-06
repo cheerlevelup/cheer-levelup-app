@@ -66,14 +66,6 @@ export default async function CoachAthletePage({ params }: Props) {
   // Wellness — ostatni wpis (dla sekcji "ostatni wellness")
   const wellnessList = wellnessLogs || []
 
-  // Dieta — ostatnie 28 dni
-  const { data: dietLogs } = await supabase
-    .from('diet_logs')
-    .select('id, date, water_ml, meal_count, hunger_level')
-    .eq('athlete_id', athleteId)
-    .gte('date', daysAgo28.toISOString().split('T')[0])
-    .order('date', { ascending: false })
-
   // Historia treningów grup zorganizowanych — po wpisach zawodniczki (athlete_id),
   // nie po jej aktualnej grupie, więc zostaje widoczna nawet po zmianie/opuszczeniu grupy.
   const { data: groupTrainingEntries } = await supabase
@@ -126,7 +118,6 @@ export default async function CoachAthletePage({ params }: Props) {
       feedbacks={feedbacks || []}
       wellnessLogs={wellnessLogs || []}
       wellnessList={wellnessList}
-      dietLogs={dietLogs || []}
       groupTrainingEntries={groupTrainingEntries || []}
       painLogs={painLogs || []}
       groupModuleConfigs={groupModuleConfigs || []}

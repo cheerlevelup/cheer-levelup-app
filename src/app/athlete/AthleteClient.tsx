@@ -4,7 +4,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Athlete, WorkoutSession, AthleteWorkoutAssignment, WorkoutDay } from '@/types/workout'
-import DietModal from '@/components/DietModal'
 import WellnessModal from '@/components/WellnessModal'
 
 interface Props {
@@ -17,8 +16,6 @@ interface Props {
   } | null
   history: WorkoutSession[]
   todayWellness: WellnessStatus
-  todayDiet: boolean
-  dietEnabled: boolean
   wellnessEnabled: boolean
   wellnessFields: string[]
 }
@@ -56,12 +53,10 @@ function formatLongDate(iso: string): string {
   return new Date(iso).toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' })
 }
 
-export default function AthleteClient({ athlete, nextTraining, history, todayWellness, todayDiet, dietEnabled, wellnessEnabled, wellnessFields }: Props) {
+export default function AthleteClient({ athlete, nextTraining, history, todayWellness, wellnessEnabled, wellnessFields }: Props) {
   const router = useRouter()
   const [wellnessOpen, setWellnessOpen] = useState(false)
-  const [dietOpen, setDietOpen] = useState(false)
   const [wellnessDone, setWellnessDone] = useState(todayWellness.isComplete)
-  const [dietDone, setDietDone] = useState(todayDiet)
 
   // Prefetch kluczowych tras przy ładowaniu panelu
   useState(() => {
@@ -176,47 +171,6 @@ export default function AthleteClient({ athlete, nextTraining, history, todayWel
               </div>
               <div style={{ flexShrink: 0, fontFamily: mono, fontSize: '0.8rem', color: wellnessDone ? '#16A34A' : C.gold, fontWeight: 800 }}>
                 {wellnessDone ? '' : '›'}
-              </div>
-            </div>
-          </button>}
-
-          {/* ── DIETA ── */}
-          {dietEnabled && <button
-            className="action-card"
-            onClick={() => setDietOpen(true)}
-            style={{ width: '100%', border: 'none', background: 'none', padding: 0, marginBottom: '0.75rem', textAlign: 'left' }}
-          >
-            <div style={{
-              background: dietDone ? '#F0FDF4' : C.white,
-              border: `1.5px solid ${dietDone ? '#86EFAC' : C.grayLight}`,
-              borderRadius: 16,
-              padding: '1rem 1.25rem',
-              boxShadow: '0 2px 12px rgba(13,27,42,0.06)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 14,
-            }}>
-              <div style={{
-                width: 52, height: 52, borderRadius: 14, flexShrink: 0,
-                background: dietDone ? C.green : C.navy,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '1.5rem',
-              }}>
-                {dietDone ? '✓' : '🥗'}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: mono, fontSize: '0.6rem', color: dietDone ? '#16A34A' : C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 3, fontWeight: 700 }}>
-                  Dieta · {formatDate(todayWellness.dateIso)}
-                </div>
-                <div style={{ fontWeight: 800, fontSize: '1rem', color: dietDone ? '#15803D' : C.navy }}>
-                  {dietDone ? 'Zapisana ✓' : 'Uzupełnij dziennik diety'}
-                </div>
-                {!dietDone && (
-                  <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: 2 }}>Posiłki, woda, suplementy</div>
-                )}
-              </div>
-              <div style={{ flexShrink: 0, fontFamily: mono, fontSize: '0.8rem', color: dietDone ? '#16A34A' : C.gold, fontWeight: 800 }}>
-                {dietDone ? '' : '›'}
               </div>
             </div>
           </button>}
@@ -357,14 +311,6 @@ export default function AthleteClient({ athlete, nextTraining, history, todayWel
           enabledFields={wellnessFields}
           onClose={() => setWellnessOpen(false)}
           onSaved={() => { setWellnessOpen(false); setWellnessDone(true) }}
-        />
-      )}
-
-      {dietEnabled && dietOpen && (
-        <DietModal
-          athleteId={athlete.id}
-          onClose={() => setDietOpen(false)}
-          onSaved={() => { setDietDone(true); setDietOpen(false) }}
         />
       )}
     </>

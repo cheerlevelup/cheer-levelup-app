@@ -744,12 +744,10 @@ function WellnessEntryDetail({ w, onClose }: { w: any; onClose: () => void }) {
   )
 }
 
-function AthleteQuickReportModal({ athlete, wellnessLogs, dietLogs, onClose, onGoToProfile }: { athlete: any; wellnessLogs: any[]; dietLogs: any[]; onClose: () => void; onGoToProfile: () => void }) {
-  const [reportTab, setReportTab] = useState<'wellness' | 'diet'>('wellness')
+function AthleteQuickReportModal({ athlete, wellnessLogs, onClose, onGoToProfile }: { athlete: any; wellnessLogs: any[]; onClose: () => void; onGoToProfile: () => void }) {
   const [detailEntry, setDetailEntry] = useState<any | null>(null)
 
   const myWellness = wellnessLogs.filter((l: any) => l.athlete_id === athlete.id).sort((a: any, b: any) => b.date?.localeCompare(a.date ?? '') || 0)
-  const myDiet = dietLogs.filter((d: any) => d.athlete_id === athlete.id).sort((a: any, b: any) => b.date?.localeCompare(a.date ?? '') || 0)
 
   return (
     <>
@@ -758,7 +756,7 @@ function AthleteQuickReportModal({ athlete, wellnessLogs, dietLogs, onClose, onG
         <div style={{ width: '100%', maxWidth: 520, background: C.white, borderRadius: 18, border: `1.5px solid ${C.grayLight}`, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
           {/* Header */}
           <div style={{ background: C.navy, padding: '1rem 1.25rem', borderRadius: '16px 16px 0 0', flexShrink: 0 }}>
-            <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 3 }}>Raporty zawodniczki</div>
+            <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 3 }}>Raport wellness zawodniczki</div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
               <h2 style={{ color: C.white, fontSize: '1.1rem', fontWeight: 800 }}>{athlete.full_name}</h2>
               <button onClick={onGoToProfile} style={{ border: 'none', background: C.gold, color: C.navy, borderRadius: 8, padding: '0.4rem 0.75rem', fontFamily: mono, fontSize: '0.66rem', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}>
@@ -766,59 +764,32 @@ function AthleteQuickReportModal({ athlete, wellnessLogs, dietLogs, onClose, onG
               </button>
             </div>
           </div>
-          {/* Tab bar */}
-          <div style={{ display: 'flex', borderBottom: `1.5px solid ${C.grayLight}`, flexShrink: 0 }}>
-            {([{ id: 'wellness', label: '🩺 Wellness' }, { id: 'diet', label: '🥗 Dieta' }] as { id: 'wellness' | 'diet'; label: string }[]).map(t => (
-              <button key={t.id} onClick={() => setReportTab(t.id)} style={{ flex: 1, padding: '0.65rem', border: 'none', background: reportTab === t.id ? C.white : C.offWhite, color: reportTab === t.id ? C.navy : C.gray, fontWeight: reportTab === t.id ? 800 : 600, fontFamily: mono, fontSize: '0.7rem', borderBottom: reportTab === t.id ? `2px solid ${C.gold}` : '2px solid transparent', cursor: 'pointer' }}>
-                {t.label}
-              </button>
-            ))}
-          </div>
           {/* Content */}
           <div style={{ overflowY: 'auto', flex: 1 }}>
-            {reportTab === 'wellness' && (
-              myWellness.length === 0
-                ? <div style={{ padding: '2rem', textAlign: 'center', fontFamily: mono, fontSize: '0.72rem', color: C.gray }}>Brak wpisów wellness (ostatnie 30 dni)</div>
-                : myWellness.map((w: any, i: number) => {
-                    const hasDetail = w.sleep_hours != null || w.energy != null || w.stress != null || w.readiness != null || w.pain_data?.painDuring != null
-                    return (
-                      <button key={w.date || i} onClick={() => hasDetail && setDetailEntry(w)}
-                        style={{ width: '100%', background: 'none', border: 'none', borderBottom: i < myWellness.length - 1 ? `1.5px solid ${C.grayLight}` : 'none', padding: '0.7rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: hasDetail ? 'pointer' : 'default', textAlign: 'left' }}
-                        onMouseEnter={e => hasDetail && (e.currentTarget.style.background = C.offWhite)}
-                        onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-                        <div style={{ fontFamily: mono, fontSize: '0.75rem', fontWeight: 700, color: C.navy }}>
-                          {new Date(w.date || w.created_at).toLocaleDateString('pl-PL', { weekday: 'short', day: 'numeric', month: 'short' })}
-                        </div>
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                          {w.energy != null && <span style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gold }}>⚡{w.energy}</span>}
-                          {w.sleep_hours != null && <span style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray }}>🌙{w.sleep_hours}h</span>}
-                          {w.readiness != null && <span style={{ fontFamily: mono, fontSize: '0.68rem', color: C.green }}>💪{w.readiness}</span>}
-                          {w.stress != null && <span style={{ fontFamily: mono, fontSize: '0.68rem', color: w.stress >= 7 ? C.red : C.gray }}>🧠{w.stress}</span>}
-                          {w.pain_data?.painDuring > 0 && <span style={{ fontFamily: mono, fontSize: '0.68rem', color: C.red }}>🩹{w.pain_data.painDuring}</span>}
-                          {hasDetail && <span style={{ color: C.gray, fontSize: '0.8rem' }}>›</span>}
-                        </div>
-                      </button>
-                    )
-                  })
-            )}
-            {reportTab === 'diet' && (
-              myDiet.length === 0
-                ? <div style={{ padding: '2rem', textAlign: 'center', fontFamily: mono, fontSize: '0.72rem', color: C.gray }}>Brak wpisów diety (ostatnie 30 dni)</div>
-                : myDiet.map((d: any, i: number) => (
-                    <div key={d.date || i} style={{ padding: '0.7rem 1.25rem', borderBottom: i < myDiet.length - 1 ? `1.5px solid ${C.grayLight}` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            {myWellness.length === 0
+              ? <div style={{ padding: '2rem', textAlign: 'center', fontFamily: mono, fontSize: '0.72rem', color: C.gray }}>Brak wpisów wellness (ostatnie 30 dni)</div>
+              : myWellness.map((w: any, i: number) => {
+                  const hasDetail = w.sleep_hours != null || w.energy != null || w.stress != null || w.readiness != null || w.pain_data?.painDuring != null
+                  return (
+                    <button key={w.date || i} onClick={() => hasDetail && setDetailEntry(w)}
+                      style={{ width: '100%', background: 'none', border: 'none', borderBottom: i < myWellness.length - 1 ? `1.5px solid ${C.grayLight}` : 'none', padding: '0.7rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: hasDetail ? 'pointer' : 'default', textAlign: 'left' }}
+                      onMouseEnter={e => hasDetail && (e.currentTarget.style.background = C.offWhite)}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
                       <div style={{ fontFamily: mono, fontSize: '0.75rem', fontWeight: 700, color: C.navy }}>
-                        {new Date(d.date).toLocaleDateString('pl-PL', { weekday: 'short', day: 'numeric', month: 'short' })}
+                        {new Date(w.date || w.created_at).toLocaleDateString('pl-PL', { weekday: 'short', day: 'numeric', month: 'short' })}
                       </div>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        {d.had_breakfast && <span style={{ fontFamily: mono, fontSize: '0.65rem', color: C.green }}>🌅śniad.</span>}
-                        {d.meal_count > 0 && <span style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray }}>🍽️{d.meal_count}</span>}
-                        {d.water_ml > 0 && <span style={{ fontFamily: mono, fontSize: '0.68rem', color: C.navy }}>💧{d.water_ml}ml</span>}
-                        {d.coffee_count > 0 && <span style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray }}>☕{d.coffee_count}</span>}
-                        {d.hunger_level != null && <span style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray }}>głód:{d.hunger_level}</span>}
+                        {w.energy != null && <span style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gold }}>⚡{w.energy}</span>}
+                        {w.sleep_hours != null && <span style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray }}>🌙{w.sleep_hours}h</span>}
+                        {w.readiness != null && <span style={{ fontFamily: mono, fontSize: '0.68rem', color: C.green }}>💪{w.readiness}</span>}
+                        {w.stress != null && <span style={{ fontFamily: mono, fontSize: '0.68rem', color: w.stress >= 7 ? C.red : C.gray }}>🧠{w.stress}</span>}
+                        {w.pain_data?.painDuring > 0 && <span style={{ fontFamily: mono, fontSize: '0.68rem', color: C.red }}>🩹{w.pain_data.painDuring}</span>}
+                        {hasDetail && <span style={{ color: C.gray, fontSize: '0.8rem' }}>›</span>}
                       </div>
-                    </div>
-                  ))
-            )}
+                    </button>
+                  )
+                })
+            }
           </div>
           <div style={{ padding: '0.875rem 1.25rem', borderTop: `1.5px solid ${C.grayLight}`, flexShrink: 0 }}>
             <button onClick={onClose} style={{ width: '100%', padding: '0.7rem', border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.gray, borderRadius: 10, fontWeight: 700, fontFamily: sans, cursor: 'pointer' }}>Zamknij</button>
@@ -829,7 +800,7 @@ function AthleteQuickReportModal({ athlete, wellnessLogs, dietLogs, onClose, onG
   )
 }
 
-type Tab = 'trening' | 'wellness' | 'diet' | 'athletes'
+type Tab = 'trening' | 'wellness' | 'athletes'
 
 // ── Wellness helpers ──────────────────────────────────────────────────────────
 
@@ -1125,7 +1096,7 @@ function AthleteEditCard({ athlete, groupId, onSaved }: { athlete: any; groupId:
           {saved && <span style={{ fontFamily: mono, fontSize: '0.62rem', color: C.green }}>✓ Zapisano</span>}
           <a href={`/coach/athletes/${athlete.id}`} onClick={e => e.stopPropagation()}
             style={{ border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.navy, borderRadius: 7, padding: '0.3rem 0.6rem', fontFamily: mono, fontSize: '0.6rem', fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}
-            title="Pełny profil z raportami wellness i diety">
+            title="Pełny profil z raportami wellness">
             📊 Raporty
           </a>
           <span style={{ color: C.gray, fontSize: '1rem', transition: 'transform 0.2s', transform: open ? 'rotate(90deg)' : 'none' }}>›</span>
@@ -1678,19 +1649,17 @@ function PlanExerciseTable({ rows, athletes, overrides, actual, uniqueDays, pain
   )
 }
 
-export default function CoachGroupDetailClient({ group, athletes, assignments, days, sessions, plans, wellnessLogs = [], wellnessWeek = [], feedbacks = [], dietLogs = [], moduleConfigs = [], assignmentsHistory = [], archivedPlans = [] }: any) {
+export default function CoachGroupDetailClient({ group, athletes, assignments, days, sessions, plans, wellnessLogs = [], wellnessWeek = [], feedbacks = [], moduleConfigs = [], assignmentsHistory = [], archivedPlans = [] }: any) {
   const router = useRouter()
   const supabase = createClient()
   const [showAssignModal, setShowAssignModal] = useState(false)
   const [assignedMsg, setAssignedMsg] = useState('')
   const [activeTab, setActiveTab] = useState<Tab>('trening')
-  const [moduleConfig, setModuleConfig] = useState<'wellness' | 'diet' | null>(null)
-  const [athleteDietConfig, setAthleteDietConfig] = useState<any | null>(null)
+  const [moduleConfig, setModuleConfig] = useState<'wellness' | null>(null)
   const [athleteWellnessConfig, setAthleteWellnessConfig] = useState<any | null>(null)
   const [localModuleConfigs, setLocalModuleConfigs] = useState<any[]>(moduleConfigs)
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null)
   const [wellnessPeriod, setWellnessPeriod] = useState(14)
-  const [dietPeriod, setDietPeriod] = useState(14)
   const [trainingPeriod, setTrainingPeriod] = useState(30)
   const [localAthletes, setLocalAthletes] = useState<any[]>(athletes)
   const [editingGroup, setEditingGroup] = useState(false)
@@ -1725,27 +1694,14 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
   const [planExData, setPlanExData] = useState<{ blocks: any[]; overrides: Record<number, Record<number, any>>; actual: Record<number, Record<number, ActualEntry>>; painByAthleteDay?: Record<number, Set<number>>; painByAthleteEx?: Record<number, Record<string, PainEntry>> } | null>(null)
   const [planExLoading, setPlanExLoading] = useState(false)
 
-  const defaultDietParams = ['had_breakfast', 'meal_count', 'water_ml']
   const defaultWellnessPreParams = ['sleep_hours', 'sleep_quality', 'readiness', 'energy', 'stress', 'muscle_soreness', 'hydration', 'recovery_score']
   const defaultWellnessPostParams: string[] = []
-  const groupDietConfig = localModuleConfigs.find((config: any) => config.module === 'diet' && config.group_id === group.id)
-  const groupDietEnabled = groupDietConfig?.enabled !== false
   const groupWellnessConfig = localModuleConfigs.find((config: any) => config.module === 'wellness' && config.group_id === group.id)
   const groupWellnessEnabled = groupWellnessConfig?.enabled !== false
-  const getAthleteDietConfig = (athleteId: number) => localModuleConfigs.find((config: any) => config.module === 'diet' && config.athlete_id === athleteId)
   const getAthleteWellnessConfig = (athleteId: number) => localModuleConfigs.find((config: any) => config.module === 'wellness' && config.athlete_id === athleteId)
-  const getDietEnabled = (athleteId: number) => {
-    const config = getAthleteDietConfig(athleteId)
-    return config ? config.enabled !== false : groupDietEnabled
-  }
   const getWellnessEnabled = (athleteId: number) => {
     const config = getAthleteWellnessConfig(athleteId)
     return config ? config.enabled !== false : groupWellnessEnabled
-  }
-  const groupDietForPanel = {
-    enabled: groupDietEnabled,
-    pre: groupDietConfig?.pre_params || defaultDietParams,
-    post: groupDietConfig?.post_params || [],
   }
   const groupWellnessForPanel = {
     enabled: groupWellnessEnabled,
@@ -1755,70 +1711,6 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
 
   function sameList(a: string[] = [], b: string[] = []) {
     return a.length === b.length && a.every(item => b.includes(item))
-  }
-
-  async function saveDietAccess(target: { athleteId?: number; enabled: boolean }) {
-    const current = target.athleteId ? getAthleteDietConfig(target.athleteId) || groupDietConfig : groupDietConfig
-    const groupPre = groupDietConfig?.pre_params || defaultDietParams
-    const groupPost = groupDietConfig?.post_params || []
-
-    if (target.athleteId && target.enabled === groupDietEnabled) {
-      const athleteConfig = getAthleteDietConfig(target.athleteId)
-      const hasCustomParams = athleteConfig && (
-        !sameList(athleteConfig.pre_params || [], groupPre)
-        || !sameList(athleteConfig.post_params || [], groupPost)
-      )
-
-      if (!hasCustomParams) {
-        if (athleteConfig?.id) {
-          const { error } = await supabase
-            .from('group_module_config')
-            .delete()
-            .eq('id', athleteConfig.id)
-
-          if (error) {
-            setAssignedMsg(`Błąd zapisu diety: ${error.message}`)
-            return
-          }
-        }
-
-        setLocalModuleConfigs(prev => prev.filter((config: any) => !(config.module === 'diet' && config.athlete_id === target.athleteId)))
-        setAssignedMsg('Dieta ustawiona jak grupa')
-        setTimeout(() => setAssignedMsg(''), 1800)
-        return
-      }
-    }
-
-    const payload: any = {
-      module: 'diet',
-      enabled: target.enabled,
-      pre_params: current?.pre_params || defaultDietParams,
-      post_params: current?.post_params || [],
-      updated_at: new Date().toISOString(),
-    }
-    if (target.athleteId) payload.athlete_id = target.athleteId
-    else payload.group_id = group.id
-
-    const { data, error } = await supabase
-      .from('group_module_config')
-      .upsert(payload, { onConflict: target.athleteId ? 'athlete_id,module' : 'group_id,module' })
-      .select('id, group_id, athlete_id, module, enabled, pre_params, post_params, updated_at')
-      .single()
-
-    if (error) {
-      setAssignedMsg(`Błąd zapisu diety: ${error.message}`)
-      return
-    }
-
-    setLocalModuleConfigs(prev => [
-      ...prev.filter((config: any) => target.athleteId
-        ? !(config.module === 'diet' && config.athlete_id === target.athleteId)
-        : !(config.module === 'diet' && config.group_id === group.id)
-      ),
-      data,
-    ])
-    setAssignedMsg(target.enabled ? 'Dieta włączona' : 'Dieta wyłączona')
-    setTimeout(() => setAssignedMsg(''), 1800)
   }
 
   async function saveWellnessAccess(target: { athleteId?: number; enabled: boolean }) {
@@ -2047,14 +1939,6 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
           onClose={() => { setModuleConfig(null); router.refresh() }}
         />
       )}
-      {athleteDietConfig && (
-        <ModuleConfigPanel
-          athleteId={athleteDietConfig.id}
-          module="diet"
-          groupConfig={groupDietForPanel}
-          onClose={() => { setAthleteDietConfig(null); router.refresh() }}
-        />
-      )}
       {athleteWellnessConfig && (
         <ModuleConfigPanel
           athleteId={athleteWellnessConfig.id}
@@ -2076,7 +1960,6 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
         <AthleteQuickReportModal
           athlete={quickReportAthlete}
           wellnessLogs={wellnessLogs}
-          dietLogs={dietLogs}
           onClose={() => setQuickReportAthlete(null)}
           onGoToProfile={() => { setQuickReportAthlete(null); router.push(`/coach/athletes/${quickReportAthlete.id}`) }}
         />
@@ -2143,7 +2026,6 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
             {([
               { id: 'trening',  label: '🏋️ Trening' },
               { id: 'wellness', label: '🩺 Wellness' },
-              { id: 'diet',     label: '🥗 Dieta' },
               { id: 'athletes', label: '👤 Zawodniczki' },
             ] as { id: Tab; label: string }[]).map(t => (
               <button key={t.id} onClick={() => setActiveTab(t.id)} style={{ padding: '0.7rem 1.1rem', border: 'none', background: 'transparent', color: activeTab === t.id ? C.gold : C.gray, fontWeight: activeTab === t.id ? 800 : 600, fontFamily: mono, fontSize: '0.72rem', borderBottom: activeTab === t.id ? `2px solid ${C.gold}` : '2px solid transparent', cursor: 'pointer', letterSpacing: '0.04em' }}>
@@ -2237,86 +2119,6 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                       { v: maxPain !== null ? maxPain : null, color: maxPain !== null ? (maxPain >= 6 ? C.red : maxPain >= 4 ? C.gold : C.green) : undefined },
                       { v: actH !== null ? `${actH}h` : null },
                       { v: latestCycle === 'menstruacja' ? '🔴 mens.' : latestCycle ? latestCycle.slice(0, 7) : null, color: latestCycle === 'menstruacja' ? C.red : C.gray },
-                    ],
-                  }
-                })}
-                onAthleteClick={openQuickReport}
-              />
-            </div>
-          )}
-
-          {/* ══ DIET TAB ══════════════════════════════════════════════════════════ */}
-          {activeTab === 'diet' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-
-              {/* Config */}
-              <Card>
-                <div style={{ padding: '1rem 1.25rem', borderBottom: `1.5px solid ${C.grayLight}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div>
-                    <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 3 }}>Konfiguracja parametrów</div>
-                    <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.navy, fontWeight: 700 }}>Indywidualne ustawienia zawodniczek</div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                  <button onClick={() => saveDietAccess({ enabled: !groupDietEnabled })} style={{ border: `1.5px solid ${groupDietEnabled ? '#86EFAC' : '#FCA5A5'}`, background: groupDietEnabled ? '#F0FDF4' : '#FEF2F2', color: groupDietEnabled ? C.green : C.red, borderRadius: 999, padding: '0.45rem 0.85rem', fontWeight: 900, fontSize: '0.74rem', cursor: 'pointer' }}>
-                    {groupDietEnabled ? 'Dieta włączona' : 'Dieta wyłączona'}
-                  </button>
-                  <button onClick={() => setModuleConfig('diet')} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 8, padding: '0.45rem 0.85rem', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer' }}>
-                    🥗 Edytuj dla grupy
-                  </button>
-                  </div>
-                </div>
-                {athletes.map((athlete: any, i: number) => {
-                  const myDiet = filterByDays(dietLogs.filter((d: any) => d.athlete_id === athlete.id), 30)
-                  const individualConfig = getAthleteDietConfig(athlete.id)
-                  const dietEnabled = getDietEnabled(athlete.id)
-                  return (
-                    <div key={athlete.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0.65rem 1.25rem', borderBottom: i < athletes.length - 1 ? `1.5px solid ${C.grayLight}` : 'none' }}>
-                      <div style={{ flex: 1, fontWeight: 700, color: C.navy, fontSize: '0.9rem' }}>{athlete.full_name}</div>
-                      <div style={{ fontFamily: mono, fontSize: '0.68rem', color: myDiet.length === 0 ? C.gray : C.green }}>{myDiet.length} wpisów / 30 dni</div>
-                      <div style={{ fontFamily: mono, fontSize: '0.58rem', color: individualConfig ? C.gold : C.gray, minWidth: 82, textAlign: 'center' }}>
-                        {individualConfig ? 'indywidualnie' : 'wg grupy'}
-                      </div>
-                      <button onClick={() => saveDietAccess({ athleteId: athlete.id, enabled: !dietEnabled })} style={{ border: `1.5px solid ${dietEnabled ? '#86EFAC' : '#FCA5A5'}`, background: dietEnabled ? '#F0FDF4' : '#FEF2F2', color: dietEnabled ? C.green : C.red, borderRadius: 999, padding: '0.35rem 0.7rem', fontFamily: mono, fontSize: '0.6rem', fontWeight: 900, cursor: 'pointer', minWidth: 84 }}>
-                        {dietEnabled ? 'włączona' : 'wyłączona'}
-                      </button>
-                      <button onClick={() => setAthleteDietConfig(athlete)} style={{ border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.navy, borderRadius: 7, padding: '0.35rem 0.65rem', fontFamily: mono, fontSize: '0.62rem', fontWeight: 700, cursor: 'pointer' }}>
-                        Konfiguruj →
-                      </button>
-                    </div>
-                  )
-                })}
-              </Card>
-
-              {/* ── Diet stats table ── */}
-              <StatsCard
-                title="Statystyki diety"
-                period={dietPeriod}
-                onPeriodChange={setDietPeriod}
-                cols={[
-                  { key: 'Zawodniczka', left: true },
-                  { key: 'Wpisy', emoji: '📝' },
-                  { key: 'Śniadanie', emoji: '🌅' },
-                  { key: 'Posiłki śr.', emoji: '🍽️' },
-                  { key: 'Woda ml', emoji: '💧' },
-                  { key: 'Kawa śr.', emoji: '☕' },
-                  { key: 'Głód śr.', emoji: '🔢' },
-                ]}
-                rows={athletes.map((athlete: any) => {
-                  const logs = filterByDays(dietLogs.filter((d: any) => d.athlete_id === athlete.id), dietPeriod)
-                  const breakfastPct = logs.length ? Math.round((logs.filter((d: any) => d.had_breakfast).length / logs.length) * 100) : null
-                  const mealAvg = avg(logs.map((d: any) => d.meal_count).filter((v: any) => v > 0))
-                  const waterAvg = avg(logs.map((d: any) => d.water_ml).filter((v: any) => v != null && v > 0))
-                  const coffeeAvg = avg(logs.map((d: any) => d.coffee_count).filter((v: any) => v != null))
-                  const hungerAvg = avg(logs.map((d: any) => d.hunger_level).filter((v: any) => v != null))
-                  return {
-                    id: athlete.id, name: athlete.full_name,
-                    cells: [
-                      { v: logs.length || null, color: logs.length === 0 ? C.red : C.green },
-                      { v: breakfastPct !== null ? `${breakfastPct}%` : null, color: breakfastPct === null ? undefined : breakfastPct >= 80 ? C.green : breakfastPct >= 50 ? C.gold : C.red },
-                      { v: mealAvg !== null ? mealAvg.toFixed(1) : null },
-                      { v: waterAvg !== null ? Math.round(waterAvg) : null, color: waterAvg === null ? undefined : waterAvg >= 2000 ? C.green : waterAvg >= 1500 ? C.gold : C.red },
-                      { v: coffeeAvg !== null ? coffeeAvg.toFixed(1) : null },
-                      { v: hungerAvg !== null ? hungerAvg.toFixed(1) : null },
                     ],
                   }
                 })}

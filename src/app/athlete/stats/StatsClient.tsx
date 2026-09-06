@@ -25,7 +25,6 @@ interface Props {
   painLogs: PainLog[]
   setLogs: SetLog[]
   sessions: SessionSummary[]
-  dietLogs: any[]
 }
 
 const C = {
@@ -334,7 +333,7 @@ function LoadChart({ sessions, feedbacks }: { sessions: SessionSummary[]; feedba
   )
 }
 
-export default function StatsClient({ athlete, wellnessLogs, feedbacks, painLogs, setLogs, sessions, dietLogs }: Props) {
+export default function StatsClient({ athlete, wellnessLogs, feedbacks, painLogs, setLogs, sessions }: Props) {
   const router = useRouter()
   const [tab, setTab] = useState<'ogolne'|'cwiczenia'|'obciazenie'|'wellness'>('ogolne')
 
@@ -372,8 +371,6 @@ export default function StatsClient({ athlete, wellnessLogs, feedbacks, painLogs
     { id: 'wellness', label: '💚 Wellness' },
   ] as const
 
-  const hasDiet = dietLogs.length > 0
-
   const wellnessChartData = useMemo(() => {
     const sorted = [...wellnessLogs].sort((a,b) => (a.date||a.created_at||'').localeCompare(b.date||b.created_at||''))
     function toPoints(fn: (w: WellnessLog) => number | null | undefined) {
@@ -394,14 +391,6 @@ export default function StatsClient({ athlete, wellnessLogs, feedbacks, painLogs
       hr: toPoints(w => w.resting_hr),
     }
   }, [wellnessLogs])
-
-  const dietChartData = useMemo(() => {
-    const sorted = [...dietLogs].sort((a,b) => (a.date||'').localeCompare(b.date||''))
-    return {
-      water: sorted.flatMap(d => d.water_ml != null ? [{ date: d.date, value: d.water_ml / 1000 }] : []),
-      coffee: sorted.flatMap(d => d.coffee_count != null ? [{ date: d.date, value: d.coffee_count }] : []),
-    }
-  }, [dietLogs])
 
   return (
     <>
@@ -580,13 +569,6 @@ export default function StatsClient({ athlete, wellnessLogs, feedbacks, painLogs
                 ...(wellnessChartData.hr.length > 0 ? [{
                   title: 'HR spoczynkowe',
                   series: [{ label: 'HR (bpm)', color: C.red, data: wellnessChartData.hr }],
-                }] : []),
-                ...(hasDiet ? [{
-                  title: 'Nawodnienie i kawa',
-                  series: [
-                    ...(dietChartData.water.length > 0 ? [{ label: 'Woda (L)', color: C.blue, data: dietChartData.water }] : []),
-                    ...(dietChartData.coffee.length > 0 ? [{ label: 'Kawa (filiż.)', color: '#6B3A2A', data: dietChartData.coffee }] : []),
-                  ],
                 }] : []),
               ].filter(g => g.series.length > 0).map(g => (
                 <Card key={g.title} style={{ marginBottom: '1rem' }}>

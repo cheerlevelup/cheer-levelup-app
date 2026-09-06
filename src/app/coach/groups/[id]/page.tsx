@@ -147,18 +147,10 @@ export default async function CoachGroupDetailPage({ params }: Props) {
     .gte('created_at', thirtyDaysAgo.toISOString())
     .order('created_at', { ascending: false })
 
-  // Dieta z ostatnich 30 dni
-  const { data: dietLogs } = await supabase
-    .from('diet_logs')
-    .select('athlete_id, date, meal_count, had_breakfast, hunger_level, water_ml, coffee_count')
-    .in('athlete_id', athleteIds)
-    .gte('date', thirtyDaysAgo.toISOString().split('T')[0])
-    .order('date', { ascending: false })
-
   const { data: moduleConfigs } = await supabase
     .from('group_module_config')
     .select('id, group_id, athlete_id, module, enabled, pre_params, post_params, updated_at')
-    .in('module', ['diet', 'wellness'])
+    .eq('module', 'wellness')
     .or(`group_id.eq.${groupId},athlete_id.in.(${athleteIds.join(',')})`)
 
   const wellnessWeek = (wellnessLogs || []).filter((l: any) => l.date >= sevenDaysAgo.toISOString().split('T')[0])
@@ -174,7 +166,6 @@ export default async function CoachGroupDetailPage({ params }: Props) {
       wellnessLogs={wellnessLogs || []}
       wellnessWeek={wellnessWeek}
       feedbacks={feedbacks || []}
-      dietLogs={dietLogs || []}
       moduleConfigs={moduleConfigs || []}
       assignmentsHistory={allGroupAssignmentsHistory || []}
       archivedPlans={archivedPlans || []}
