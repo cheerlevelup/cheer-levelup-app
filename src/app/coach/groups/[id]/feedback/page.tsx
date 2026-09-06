@@ -27,9 +27,11 @@ export default async function GroupFeedbackPage({ params }: Props) {
 
   const { data: athletes } = await supabase
     .from('athletes')
-    .select('id, full_name')
+    .select('id, full_name, archived')
     .eq('group_id', groupId)
     .order('full_name', { ascending: true })
 
-  return <FeedbackKioskClient group={group} athletes={athletes || []} />
+  const activeAthletes = (athletes || []).filter((a: any) => !a.archived)
+
+  return <FeedbackKioskClient group={group} athletes={activeAthletes} />
 }

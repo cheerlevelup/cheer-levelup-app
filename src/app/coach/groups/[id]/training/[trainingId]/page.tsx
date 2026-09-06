@@ -34,11 +34,13 @@ export default async function GroupTrainingPage({ params }: Props) {
     .single()
   if (!training) redirect(`/coach/groups/${groupId}`)
 
-  const { data: athletes } = await supabase
+  const { data: rawAthletes } = await supabase
     .from('athletes')
-    .select('id, full_name, birth_year')
+    .select('id, full_name, birth_year, archived')
     .eq('group_id', groupId)
     .order('full_name', { ascending: true })
+
+  const athletes = (rawAthletes || []).filter((a: any) => !a.archived)
 
   const { data: exercises } = await supabase
     .from('group_training_exercises')

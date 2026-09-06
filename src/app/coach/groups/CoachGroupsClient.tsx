@@ -13,6 +13,8 @@ const C = {
   offWhite: '#F4F6F9',
   gray: '#8A9BB0',
   grayLight: '#E8ECF2',
+  red: '#EF4444',
+  green: '#22C55E',
 }
 
 const sans = "'Space Grotesk', sans-serif"
@@ -30,6 +32,8 @@ type Athlete = {
   id: number
   full_name: string
   group_id?: number | null
+  archived?: boolean | null
+  group?: Group | null
 }
 
 interface Props {
@@ -116,13 +120,56 @@ function NewGroupModal({ groups, onClose }: { groups: Group[]; onClose: () => vo
 export default function CoachGroupsClient({ groups, athletes }: Props) {
   const router = useRouter()
   const [newGroupOpen, setNewGroupOpen] = useState(false)
+  const [tab, setTab] = useState<'groups' | 'archive'>('groups')
+  const [expandedGroupId, setExpandedGroupId] = useState<number | null>(null)
+  const [pendingIds, setPendingIds] = useState<number[]>([])
+
+  const activeAthletes = athletes.filter(a => !a.archived)
+  const archivedAthletes = athletes
+    .filter(a => a.archived)
+    .slice()
+    .sort((a, b) => a.full_name.localeCompare(b.full_name, 'pl'))
 
   const managedGroups = groups.filter(g => g.group_type === 'managed')
   const selfGroups = groups.filter(g => g.group_type !== 'managed')
 
+  function setPending(id: number, on: boolean) {
+    setPendingIds(prev => on ? [...prev, id] : prev.filter(x => x !== id))
+  }
+
+  async function archiveAthlete(athleteId: number) {
+    setPending(athleteId, true)
+    const supabase = createClient()
+    await supabase.from('athletes').update({ archived: true }).eq('id', athleteId)
+    router.refresh()
+    setPending(athleteId, false)
+  }
+
+  async function restoreAthlete(athleteId: number) {
+    setPending(athleteId, true)
+    const supabase = createClient()
+    await supabase.from('athletes').update({ archived: false }).eq('id', athleteId)
+    router.refresh()
+    setPending(athleteId, false)
+  }
+
+  async function archiveWholeGroup(group: Group) {
+    const count = activeAthletes.filter(a => a.group_id === group.id).length
+    if (count === 0) return
+    if (!confirm(`Przenieść wszystkie zawodniczki (${count}) z grupy „${group.name}” do archiwum?`)) return
+    setPending(group.id, true)
+    const supabase = createClient()
+    await supabase.from('athletes').update({ archived: true }).eq('group_id', group.id)
+    router.refresh()
+    setPending(group.id, false)
+  }
+
   function GroupCard({ group }: { group: Group }) {
-    const groupAthletes = athletes.filter(a => a.group_id === group.id)
+    const groupAthletes = activeAthletes.filter(a => a.group_id === group.id)
     const isManaged = group.group_type === 'managed'
+    const expanded = expandedGroupId === group.id
+    const groupPending = pendingIds.includes(group.id)
+
     return (
       <Card key={group.id}>
         <button onClick={() => router.push(`/coach/groups/${group.id}`)} style={{ width: '100%', background: 'none', border: 'none', padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', textAlign: 'left' }}>
@@ -149,6 +196,42 @@ export default function CoachGroupsClient({ groups, athletes }: Props) {
           </div>
           <span style={{ color: C.gray, marginLeft: 12 }}>›</span>
         </button>
+
+        <div style={{ borderTop: `1.5px solid ${C.grayLight}`, display: 'flex' }}>
+          <button
+            onClick={() => setExpandedGroupId(expanded ? null : group.id)}
+            style={{ flex: 1, border: 'none', background: 'none', padding: '0.6rem', fontFamily: mono, fontSize: '0.64rem', fontWeight: 700, color: C.gray, letterSpacing: '0.04em', borderRight: `1.5px solid ${C.grayLight}` }}
+          >
+            {expanded ? '▲ Ukryj zawodniczki' : '▾ Zarządzaj zawodniczkami'}
+          </button>
+          <button
+            onClick={() => archiveWholeGroup(group)}
+            disabled={groupAthletes.length === 0 || groupPending}
+            style={{ flex: 1, border: 'none', background: 'none', padding: '0.6rem', fontFamily: mono, fontSize: '0.64rem', fontWeight: 700, color: groupAthletes.length === 0 ? C.grayLight : C.red }}
+          >
+            {groupPending ? 'Przenoszę...' : '🗄 Archiwizuj grupę'}
+          </button>
+        </div>
+
+        {expanded && (
+          <div style={{ borderTop: `1.5px solid ${C.grayLight}`, padding: '0.6rem 0.75rem', display: 'flex', flexDirection: 'column', gap: 6, background: C.offWhite }}>
+            {groupAthletes.length === 0 && (
+              <div style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray, padding: '0.4rem 0' }}>Brak zawodniczek w tej grupie.</div>
+            )}
+            {groupAthletes.map(athlete => (
+              <div key={athlete.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 8, padding: '0.45rem 0.6rem' }}>
+                <span style={{ fontSize: '0.85rem', color: C.navy, fontWeight: 600 }}>{athlete.full_name}</span>
+                <button
+                  onClick={() => archiveAthlete(athlete.id)}
+                  disabled={pendingIds.includes(athlete.id)}
+                  style={{ border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.red, borderRadius: 6, padding: '3px 8px', fontFamily: mono, fontSize: '0.6rem', fontWeight: 700, whiteSpace: 'nowrap' }}
+                >
+                  {pendingIds.includes(athlete.id) ? '...' : '→ archiwum'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
     )
   }
@@ -160,6 +243,7 @@ export default function CoachGroupsClient({ groups, athletes }: Props) {
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: ${C.offWhite}; }
         button { cursor: pointer; font-family: inherit; }
+        button:disabled { cursor: default; opacity: 0.55; }
       `}</style>
       <div style={{ minHeight: '100vh', background: C.offWhite, fontFamily: sans, color: C.navy }}>
         <header style={{ background: C.navy, padding: '1rem 1.25rem 1.35rem', position: 'sticky', top: 0, zIndex: 10 }}>
@@ -169,53 +253,115 @@ export default function CoachGroupsClient({ groups, athletes }: Props) {
             </button>
             <h1 style={{ color: C.white, fontSize: '1.45rem', fontWeight: 800, marginTop: '1rem' }}>Grupy</h1>
             <p style={{ color: C.gray, fontSize: '0.84rem', marginTop: 4 }}>Zarzadzanie zawodniczkami w grupach.</p>
+
+            <div style={{ display: 'flex', gap: 6, marginTop: '1.1rem' }}>
+              {([
+                { id: 'groups' as const, label: 'Grupy' },
+                { id: 'archive' as const, label: `Archiwum${archivedAthletes.length ? ` (${archivedAthletes.length})` : ''}` },
+              ]).map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => setTab(t.id)}
+                  style={{
+                    flex: 1, padding: '0.6rem', borderRadius: 10, border: `1.5px solid ${tab === t.id ? C.gold : C.navyBorder}`,
+                    background: tab === t.id ? C.gold : C.navyLight, color: tab === t.id ? C.navy : C.gray,
+                    fontWeight: 800, fontFamily: mono, fontSize: '0.7rem', letterSpacing: '0.04em',
+                  }}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
           </div>
         </header>
 
         <main style={{ maxWidth: 720, margin: '0 auto', padding: '1.25rem 1rem 5rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: '1rem' }}>
-            <Card>
-              <div style={{ padding: '0.875rem' }}>
-                <div style={{ fontFamily: mono, fontSize: '0.64rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 7 }}>Grupy</div>
-                <div style={{ fontFamily: mono, fontSize: '1.7rem', fontWeight: 800, color: C.gold, lineHeight: 1 }}>{groups.length}</div>
+          {tab === 'groups' ? (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: '1rem' }}>
+                <Card>
+                  <div style={{ padding: '0.875rem' }}>
+                    <div style={{ fontFamily: mono, fontSize: '0.64rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 7 }}>Grupy</div>
+                    <div style={{ fontFamily: mono, fontSize: '1.7rem', fontWeight: 800, color: C.gold, lineHeight: 1 }}>{groups.length}</div>
+                  </div>
+                </Card>
+                <Card>
+                  <div style={{ padding: '0.875rem' }}>
+                    <div style={{ fontFamily: mono, fontSize: '0.64rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 7 }}>Zawodniczki</div>
+                    <div style={{ fontFamily: mono, fontSize: '1.7rem', fontWeight: 800, color: C.navy, lineHeight: 1 }}>{activeAthletes.length}</div>
+                  </div>
+                </Card>
               </div>
-            </Card>
-            <Card>
-              <div style={{ padding: '0.875rem' }}>
-                <div style={{ fontFamily: mono, fontSize: '0.64rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 7 }}>Zawodniczki</div>
-                <div style={{ fontFamily: mono, fontSize: '1.7rem', fontWeight: 800, color: C.navy, lineHeight: 1 }}>{athletes.length}</div>
-              </div>
-            </Card>
-          </div>
 
-          <button
-            onClick={() => setNewGroupOpen(true)}
-            style={{ width: '100%', padding: '0.875rem', borderRadius: 14, border: `1.5px dashed ${C.gray}`, background: C.white, color: C.navy, fontWeight: 800, fontSize: '0.9rem', marginBottom: '1.25rem', fontFamily: sans }}
-          >
-            ＋ Nowa grupa
-          </button>
+              <button
+                onClick={() => setNewGroupOpen(true)}
+                style={{ width: '100%', padding: '0.875rem', borderRadius: 14, border: `1.5px dashed ${C.gray}`, background: C.white, color: C.navy, fontWeight: 800, fontSize: '0.9rem', marginBottom: '1.25rem', fontFamily: sans }}
+              >
+                ＋ Nowa grupa
+              </button>
 
-          {managedGroups.length > 0 && (
-            <div style={{ marginBottom: '1.25rem' }}>
-              <div style={{ fontFamily: mono, fontSize: '0.64rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8, fontWeight: 700 }}>
-                Grupy zorganizowane — prowadzi trener
+              {managedGroups.length > 0 && (
+                <div style={{ marginBottom: '1.25rem' }}>
+                  <div style={{ fontFamily: mono, fontSize: '0.64rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8, fontWeight: 700 }}>
+                    Grupy zorganizowane — prowadzi trener
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {managedGroups.map(group => <GroupCard key={group.id} group={group} />)}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                {managedGroups.length > 0 && (
+                  <div style={{ fontFamily: mono, fontSize: '0.64rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8, fontWeight: 700 }}>
+                    Grupy samodzielne
+                  </div>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {selfGroups.map(group => <GroupCard key={group.id} group={group} />)}
+                </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {managedGroups.map(group => <GroupCard key={group.id} group={group} />)}
-              </div>
-            </div>
+            </>
+          ) : (
+            <>
+              <Card style={{ marginBottom: '1.25rem' }}>
+                <div style={{ padding: '0.875rem' }}>
+                  <div style={{ fontFamily: mono, fontSize: '0.64rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 7 }}>Zarchiwizowane</div>
+                  <div style={{ fontFamily: mono, fontSize: '1.7rem', fontWeight: 800, color: C.navy, lineHeight: 1 }}>{archivedAthletes.length}</div>
+                </div>
+              </Card>
+
+              {archivedAthletes.length === 0 ? (
+                <Card>
+                  <div style={{ padding: '1.5rem', textAlign: 'center', fontFamily: mono, fontSize: '0.78rem', color: C.gray }}>
+                    Archiwum jest puste.
+                  </div>
+                </Card>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {archivedAthletes.map(athlete => (
+                    <Card key={athlete.id}>
+                      <div style={{ padding: '0.85rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 800, fontSize: '0.95rem', color: C.navy }}>{athlete.full_name}</div>
+                          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, marginTop: 3 }}>
+                            {athlete.group?.name ? `grupa: ${athlete.group.name}` : 'bez przypisanej grupy'}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => restoreAthlete(athlete.id)}
+                          disabled={pendingIds.includes(athlete.id)}
+                          style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 10, padding: '0.55rem 0.9rem', fontFamily: mono, fontSize: '0.66rem', fontWeight: 800, whiteSpace: 'nowrap' }}
+                        >
+                          {pendingIds.includes(athlete.id) ? 'Przywracam...' : '↩ Przywróć'}
+                        </button>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </>
           )}
-
-          <div>
-            {managedGroups.length > 0 && (
-              <div style={{ fontFamily: mono, fontSize: '0.64rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8, fontWeight: 700 }}>
-                Grupy samodzielne
-              </div>
-            )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {selfGroups.map(group => <GroupCard key={group.id} group={group} />)}
-            </div>
-          </div>
         </main>
       </div>
 

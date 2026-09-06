@@ -16,10 +16,12 @@ export default async function CoachPage() {
     .select('*')
     .order('sort_order', { ascending: true })
 
-  const { data: athletes } = await supabase
+  const { data: rawAthletes } = await supabase
     .from('athletes')
     .select('*, group:groups(*)')
     .order('full_name', { ascending: true })
+
+  const athletes = (rawAthletes || []).filter((a: any) => !a.archived)
 
   const since = new Date()
   since.setDate(since.getDate() - 7)

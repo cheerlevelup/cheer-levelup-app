@@ -25,11 +25,13 @@ export default async function GroupReadinessPage({ params }: Props) {
     .single()
   if (!group) redirect('/coach/groups')
 
-  const { data: athletes } = await supabase
+  const { data: rawAthletes } = await supabase
     .from('athletes')
     .select('*')
     .eq('group_id', groupId)
     .order('full_name', { ascending: true })
+
+  const athletes = (rawAthletes || []).filter((a: any) => !a.archived)
 
   // Konfiguracja arkusza gotowości dla grupy (jeśli trener ją ustawił)
   const { data: wellnessConfig } = await supabase

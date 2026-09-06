@@ -26,11 +26,13 @@ export default async function GroupStatsPage({ params }: Props) {
     .single()
   if (!group) redirect('/coach/groups')
 
-  const { data: athletes } = await supabase
+  const { data: rawAthletes } = await supabase
     .from('athletes')
-    .select('id, full_name')
+    .select('id, full_name, archived')
     .eq('group_id', groupId)
     .order('full_name', { ascending: true })
+
+  const athletes = (rawAthletes || []).filter((a: any) => !a.archived)
 
   const { data: trainings } = await supabase
     .from('group_trainings')

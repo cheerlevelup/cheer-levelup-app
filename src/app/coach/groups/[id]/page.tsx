@@ -28,12 +28,14 @@ export default async function CoachGroupDetailPage({ params }: Props) {
 
   if (!group) redirect('/coach/groups')
 
-  // Zawodniczki w grupie
-  const { data: athletes } = await supabase
+  // Zawodniczki w grupie (bez zarchiwizowanych — te widoczne są tylko w archiwum)
+  const { data: allGroupAthletes } = await supabase
     .from('athletes')
     .select('*')
     .eq('group_id', groupId)
     .order('full_name', { ascending: true })
+
+  const athletes = (allGroupAthletes || []).filter((a: any) => !a.archived)
 
   // Grupa zorganizowana (np. Ultra) — osobny panel prowadzony przez trenera
   if ((group as any).group_type === 'managed') {
