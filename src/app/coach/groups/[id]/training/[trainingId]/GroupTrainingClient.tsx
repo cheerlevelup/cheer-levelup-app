@@ -5,14 +5,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { formatDatePl } from '@/lib/groupTraining'
-
-const C = {
-  navy: '#0D1B2A', navyLight: '#1A2E45', navyBorder: '#243652',
-  gold: '#F5C842', white: '#FFFFFF', offWhite: '#F4F6F9',
-  gray: '#8A9BB0', grayLight: '#E8ECF2', green: '#22C55E', red: '#EF4444', orange: '#F97316',
-}
-const sans = "'Space Grotesk', sans-serif"
-const mono = "'Space Mono', monospace"
+import { CheckSquare, MessageCircle } from 'lucide-react'
+import { SetPageMeta } from '@/components/coach/PageMetaContext'
+import { Button } from '@/components/coach/ui'
 
 type Group = { id: number; name: string }
 type Training = { id: number; group_id: number; training_date: string; absent_athlete_ids?: number[] | null }
@@ -208,108 +203,108 @@ function CellModal({ athlete, exercise, entry, training, onClose, onSaved }: {
   }
 
   const cellInput: React.CSSProperties = {
-    width: '100%', padding: '0.55rem 0.5rem', border: `1.5px solid ${C.grayLight}`,
-    borderRadius: 8, background: C.offWhite, color: C.navy,
-    fontFamily: mono, fontSize: '0.82rem', outline: 'none', textAlign: 'center',
+    width: '100%', padding: '0.55rem 0.5rem', border: `1.5px solid var(--border)`,
+    borderRadius: 8, background: 'var(--bg)', color: 'var(--navy-900)',
+    fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.82rem', outline: 'none', textAlign: 'center',
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(13,27,42,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: sans }}>
-      <div style={{ width: '100%', maxWidth: 520, maxHeight: '92vh', display: 'flex', flexDirection: 'column', background: C.white, borderRadius: 18, overflow: 'hidden', border: `1.5px solid ${C.grayLight}` }}>
-        <div style={{ background: C.navy, padding: '1rem 1.25rem', flexShrink: 0 }}>
-          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(13,27,42,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: 'var(--font-inter), sans-serif' }}>
+      <div style={{ width: '100%', maxWidth: 520, maxHeight: '92vh', display: 'flex', flexDirection: 'column', background: '#ffffff', borderRadius: 18, overflow: 'hidden', border: `1.5px solid var(--border)` }}>
+        <div style={{ background: 'var(--navy-900)', padding: '1rem 1.25rem', flexShrink: 0 }}>
+          <div style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.62rem', color: 'var(--gold)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>
             {exercise.name || 'Ćwiczenie'}
           </div>
-          <div style={{ fontWeight: 800, fontSize: '1.15rem', color: C.white }}>{athlete.full_name}</div>
+          <div style={{ fontWeight: 800, fontSize: '1.15rem', color: '#ffffff' }}>{athlete.full_name}</div>
         </div>
 
         <div style={{ overflowY: 'auto', flex: 1, padding: '1.1rem 1.25rem' }}>
           {/* ── MODYFIKACJA ĆWICZENIA ── */}
-          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8 }}>
+          <div style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.62rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8 }}>
             Modyfikacja ćwiczenia — tylko ta zawodniczka
           </div>
           <input
             value={exerciseOverride}
             onChange={e => setExerciseOverride(e.target.value)}
             placeholder={`np. zamiast „${exercise.name || 'ćwiczenia'}”: wersja z gumą, inne ćwiczenie...`}
-            style={{ width: '100%', padding: '0.65rem', border: `1.5px solid ${exerciseOverride.trim() ? C.gold : C.grayLight}`, borderRadius: 10, background: exerciseOverride.trim() ? '#FFFBEB' : C.offWhite, color: C.navy, fontFamily: sans, fontSize: '0.88rem', outline: 'none', marginBottom: '0.75rem' }}
+            style={{ width: '100%', padding: '0.65rem', border: `1.5px solid ${exerciseOverride.trim() ? 'var(--gold)' : 'var(--border)'}`, borderRadius: 10, background: exerciseOverride.trim() ? '#FFFBEB' : 'var(--bg)', color: 'var(--navy-900)', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.88rem', outline: 'none', marginBottom: '0.75rem' }}
           />
 
           {/* ── BEZ CIĘŻARU (masa własna) ── */}
           <button
             onClick={() => setBodyweight(v => !v)}
-            style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: 10, border: `1.5px solid ${bodyweight ? C.gold : C.grayLight}`, background: bodyweight ? '#FFFBEB' : C.offWhite, marginBottom: '1.25rem' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: 10, border: `1.5px solid ${bodyweight ? 'var(--gold)' : 'var(--border)'}`, background: bodyweight ? '#FFFBEB' : 'var(--bg)', marginBottom: '1.25rem' }}
           >
-            <span style={{ flexShrink: 0, width: 38, height: 22, borderRadius: 999, background: bodyweight ? C.gold : C.grayLight, position: 'relative', transition: 'background 0.15s' }}>
-              <span style={{ position: 'absolute', top: 2, left: bodyweight ? 18 : 2, width: 18, height: 18, borderRadius: '50%', background: C.white, transition: 'left 0.15s' }} />
+            <span style={{ flexShrink: 0, width: 38, height: 22, borderRadius: 999, background: bodyweight ? 'var(--gold)' : 'var(--border)', position: 'relative', transition: 'background 0.15s' }}>
+              <span style={{ position: 'absolute', top: 2, left: bodyweight ? 18 : 2, width: 18, height: 18, borderRadius: '50%', background: '#ffffff', transition: 'left 0.15s' }} />
             </span>
             <span>
-              <span style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', color: C.navy }}>Bez ciężaru — wpisuj powtórzenia</span>
-              <span style={{ display: 'block', fontFamily: mono, fontSize: '0.6rem', color: C.gray, marginTop: 1 }}>masa własna: w tabeli zamiast kg wpisujesz wykonane powt.</span>
+              <span style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', color: 'var(--navy-900)' }}>Bez ciężaru — wpisuj powtórzenia</span>
+              <span style={{ display: 'block', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.6rem', color: 'var(--muted-light)', marginTop: 1 }}>masa własna: w tabeli zamiast kg wpisujesz wykonane powt.</span>
             </span>
           </button>
 
           {/* ── SERIE ── */}
-          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8 }}>
+          <div style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.62rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8 }}>
             Serie
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: bodyweight ? '34px 1fr 1fr 30px' : '34px 1fr 1fr 1fr 30px', gap: 6, alignItems: 'center', marginBottom: 6 }}>
-            <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, textAlign: 'center' }}>#</span>
-            <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, textAlign: 'center' }}>POWT.</span>
-            <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, textAlign: 'center' }}>TEMPO</span>
-            {!bodyweight && <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, textAlign: 'center' }}>CIĘŻAR</span>}
+            <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.58rem', color: 'var(--muted-light)', textAlign: 'center' }}>#</span>
+            <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.58rem', color: 'var(--muted-light)', textAlign: 'center' }}>POWT.</span>
+            <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.58rem', color: 'var(--muted-light)', textAlign: 'center' }}>TEMPO</span>
+            {!bodyweight && <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.58rem', color: 'var(--muted-light)', textAlign: 'center' }}>CIĘŻAR</span>}
             <span />
           </div>
           {sets.map((s, idx) => {
             const skipInput: React.CSSProperties = s.skipped
-              ? { ...cellInput, textDecoration: 'line-through', color: C.gray, background: '#F1F3F7' }
+              ? { ...cellInput, textDecoration: 'line-through', color: 'var(--muted-light)', background: '#F1F3F7' }
               : cellInput
             return (
               <div key={idx} style={{ display: 'grid', gridTemplateColumns: bodyweight ? '34px 1fr 1fr 30px' : '34px 1fr 1fr 1fr 30px', gap: 6, alignItems: 'center', marginBottom: 6 }}>
                 <button
                   onClick={() => toggleSkip(idx)}
                   title={s.skipped ? 'Cofnij — seria zrobiona' : 'Oznacz: seria nie zrobiona'}
-                  style={{ border: s.skipped ? `1.5px solid ${C.red}` : '1.5px solid transparent', borderRadius: 7, background: s.skipped ? '#FDEDED' : 'none', fontFamily: mono, fontSize: '0.82rem', fontWeight: 700, color: s.skipped ? C.red : C.navy, textAlign: 'center', textDecoration: s.skipped ? 'line-through' : 'none', padding: '0.32rem 0' }}
+                  style={{ border: s.skipped ? `1.5px solid ${'#c23b3b'}` : '1.5px solid transparent', borderRadius: 7, background: s.skipped ? '#FDEDED' : 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.82rem', fontWeight: 700, color: s.skipped ? '#c23b3b' : 'var(--navy-900)', textAlign: 'center', textDecoration: s.skipped ? 'line-through' : 'none', padding: '0.32rem 0' }}
                 >
                   {idx + 1}
                 </button>
                 <input value={s.reps || ''} onChange={e => updateSet(idx, 'reps', e.target.value)} placeholder={presc.reps || '8'} style={skipInput} inputMode="text" disabled={s.skipped} />
                 <input value={s.tempo || ''} onChange={e => updateSet(idx, 'tempo', e.target.value)} placeholder={presc.tempo || '3010'} style={skipInput} inputMode="text" disabled={s.skipped} />
                 {!bodyweight && <input value={s.weight || ''} onChange={e => updateSet(idx, 'weight', e.target.value)} placeholder="kg" style={skipInput} inputMode="text" disabled={s.skipped} />}
-                <button onClick={() => removeSet(idx)} title="Usuń serię" style={{ border: 'none', background: 'none', color: C.gray, fontSize: '0.9rem', padding: 4 }}>✕</button>
+                <button onClick={() => removeSet(idx)} title="Usuń serię" style={{ border: 'none', background: 'none', color: 'var(--muted-light)', fontSize: '0.9rem', padding: 4 }}>✕</button>
               </div>
             )
           })}
-          <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, marginBottom: 8 }}>
+          <div style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.58rem', color: 'var(--muted-light)', marginBottom: 8 }}>
             Kliknij numer serii, by oznaczyć „nie zrobiła".
           </div>
-          <button onClick={addSet} style={{ width: '100%', padding: '0.6rem', borderRadius: 10, border: `1.5px dashed ${C.gray}`, background: C.white, color: C.navy, fontWeight: 700, fontSize: '0.82rem', marginBottom: '1.25rem' }}>
+          <button onClick={addSet} style={{ width: '100%', padding: '0.6rem', borderRadius: 10, border: `1.5px dashed var(--muted-light)`, background: '#ffffff', color: 'var(--navy-900)', fontWeight: 700, fontSize: '0.82rem', marginBottom: '1.25rem' }}>
             ＋ Dodaj serię
           </button>
 
           {/* ── BÓL ── */}
-          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8 }}>
+          <div style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.62rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8 }}>
             Ból
           </div>
           <button
             onClick={() => { const next = !pain; setPain(next); if (!next) { setPainVas(null); setPainComment('') } }}
-            style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: 10, border: `1.5px solid ${pain ? C.red : C.grayLight}`, background: pain ? '#FEF2F2' : C.offWhite, marginBottom: pain ? '0.85rem' : '1.25rem' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: 10, border: `1.5px solid ${pain ? '#c23b3b' : 'var(--border)'}`, background: pain ? '#FEF2F2' : 'var(--bg)', marginBottom: pain ? '0.85rem' : '1.25rem' }}
           >
-            <span style={{ flexShrink: 0, width: 38, height: 22, borderRadius: 999, background: pain ? C.red : C.grayLight, position: 'relative', transition: 'background 0.15s' }}>
-              <span style={{ position: 'absolute', top: 2, left: pain ? 18 : 2, width: 18, height: 18, borderRadius: '50%', background: C.white, transition: 'left 0.15s' }} />
+            <span style={{ flexShrink: 0, width: 38, height: 22, borderRadius: 999, background: pain ? '#c23b3b' : 'var(--border)', position: 'relative', transition: 'background 0.15s' }}>
+              <span style={{ position: 'absolute', top: 2, left: pain ? 18 : 2, width: 18, height: 18, borderRadius: '50%', background: '#ffffff', transition: 'left 0.15s' }} />
             </span>
-            <span style={{ fontWeight: 700, fontSize: '0.84rem', color: pain ? '#B91C1C' : C.navy }}>Wystąpił ból</span>
+            <span style={{ fontWeight: 700, fontSize: '0.84rem', color: pain ? '#B91C1C' : 'var(--navy-900)' }}>Wystąpił ból</span>
           </button>
 
           {pain && (
             <>
-              <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 6 }}>
+              <div style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.58rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 6 }}>
                 Nasilenie (skala VAS) — opcjonalnie
               </div>
               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
                 <button
                   onClick={() => setPainVas(null)}
-                  style={{ padding: '0.45rem 0.7rem', borderRadius: 8, border: `1.5px solid ${painVas === null ? C.gold : C.grayLight}`, background: painVas === null ? C.navy : C.offWhite, color: painVas === null ? C.gold : C.navy, fontFamily: mono, fontSize: '0.72rem', fontWeight: 700 }}
+                  style={{ padding: '0.45rem 0.7rem', borderRadius: 8, border: `1.5px solid ${painVas === null ? 'var(--gold)' : 'var(--border)'}`, background: painVas === null ? 'var(--navy-900)' : 'var(--bg)', color: painVas === null ? 'var(--gold)' : 'var(--navy-900)', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.72rem', fontWeight: 700 }}
                 >
                   nie podano
                 </button>
@@ -317,7 +312,7 @@ function CellModal({ athlete, exercise, entry, training, onClose, onSaved }: {
                   <button
                     key={v}
                     onClick={() => setPainVas(v)}
-                    style={{ width: 34, padding: '0.45rem 0', borderRadius: 8, border: `1.5px solid ${painVas === v ? C.gold : C.grayLight}`, background: painVas === v ? (v >= 5 ? C.red : C.orange) : C.offWhite, color: painVas === v ? C.white : C.navy, fontFamily: mono, fontSize: '0.78rem', fontWeight: 700 }}
+                    style={{ width: 34, padding: '0.45rem 0', borderRadius: 8, border: `1.5px solid ${painVas === v ? 'var(--gold)' : 'var(--border)'}`, background: painVas === v ? (v >= 5 ? '#c23b3b' : '#c07f1e') : 'var(--bg)', color: painVas === v ? '#ffffff' : 'var(--navy-900)', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.78rem', fontWeight: 700 }}
                   >
                     {v}
                   </button>
@@ -327,13 +322,13 @@ function CellModal({ athlete, exercise, entry, training, onClose, onSaved }: {
                 value={painComment}
                 onChange={e => setPainComment(e.target.value)}
                 placeholder="Gdzie boli? Opis bólu..."
-                style={{ width: '100%', padding: '0.65rem', border: `1.5px solid ${C.grayLight}`, borderRadius: 10, background: C.offWhite, color: C.navy, fontFamily: sans, fontSize: '0.88rem', outline: 'none', marginBottom: '1.25rem' }}
+                style={{ width: '100%', padding: '0.65rem', border: `1.5px solid var(--border)`, borderRadius: 10, background: 'var(--bg)', color: 'var(--navy-900)', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.88rem', outline: 'none', marginBottom: '1.25rem' }}
               />
             </>
           )}
 
           {/* ── KOMENTARZ ── */}
-          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8 }}>
+          <div style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.62rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8 }}>
             Komentarz do całego ćwiczenia
           </div>
           <textarea
@@ -341,18 +336,18 @@ function CellModal({ athlete, exercise, entry, training, onClose, onSaved }: {
             onChange={e => setComment(e.target.value)}
             placeholder="Uwagi do techniki, przebiegu wszystkich serii..."
             rows={2}
-            style={{ width: '100%', padding: '0.65rem', border: `1.5px solid ${C.grayLight}`, borderRadius: 10, background: C.offWhite, color: C.navy, fontFamily: sans, fontSize: '0.88rem', outline: 'none', resize: 'vertical' }}
+            style={{ width: '100%', padding: '0.65rem', border: `1.5px solid var(--border)`, borderRadius: 10, background: 'var(--bg)', color: 'var(--navy-900)', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.88rem', outline: 'none', resize: 'vertical' }}
           />
-          {error && <div style={{ color: C.red, fontSize: '0.82rem', marginTop: '0.75rem' }}>❌ {error}</div>}
+          {error && <div style={{ color: '#c23b3b', fontSize: '0.82rem', marginTop: '0.75rem' }}>❌ {error}</div>}
         </div>
 
-        <div style={{ padding: '0.875rem 1.25rem', borderTop: `1.5px solid ${C.grayLight}`, display: 'flex', gap: 10, flexShrink: 0 }}>
-          <button onClick={onClose} style={{ padding: '0.8rem 1.1rem', border: `1.5px solid ${C.grayLight}`, borderRadius: 12, background: C.white, color: C.gray, fontWeight: 700 }}>
+        <div style={{ padding: '0.875rem 1.25rem', borderTop: `1.5px solid var(--border)`, display: 'flex', gap: 10, flexShrink: 0 }}>
+          <Button variant="ghost" onClick={onClose}>
             Anuluj
-          </button>
-          <button onClick={handleSave} disabled={saving} style={{ flex: 1, padding: '0.8rem', border: 'none', borderRadius: 12, background: C.navy, color: C.gold, fontWeight: 900, fontSize: '0.92rem' }}>
+          </Button>
+          <Button variant="dark" onClick={handleSave} disabled={saving} style={{ flex: 1, color: 'var(--gold)', fontWeight: 900 }}>
             {saving ? 'Zapisuję...' : 'Zapisz'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -905,79 +900,84 @@ export default function GroupTrainingClient({ group, training, athletes, initial
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: ${C.offWhite}; }
-        button { cursor: pointer; font-family: inherit; }
         .gt-table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; }
-        .gt-table th, .gt-table td { border-bottom: 1px solid ${C.grayLight}; border-right: 1px solid ${C.grayLight}; vertical-align: top; }
+        .gt-table th, .gt-table td { border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); vertical-align: top; }
         .gt-table tbody tr:last-child td { border-bottom: none; }
-        .gt-sticky { position: sticky; left: 0; z-index: 2; background: ${C.white}; box-shadow: 3px 0 8px rgba(13,27,42,0.05); }
+        .gt-sticky { position: sticky; left: 0; z-index: 2; background: #ffffff; box-shadow: 3px 0 8px rgba(13,27,42,0.05); }
         .gt-table thead th { position: sticky; top: 0; z-index: 4; box-shadow: 0 2px 6px rgba(13,27,42,0.05); }
         .gt-table thead th.gt-sticky { z-index: 5; }
         .gt-row td { transition: background 0.12s ease; }
         .gt-row:nth-child(even) td, .gt-row:nth-child(even) .gt-sticky { background: #FBFCFE; }
         .gt-row:hover td, .gt-row:hover .gt-sticky { background: #EFF4FB; }
-        .gt-w { width: 44px; border: 1.5px solid #DBE2EB; border-radius: 7px; background: #FAFBFC; font-family: ${mono}; font-size: 0.74rem; color: ${C.navy}; padding: 0.3rem 0.2rem; outline: none; text-align: center; transition: border-color 0.12s, background 0.12s; }
-        .gt-w.filled { border-color: ${C.grayLight}; background: ${C.white}; }
-        .gt-w:focus { border-color: ${C.gold}; background: ${C.white}; }
+        .gt-w { width: 44px; border: 1.5px solid #DBE2EB; border-radius: 7px; background: #FAFBFC; font-family: var(--font-inter), sans-serif; font-size: 0.74rem; color: var(--navy-900); padding: 0.3rem 0.2rem; outline: none; text-align: center; transition: border-color 0.12s, background 0.12s; }
+        .gt-w.filled { border-color: var(--border); background: #ffffff; }
+        .gt-w:focus { border-color: var(--gold); background: #ffffff; }
       `}</style>
-      <div style={{ minHeight: '100vh', background: C.offWhite, fontFamily: sans, color: C.navy }}>
-        <header style={{ background: C.navy, padding: '1rem 1.25rem 1.2rem', position: 'sticky', top: 0, zIndex: 10 }}>
-          <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-              <button onClick={() => router.push(`/coach/groups/${group.id}`)} style={{ border: 'none', background: C.navyLight, color: C.gray, borderRadius: 10, padding: '0.55rem 0.75rem', fontFamily: mono, fontSize: '0.68rem', fontWeight: 700 }}>
-                ← {group.name}
-              </button>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Data:</span>
-                <input
-                  type="date"
-                  value={trainingDate}
-                  onChange={e => handleDateChange(e.target.value)}
-                  style={{ border: `1.5px solid ${C.navyBorder}`, background: C.navyLight, color: C.white, borderRadius: 8, padding: '0.4rem 0.6rem', fontFamily: mono, fontSize: '0.78rem', outline: 'none' }}
-                />
-              </div>
-            </div>
-            <h1 style={{ color: C.white, fontSize: '1.25rem', fontWeight: 800, marginTop: '0.8rem' }}>
+      <SetPageMeta title="Trening" backHref={`/coach/groups/${group.id}`} backLabel={group.name} />
+      <div className="coach-content">
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
+          <div>
+            <h1 style={{ color: 'var(--ink)', fontSize: '1.15rem', fontWeight: 700, margin: 0, fontFamily: 'var(--font-inter), sans-serif' }}>
               Trening · {formatDatePl(trainingDate)}
             </h1>
-            <p style={{ color: C.gray, fontSize: '0.8rem', marginTop: 3 }}>
+            <p style={{ color: 'var(--muted)', fontSize: '0.8rem', marginTop: 4, maxWidth: 760, fontFamily: 'var(--font-inter), sans-serif' }}>
               W nagłówku kolumny: serie, powtórzenia i tempo dla całej grupy. Przeciągnij ⠿, by zmienić kolejność. „BW" wpisuje 0 (masa ciała) w ciężar wszystkim, „P" przełącza kolumnę na wpisywanie powtórzeń zamiast kg. W wierszu zawodniczki wpisujesz ciężar, „+ ból"/„+ notatka" dają szybki wpis bez ✎. Kliknij numer serii (S1, S2…), by oznaczyć „nie zrobiła", a ✕ przy nazwisku wykreśla nieobecną.
             </p>
           </div>
-        </header>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '11px', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>Data</span>
+            <input
+              type="date"
+              value={trainingDate}
+              onChange={e => handleDateChange(e.target.value)}
+              style={{ border: '1px solid var(--border)', background: '#ffffff', color: 'var(--ink)', borderRadius: 8, padding: '7px 10px', fontFamily: 'var(--font-inter), sans-serif', fontSize: '13px', outline: 'none' }}
+            />
+          </div>
+        </div>
 
-        <main style={{ maxWidth: 1100, margin: '0 auto', padding: '1.25rem 1rem 5rem' }}>
-          {error && (
-            <div style={{ padding: '0.75rem', background: '#FEF2F2', border: `1.5px solid ${C.red}`, borderRadius: 10, color: C.red, fontWeight: 700, fontSize: '0.86rem', marginBottom: '1rem' }}>
-              ❌ {error}
-            </div>
-          )}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Button variant="ghost" size="small" onClick={() => router.push(`/coach/groups/${group.id}/readiness`)}>
+            <CheckSquare size={13} /> Gotowość treningowa
+          </Button>
+          <Button variant="ghost" size="small" onClick={() => router.push(`/coach/groups/${group.id}/feedback`)}>
+            <MessageCircle size={13} /> Feedback po treningu
+          </Button>
+        </div>
 
-          {athletes.length === 0 ? (
-            <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, padding: '1.5rem', textAlign: 'center', color: C.gray }}>
-              Brak zawodniczek w grupie — najpierw dodaj zawodniczki z panelu grupy.
-            </div>
-          ) : (
-            <>
-              {exercises.length === 0 && (
-                <button onClick={handleCopyFromPrevious} disabled={copying} style={{ padding: '0.7rem 1.1rem', borderRadius: 12, border: `1.5px dashed ${C.gray}`, background: C.white, color: C.navy, fontWeight: 700, fontSize: '0.85rem', marginBottom: '1rem' }}>
-                  {copying ? 'Kopiuję...' : '⧉ Skopiuj ćwiczenia z poprzedniego treningu'}
-                </button>
-              )}
+        {error && (
+          <div style={{ padding: '0.75rem', background: '#fdedec', border: '1.5px solid #c23b3b', borderRadius: 10, color: '#c23b3b', fontWeight: 700, fontSize: '0.86rem', fontFamily: 'var(--font-inter), sans-serif' }}>
+            ❌ {error}
+          </div>
+        )}
 
-              <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, overflow: 'auto', maxHeight: '72vh', boxShadow: '0 4px 20px rgba(13,27,42,0.06)' }}>
+        {athletes.length === 0 ? (
+          <div style={{ background: '#ffffff', border: `1.5px solid var(--border)`, borderRadius: 14, padding: '1.5rem', textAlign: 'center', color: 'var(--muted-light)', fontFamily: 'var(--font-inter), sans-serif' }}>
+            Brak zawodniczek w grupie — najpierw dodaj zawodniczki z panelu grupy.
+          </div>
+        ) : (
+          <>
+            {exercises.length === 0 && (
+              <Button
+                variant="ghost"
+                onClick={handleCopyFromPrevious}
+                disabled={copying}
+                style={{ alignSelf: 'flex-start', border: '1.5px dashed var(--muted-light)', color: 'var(--navy-900)' }}
+              >
+                {copying ? 'Kopiuję...' : '⧉ Skopiuj ćwiczenia z poprzedniego treningu'}
+              </Button>
+            )}
+
+              <div className="coach-attendance-grid-wrap" style={{ background: '#ffffff', overflow: 'auto', maxHeight: '72vh', boxShadow: 'var(--shadow)' }}>
                 <table className="gt-table">
                   <thead>
                     <tr>
-                      <th className="gt-sticky" style={{ minWidth: 150, padding: '0.7rem 0.85rem', textAlign: 'left', fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', background: C.offWhite, zIndex: 5 }}>
+                      <th className="gt-sticky" style={{ minWidth: 150, padding: '0.7rem 0.85rem', textAlign: 'left', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.62rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.08em', background: 'var(--bg)', zIndex: 5 }}>
                         Zawodniczka
                       </th>
                       {sortedExercises.map(ex => {
                         const headerInput: React.CSSProperties = {
                           width: '100%', minWidth: 0, border: `1px solid transparent`, borderRadius: 6,
-                          background: C.white, fontFamily: mono, fontSize: '0.72rem', fontWeight: 700, color: C.navy,
+                          background: '#ffffff', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.72rem', fontWeight: 700, color: 'var(--navy-900)',
                           padding: '0.28rem 0.15rem', outline: 'none', textAlign: 'center',
                         }
                         return (
@@ -985,7 +985,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                             key={ex.id}
                             onDragOver={e => { if (dragExId.current != null) { e.preventDefault(); if (dragOverExId !== ex.id) setDragOverExId(ex.id) } }}
                             onDrop={e => { e.preventDefault(); reorderExercise(ex.id) }}
-                            style={{ width: 178, minWidth: 178, maxWidth: 178, padding: '0.4rem 0.45rem', background: C.offWhite, boxShadow: dragOverExId === ex.id ? `inset 3px 0 0 ${C.gold}` : undefined }}
+                            style={{ width: 178, minWidth: 178, maxWidth: 178, padding: '0.4rem 0.45rem', background: 'var(--bg)', boxShadow: dragOverExId === ex.id ? `inset 3px 0 0 var(--gold)` : undefined }}
                           >
                             <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                               <span
@@ -993,7 +993,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 onDragStart={e => { dragExId.current = ex.id; e.dataTransfer.effectAllowed = 'move' }}
                                 onDragEnd={() => { dragExId.current = null; setDragOverExId(null) }}
                                 title="Przeciągnij, by zmienić kolejność ćwiczeń"
-                                style={{ cursor: 'grab', color: C.gray, fontSize: '0.82rem', lineHeight: 1, flexShrink: 0, padding: '0 1px', userSelect: 'none' }}
+                                style={{ cursor: 'grab', color: 'var(--muted-light)', fontSize: '0.82rem', lineHeight: 1, flexShrink: 0, padding: '0 1px', userSelect: 'none' }}
                               >
                                 ⠿
                               </span>
@@ -1008,14 +1008,14 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 }}
                                 onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
                                 placeholder="nazwa ćwiczenia"
-                                style={{ flex: 1, minWidth: 0, border: `1.5px solid transparent`, borderRadius: 7, background: 'transparent', fontWeight: 800, fontSize: '0.82rem', color: C.navy, padding: '0.3rem 0.35rem', outline: 'none', fontFamily: sans }}
-                                onFocus={e => { e.target.style.background = C.white; e.target.style.borderColor = C.gold }}
+                                style={{ flex: 1, minWidth: 0, border: `1.5px solid transparent`, borderRadius: 7, background: 'transparent', fontWeight: 800, fontSize: '0.82rem', color: 'var(--navy-900)', padding: '0.3rem 0.35rem', outline: 'none', fontFamily: 'var(--font-inter), sans-serif' }}
+                                onFocus={e => { e.target.style.background = '#ffffff'; e.target.style.borderColor = 'var(--gold)' }}
                               />
                               {!ex.bodyweight && (
                                 <button
                                   onClick={() => fillColumnBodyweight(ex)}
                                   title="Wpisz 0 (masa ciała) w ciężar wszystkim zawodniczkom"
-                                  style={{ flexShrink: 0, fontFamily: mono, fontSize: '0.5rem', fontWeight: 700, border: `1px solid ${C.grayLight}`, background: C.white, color: C.navy, borderRadius: 5, padding: '2px 4px', lineHeight: 1 }}
+                                  style={{ flexShrink: 0, fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.5rem', fontWeight: 700, border: `1px solid var(--border)`, background: '#ffffff', color: 'var(--navy-900)', borderRadius: 5, padding: '2px 4px', lineHeight: 1 }}
                                 >
                                   BW
                                 </button>
@@ -1023,28 +1023,28 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                               <button
                                 onClick={() => toggleExerciseBodyweight(ex.id)}
                                 title={ex.bodyweight ? 'Tryb powtórzeń włączony — kliknij, by wrócić do kg' : 'Cała kolumna: wpisuj powtórzenia zamiast kg'}
-                                style={{ flexShrink: 0, fontFamily: mono, fontSize: '0.5rem', fontWeight: 700, border: `1px solid ${ex.bodyweight ? C.gold : C.grayLight}`, background: ex.bodyweight ? '#FFFBEB' : C.white, color: ex.bodyweight ? '#92600A' : C.gray, borderRadius: 5, padding: '2px 4px', lineHeight: 1 }}
+                                style={{ flexShrink: 0, fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.5rem', fontWeight: 700, border: `1px solid ${ex.bodyweight ? 'var(--gold)' : 'var(--border)'}`, background: ex.bodyweight ? '#FFFBEB' : '#ffffff', color: ex.bodyweight ? '#92600A' : 'var(--muted-light)', borderRadius: 5, padding: '2px 4px', lineHeight: 1 }}
                               >
                                 P
                               </button>
                               <button
                                 onClick={() => toggleIndividual(ex.id)}
                                 title={ex.individual ? 'Tryb indywidualny — dane liczone z wierszy zawodniczek (kliknij, by wrócić do grupowego)' : 'Tryb indywidualny: serie/powt./tempo różne per zawodniczka, nagłówek może być pusty'}
-                                style={{ flexShrink: 0, fontFamily: mono, fontSize: '0.5rem', fontWeight: 700, border: `1px solid ${ex.individual ? C.gold : C.grayLight}`, background: ex.individual ? '#FFFBEB' : C.white, color: ex.individual ? '#92600A' : C.gray, borderRadius: 5, padding: '2px 4px', lineHeight: 1 }}
+                                style={{ flexShrink: 0, fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.5rem', fontWeight: 700, border: `1px solid ${ex.individual ? 'var(--gold)' : 'var(--border)'}`, background: ex.individual ? '#FFFBEB' : '#ffffff', color: ex.individual ? '#92600A' : 'var(--muted-light)', borderRadius: 5, padding: '2px 4px', lineHeight: 1 }}
                               >
                                 I
                               </button>
-                              <button onClick={() => handleDeleteExercise(ex)} title="Usuń ćwiczenie" style={{ border: 'none', background: 'none', color: C.gray, fontSize: '0.78rem', padding: 2, flexShrink: 0 }}>✕</button>
+                              <button onClick={() => handleDeleteExercise(ex)} title="Usuń ćwiczenie" style={{ border: 'none', background: 'none', color: 'var(--muted-light)', fontSize: '0.78rem', padding: 2, flexShrink: 0 }}>✕</button>
                             </div>
                             {/* Rozpiska dla całej grupy: serie / powtórzenia / tempo */}
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.3fr', gap: 2, marginTop: 5, padding: 3, background: C.white, border: `1px solid ${C.grayLight}`, borderRadius: 9 }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.3fr', gap: 2, marginTop: 5, padding: 3, background: '#ffffff', border: `1px solid var(--border)`, borderRadius: 9 }}>
                               {([
                                 { field: 'sets_planned' as const, label: 'serie', value: ex.sets_planned ?? '', placeholder: '3', type: 'number' },
                                 { field: 'reps' as const, label: 'powt.', value: ex.reps ?? '', placeholder: '8', type: 'text' },
                                 { field: 'tempo' as const, label: 'tempo', value: ex.tempo ?? '', placeholder: '3010', type: 'text' },
                               ]).map(f => (
                                 <div key={f.field}>
-                                  <div style={{ fontFamily: mono, fontSize: '0.48rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.04em', textAlign: 'center', marginBottom: 1 }}>{f.label}</div>
+                                  <div style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.48rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.04em', textAlign: 'center', marginBottom: 1 }}>{f.label}</div>
                                   <input
                                     type={f.type}
                                     {...(f.type === 'number' ? { min: 0, max: 20 } : {})}
@@ -1059,12 +1059,12 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                               ))}
                             </div>
                             {(isMaxReps(ex.reps) || ex.bodyweight) && (
-                              <div style={{ fontFamily: mono, fontSize: '0.5rem', fontWeight: 700, color: '#854F0B', background: '#FEF6E0', border: '1px solid #F7D27A', borderRadius: 6, padding: '2px 5px', marginTop: 4, textAlign: 'center' }}>
+                              <div style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.5rem', fontWeight: 700, color: '#854F0B', background: '#FEF6E0', border: '1px solid #F7D27A', borderRadius: 6, padding: '2px 5px', marginTop: 4, textAlign: 'center' }}>
                                 {ex.bodyweight ? '↓ masa własna — wpisuj powt.' : '↓ wpisuj wykonane powt.'}
                               </div>
                             )}
                             {ex.individual && (
-                              <div style={{ fontFamily: mono, fontSize: '0.5rem', fontWeight: 700, color: '#854F0B', background: '#FEF6E0', border: '1px solid #F7D27A', borderRadius: 6, padding: '2px 5px', marginTop: 4, textAlign: 'center' }}>
+                              <div style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.5rem', fontWeight: 700, color: '#854F0B', background: '#FEF6E0', border: '1px solid #F7D27A', borderRadius: 6, padding: '2px 5px', marginTop: 4, textAlign: 'center' }}>
                                 tryb indywidualny — dane z zawodniczek
                               </div>
                             )}
@@ -1073,22 +1073,22 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                               <button
                                 onClick={() => { setVariantsOpenExId(variantsOpenExId === ex.id ? null : ex.id); setNewVariant('') }}
                                 title="Warianty wykonania tego zadania (np. Podciąganie / Negatywne / z gumą)"
-                                style={{ width: '100%', fontFamily: mono, fontSize: '0.5rem', fontWeight: 700, border: `1px solid ${(ex.variants?.length ?? 0) > 0 ? C.gold : C.grayLight}`, background: (ex.variants?.length ?? 0) > 0 ? '#FFFBEB' : C.white, color: (ex.variants?.length ?? 0) > 0 ? '#92600A' : C.gray, borderRadius: 6, padding: '2px 5px', lineHeight: 1.3 }}
+                                style={{ width: '100%', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.5rem', fontWeight: 700, border: `1px solid ${(ex.variants?.length ?? 0) > 0 ? 'var(--gold)' : 'var(--border)'}`, background: (ex.variants?.length ?? 0) > 0 ? '#FFFBEB' : '#ffffff', color: (ex.variants?.length ?? 0) > 0 ? '#92600A' : 'var(--muted-light)', borderRadius: 6, padding: '2px 5px', lineHeight: 1.3 }}
                               >
                                 ⋔ warianty{(ex.variants?.length ?? 0) > 0 ? ` (${ex.variants!.length})` : ''} {variantsOpenExId === ex.id ? '▴' : '▾'}
                               </button>
                               {variantsOpenExId === ex.id && (
-                                <div style={{ marginTop: 4, padding: 5, background: C.white, border: `1px solid ${C.grayLight}`, borderRadius: 8 }}>
+                                <div style={{ marginTop: 4, padding: 5, background: '#ffffff', border: `1px solid var(--border)`, borderRadius: 8 }}>
                                   {(ex.variants ?? []).length === 0 && (
-                                    <div style={{ fontFamily: mono, fontSize: '0.5rem', color: C.gray, marginBottom: 4, textAlign: 'center' }}>brak — dodaj wersje wykonania</div>
+                                    <div style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.5rem', color: 'var(--muted-light)', marginBottom: 4, textAlign: 'center' }}>brak — dodaj wersje wykonania</div>
                                   )}
                                   {(ex.variants ?? []).map(v => (
-                                    <div key={v.name} style={{ marginBottom: 6, padding: 4, background: C.offWhite, border: `1px solid ${C.grayLight}`, borderRadius: 7 }}>
+                                    <div key={v.name} style={{ marginBottom: 6, padding: 4, background: 'var(--bg)', border: `1px solid var(--border)`, borderRadius: 7 }}>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginBottom: 3 }}>
                                         <input
                                           defaultValue={v.name}
                                           title="Kliknij, by zmienić nazwę wariantu (zaktualizuje też zawodniczki)"
-                                          onFocus={e => { e.currentTarget.style.background = C.white; e.currentTarget.style.borderColor = C.gold }}
+                                          onFocus={e => { e.currentTarget.style.background = '#ffffff'; e.currentTarget.style.borderColor = 'var(--gold)' }}
                                           onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
                                           onBlur={e => {
                                             e.currentTarget.style.background = 'transparent'
@@ -1097,13 +1097,13 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                             if (!val) { e.target.value = v.name; return }
                                             renameVariant(ex.id, v.name, val)
                                           }}
-                                          style={{ flex: 1, minWidth: 0, fontFamily: sans, fontSize: '0.64rem', fontWeight: 700, color: C.navy, border: '1px solid transparent', borderRadius: 6, background: 'transparent', padding: '2px 4px', outline: 'none' }}
+                                          style={{ flex: 1, minWidth: 0, fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.64rem', fontWeight: 700, color: 'var(--navy-900)', border: '1px solid transparent', borderRadius: 6, background: 'transparent', padding: '2px 4px', outline: 'none' }}
                                         />
                                         {!v.bodyweight && (
                                           <button
                                             onClick={() => fillVariantBodyweight(ex, v.name)}
                                             title="Wpisz 0 (masa ciała) zawodniczkom z tym wariantem"
-                                            style={{ flexShrink: 0, fontFamily: mono, fontSize: '0.5rem', fontWeight: 700, border: `1px solid ${C.grayLight}`, background: C.white, color: C.navy, borderRadius: 5, padding: '2px 4px', lineHeight: 1 }}
+                                            style={{ flexShrink: 0, fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.5rem', fontWeight: 700, border: `1px solid var(--border)`, background: '#ffffff', color: 'var(--navy-900)', borderRadius: 5, padding: '2px 4px', lineHeight: 1 }}
                                           >
                                             BW
                                           </button>
@@ -1111,18 +1111,18 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                         <button
                                           onClick={() => toggleVariantBodyweight(ex.id, v.name)}
                                           title={v.bodyweight ? 'Wariant na masie własnej — wpisuj powt. (kliknij, by wrócić do kg)' : 'Ten wariant: wpisuj powtórzenia zamiast kg'}
-                                          style={{ flexShrink: 0, fontFamily: mono, fontSize: '0.5rem', fontWeight: 700, border: `1px solid ${v.bodyweight ? C.gold : C.grayLight}`, background: v.bodyweight ? '#FFFBEB' : C.white, color: v.bodyweight ? '#92600A' : C.gray, borderRadius: 5, padding: '2px 4px', lineHeight: 1 }}
+                                          style={{ flexShrink: 0, fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.5rem', fontWeight: 700, border: `1px solid ${v.bodyweight ? 'var(--gold)' : 'var(--border)'}`, background: v.bodyweight ? '#FFFBEB' : '#ffffff', color: v.bodyweight ? '#92600A' : 'var(--muted-light)', borderRadius: 5, padding: '2px 4px', lineHeight: 1 }}
                                         >
                                           P
                                         </button>
                                         <button
                                           onClick={() => toggleVariantIndividual(ex.id, v.name)}
                                           title={v.individual ? 'Wariant indywidualny — rozpiska z wierszy zawodniczek (kliknij, by wrócić do wspólnej)' : 'Ten wariant: serie/powt./tempo różne per zawodniczka'}
-                                          style={{ flexShrink: 0, fontFamily: mono, fontSize: '0.5rem', fontWeight: 700, border: `1px solid ${v.individual ? C.gold : C.grayLight}`, background: v.individual ? '#FFFBEB' : C.white, color: v.individual ? '#92600A' : C.gray, borderRadius: 5, padding: '2px 4px', lineHeight: 1 }}
+                                          style={{ flexShrink: 0, fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.5rem', fontWeight: 700, border: `1px solid ${v.individual ? 'var(--gold)' : 'var(--border)'}`, background: v.individual ? '#FFFBEB' : '#ffffff', color: v.individual ? '#92600A' : 'var(--muted-light)', borderRadius: 5, padding: '2px 4px', lineHeight: 1 }}
                                         >
                                           I
                                         </button>
-                                        <button onClick={() => removeVariant(ex.id, v.name)} title="Usuń wariant" style={{ flexShrink: 0, border: 'none', background: 'none', color: C.gray, fontSize: '0.72rem', padding: 0, lineHeight: 1 }}>✕</button>
+                                        <button onClick={() => removeVariant(ex.id, v.name)} title="Usuń wariant" style={{ flexShrink: 0, border: 'none', background: 'none', color: 'var(--muted-light)', fontSize: '0.72rem', padding: 0, lineHeight: 1 }}>✕</button>
                                       </div>
                                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.3fr', gap: 2 }}>
                                         {([
@@ -1131,7 +1131,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                           { field: 'tempo' as const, label: 'tempo', value: v.tempo ?? '', placeholder: ex.tempo || '3010', type: 'text' },
                                         ]).map(f => (
                                           <div key={f.field}>
-                                            <div style={{ fontFamily: mono, fontSize: '0.44rem', color: C.gray, textTransform: 'uppercase', textAlign: 'center', marginBottom: 1 }}>{f.label}</div>
+                                            <div style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.44rem', color: 'var(--muted-light)', textTransform: 'uppercase', textAlign: 'center', marginBottom: 1 }}>{f.label}</div>
                                             <input
                                               type={f.type}
                                               {...(f.type === 'number' ? { min: 0, max: 20 } : {})}
@@ -1140,28 +1140,28 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                               onBlur={() => persistVariantsNow(ex.id)}
                                               onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
                                               placeholder={f.placeholder}
-                                              style={{ width: '100%', border: `1px solid ${C.grayLight}`, borderRadius: 5, background: C.white, fontFamily: mono, fontSize: '0.66rem', color: C.navy, padding: '0.2rem 0.15rem', outline: 'none', textAlign: 'center' }}
+                                              style={{ width: '100%', border: `1px solid var(--border)`, borderRadius: 5, background: '#ffffff', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.66rem', color: 'var(--navy-900)', padding: '0.2rem 0.15rem', outline: 'none', textAlign: 'center' }}
                                             />
                                           </div>
                                         ))}
                                       </div>
                                       {v.individual && (
-                                        <div style={{ fontFamily: mono, fontSize: '0.46rem', fontWeight: 700, color: '#854F0B', background: '#FEF6E0', border: '1px solid #F7D27A', borderRadius: 5, padding: '2px 4px', marginTop: 3, textAlign: 'center' }}>
+                                        <div style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.46rem', fontWeight: 700, color: '#854F0B', background: '#FEF6E0', border: '1px solid #F7D27A', borderRadius: 5, padding: '2px 4px', marginTop: 3, textAlign: 'center' }}>
                                           tryb indywidualny — dane z zawodniczek
                                         </div>
                                       )}
                                     </div>
                                   ))}
-                                  <div style={{ fontFamily: mono, fontSize: '0.46rem', color: C.gray, marginBottom: 4, textAlign: 'center' }}>puste pole = jak nagłówek grupy</div>
+                                  <div style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.46rem', color: 'var(--muted-light)', marginBottom: 4, textAlign: 'center' }}>puste pole = jak nagłówek grupy</div>
                                   <div style={{ display: 'flex', gap: 3, marginTop: 4 }}>
                                     <input
                                       value={variantsOpenExId === ex.id ? newVariant : ''}
                                       onChange={e => setNewVariant(e.target.value)}
                                       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addVariant(ex.id) } }}
                                       placeholder="nazwa wariantu"
-                                      style={{ flex: 1, minWidth: 0, border: `1px solid ${C.grayLight}`, borderRadius: 6, background: C.offWhite, fontFamily: sans, fontSize: '0.62rem', color: C.navy, padding: '0.25rem 0.35rem', outline: 'none' }}
+                                      style={{ flex: 1, minWidth: 0, border: `1px solid var(--border)`, borderRadius: 6, background: 'var(--bg)', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.62rem', color: 'var(--navy-900)', padding: '0.25rem 0.35rem', outline: 'none' }}
                                     />
-                                    <button onClick={() => addVariant(ex.id)} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 6, padding: '0.25rem 0.45rem', fontWeight: 800, fontSize: '0.7rem', lineHeight: 1 }}>＋</button>
+                                    <button onClick={() => addVariant(ex.id)} style={{ border: 'none', background: 'var(--navy-900)', color: 'var(--gold)', borderRadius: 6, padding: '0.25rem 0.45rem', fontWeight: 800, fontSize: '0.7rem', lineHeight: 1 }}>＋</button>
                                   </div>
                                 </div>
                               )}
@@ -1169,17 +1169,17 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                           </th>
                         )
                       })}
-                      <th style={{ width: 44, minWidth: 44, padding: 0, background: C.offWhite }}>
+                      <th style={{ width: 44, minWidth: 44, padding: 0, background: 'var(--bg)' }}>
                         <button
                           onClick={handleAddExercise}
                           title="Dodaj ćwiczenie (nowa kolumna)"
-                          style={{ width: '100%', height: '100%', minHeight: 44, border: 'none', background: 'none', color: C.navy, fontWeight: 800, fontSize: '1.05rem' }}
+                          style={{ width: '100%', height: '100%', minHeight: 44, border: 'none', background: 'none', color: 'var(--navy-900)', fontWeight: 800, fontSize: '1.05rem' }}
                         >
                           ＋
                         </button>
                       </th>
                       {/* Wypełniacz — nie pozwala kolumnom ćwiczeń rozciągać się na cały ekran */}
-                      <th style={{ width: '100%', background: C.offWhite, borderRight: 'none' }} />
+                      <th style={{ width: '100%', background: 'var(--bg)', borderRight: 'none' }} />
                     </tr>
                   </thead>
                   <tbody>
@@ -1190,15 +1190,15 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                             <button
                               onClick={() => toggleAbsent(athlete.id)}
                               title={absent ? 'Przywróć na trening' : 'Wykreśl z treningu (nieobecna)'}
-                              style={{ flexShrink: 0, width: 22, height: 22, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, border: `1.5px solid ${absent ? C.gold : C.grayLight}`, background: absent ? '#FFFBEB' : C.white, color: absent ? '#92600A' : C.gray, fontSize: '0.72rem', lineHeight: 1 }}
+                              style={{ flexShrink: 0, width: 22, height: 22, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, border: `1.5px solid ${absent ? 'var(--gold)' : 'var(--border)'}`, background: absent ? '#FFFBEB' : '#ffffff', color: absent ? '#92600A' : 'var(--muted-light)', fontSize: '0.72rem', lineHeight: 1 }}
                             >
                               {absent ? '↩' : '✕'}
                             </button>
-                            <span style={{ fontWeight: 700, fontSize: '0.84rem', whiteSpace: 'nowrap', textDecoration: absent ? 'line-through' : 'none', color: absent ? C.gray : C.navy }}>
+                            <span style={{ fontWeight: 700, fontSize: '0.84rem', whiteSpace: 'nowrap', textDecoration: absent ? 'line-through' : 'none', color: absent ? 'var(--muted-light)' : 'var(--navy-900)' }}>
                               {athlete.full_name}
                             </span>
                             {absent && (
-                              <span style={{ flexShrink: 0, fontFamily: mono, fontSize: '0.5rem', fontWeight: 700, color: '#92600A', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 5, padding: '1px 5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>nieob.</span>
+                              <span style={{ flexShrink: 0, fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.5rem', fontWeight: 700, color: '#92600A', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 5, padding: '1px 5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>nieob.</span>
                             )}
                           </div>
                         </td>
@@ -1217,15 +1217,15 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                   value={entry?.variant || ''}
                                   onChange={e => saveVariant(athlete, ex, e.target.value || null)}
                                   title="Wariant wykonania dla tej zawodniczki"
-                                  style={{ width: '100%', marginBottom: 5, border: `1.5px solid ${entry?.variant ? C.gold : C.grayLight}`, background: entry?.variant ? '#FFFBEB' : C.white, color: entry?.variant ? '#92600A' : C.gray, fontFamily: sans, fontSize: '0.62rem', fontWeight: 700, borderRadius: 6, padding: '3px 4px', outline: 'none' }}
+                                  style={{ width: '100%', marginBottom: 5, border: `1.5px solid ${entry?.variant ? 'var(--gold)' : 'var(--border)'}`, background: entry?.variant ? '#FFFBEB' : '#ffffff', color: entry?.variant ? '#92600A' : 'var(--muted-light)', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.62rem', fontWeight: 700, borderRadius: 6, padding: '3px 4px', outline: 'none' }}
                                 >
                                   <option value="">— wariant —</option>
                                   {ex.variants!.map(v => <option key={v.name} value={v.name}>{v.name}{variantHasPresc(v) ? ` (${[v.sets, v.reps, v.tempo].filter(Boolean).join(' · ')})` : ''}</option>)}
                                 </select>
                               )}
                               {entry?.exercise_override && (
-                                <div title={`Zamiana ćwiczenia: ${entry.exercise_override}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%', fontFamily: sans, fontSize: '0.64rem', fontWeight: 700, color: '#854F0B', background: '#FEF6E0', border: '1px solid #F7D27A', borderRadius: 999, padding: '2px 9px 2px 2px', marginBottom: 5 }}>
-                                  <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, borderRadius: '50%', background: C.gold, color: C.navy, fontFamily: mono, fontSize: '0.62rem', fontWeight: 700, lineHeight: 1 }}>⇄</span>
+                                <div title={`Zamiana ćwiczenia: ${entry.exercise_override}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.64rem', fontWeight: 700, color: '#854F0B', background: '#FEF6E0', border: '1px solid #F7D27A', borderRadius: 999, padding: '2px 9px 2px 2px', marginBottom: 5 }}>
+                                  <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, borderRadius: '50%', background: 'var(--gold)', color: 'var(--navy-900)', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.62rem', fontWeight: 700, lineHeight: 1 }}>⇄</span>
                                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.exercise_override}</span>
                                 </div>
                               )}
@@ -1240,7 +1240,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                       <button
                                         onClick={() => toggleSkipInline(athlete, ex, i)}
                                         title={s.skipped ? 'Seria nie zrobiona — kliknij, by cofnąć' : 'Oznacz: nie zrobiła tej serii'}
-                                        style={{ display: 'block', width: '100%', border: 'none', background: 'none', fontFamily: mono, fontSize: '0.5rem', color: s.skipped ? C.red : C.gray, textAlign: 'center', marginBottom: 1, letterSpacing: '0.03em', textDecoration: s.skipped ? 'line-through' : 'none', padding: 0 }}
+                                        style={{ display: 'block', width: '100%', border: 'none', background: 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.5rem', color: s.skipped ? '#c23b3b' : 'var(--muted-light)', textAlign: 'center', marginBottom: 1, letterSpacing: '0.03em', textDecoration: s.skipped ? 'line-through' : 'none', padding: 0 }}
                                       >
                                         S{i + 1}
                                       </button>
@@ -1248,7 +1248,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                         <button
                                           onClick={() => toggleSkipInline(athlete, ex, i)}
                                           title="Nie zrobiła tej serii (kliknij, by cofnąć)"
-                                          style={{ width: 44, border: '1.5px solid #F4B5B5', borderRadius: 7, background: '#FDEDED', color: C.red, fontFamily: mono, fontSize: '0.78rem', fontWeight: 700, padding: '0.3rem 0', lineHeight: 1 }}
+                                          style={{ width: 44, border: '1.5px solid #F4B5B5', borderRadius: 7, background: '#FDEDED', color: '#c23b3b', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.78rem', fontWeight: 700, padding: '0.3rem 0', lineHeight: 1 }}
                                         >
                                           ✕
                                         </button>
@@ -1267,7 +1267,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 <button
                                   onClick={() => addInlineSet(athlete, ex)}
                                   title="Dodaj serię tej zawodniczce"
-                                  style={{ border: `1.5px solid ${C.grayLight}`, background: C.white, color: C.navy, borderRadius: 7, padding: '0.28rem 0.42rem', fontSize: '0.82rem', fontWeight: 800, flexShrink: 0, lineHeight: 1 }}
+                                  style={{ border: `1.5px solid var(--border)`, background: '#ffffff', color: 'var(--navy-900)', borderRadius: 7, padding: '0.28rem 0.42rem', fontSize: '0.82rem', fontWeight: 800, flexShrink: 0, lineHeight: 1 }}
                                 >
                                   ＋
                                 </button>
@@ -1275,7 +1275,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                   <button
                                     onClick={() => removeInlineSet(athlete, ex)}
                                     title="Usuń ostatnią serię tej zawodniczce"
-                                    style={{ border: `1.5px solid ${C.grayLight}`, background: C.white, color: C.gray, borderRadius: 7, padding: '0.28rem 0.42rem', fontSize: '0.82rem', fontWeight: 800, flexShrink: 0, lineHeight: 1 }}
+                                    style={{ border: `1.5px solid var(--border)`, background: '#ffffff', color: 'var(--muted-light)', borderRadius: 7, padding: '0.28rem 0.42rem', fontSize: '0.82rem', fontWeight: 800, flexShrink: 0, lineHeight: 1 }}
                                   >
                                     －
                                   </button>
@@ -1283,7 +1283,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 <button
                                   onClick={() => setOpenCell({ athlete, exercise: ex })}
                                   title="Szczegóły: powtórzenia, tempo, ból, komentarz"
-                                  style={{ border: `1.5px solid ${C.grayLight}`, background: C.white, color: C.gray, borderRadius: 7, padding: '0.28rem 0.36rem', fontSize: '0.72rem', flexShrink: 0, lineHeight: 1 }}
+                                  style={{ border: `1.5px solid var(--border)`, background: '#ffffff', color: 'var(--muted-light)', borderRadius: 7, padding: '0.28rem 0.36rem', fontSize: '0.72rem', flexShrink: 0, lineHeight: 1 }}
                                 >
                                   ✎
                                 </button>
@@ -1296,8 +1296,8 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                       onClick={() => toggleInlinePain(athlete, ex)}
                                       title={painActive ? (entry?.pain_comment ? `Ból: ${entry.pain_comment} (kliknij, by odznaczyć)` : 'Odznacz ból') : 'Zaznacz ból'}
                                       style={painActive
-                                        ? { fontFamily: mono, fontSize: '0.6rem', fontWeight: 700, color: C.white, background: (entry?.pain_vas != null && entry.pain_vas >= 5) ? C.red : C.orange, border: 'none', borderRadius: 6, padding: '2px 7px', lineHeight: 1.3 }
-                                        : { fontFamily: mono, fontSize: '0.56rem', fontWeight: 700, color: C.gray, background: C.white, border: `1px solid ${C.grayLight}`, borderRadius: 6, padding: '2px 6px', lineHeight: 1.3 }}
+                                        ? { fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.6rem', fontWeight: 700, color: '#ffffff', background: (entry?.pain_vas != null && entry.pain_vas >= 5) ? '#c23b3b' : '#c07f1e', border: 'none', borderRadius: 6, padding: '2px 7px', lineHeight: 1.3 }
+                                        : { fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.56rem', fontWeight: 700, color: 'var(--muted-light)', background: '#ffffff', border: `1px solid var(--border)`, borderRadius: 6, padding: '2px 6px', lineHeight: 1.3 }}
                                     >
                                       {painActive ? `ból${entry?.pain_vas != null ? ` ${entry.pain_vas}` : ''}` : '+ ból'}
                                     </button>
@@ -1310,16 +1310,16 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                     placeholder="notatka..."
                                     onBlur={e => { saveInlineComment(athlete, ex, e.target.value); setNoteOpen(null) }}
                                     onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); else if (e.key === 'Escape') setNoteOpen(null) }}
-                                    style={{ flex: 1, minWidth: 96, border: `1.5px solid ${C.gold}`, borderRadius: 6, background: C.white, fontFamily: sans, fontSize: '0.7rem', color: C.navy, padding: '2px 6px', outline: 'none' }}
+                                    style={{ flex: 1, minWidth: 96, border: `1.5px solid var(--gold)`, borderRadius: 6, background: '#ffffff', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.7rem', color: 'var(--navy-900)', padding: '2px 6px', outline: 'none' }}
                                   />
                                 ) : entry?.comment ? (
                                   <button onClick={() => setNoteOpen(entryKey(ex.id, athlete.id))} title={entry.comment}
-                                    style={{ maxWidth: 140, fontFamily: sans, fontSize: '0.62rem', color: C.navy, background: '#F4F6F9', border: `1px solid ${C.grayLight}`, borderRadius: 6, padding: '2px 7px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3 }}>
+                                    style={{ maxWidth: 140, fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.62rem', color: 'var(--navy-900)', background: '#F4F6F9', border: `1px solid var(--border)`, borderRadius: 6, padding: '2px 7px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3 }}>
                                     💬 {entry.comment}
                                   </button>
                                 ) : (
                                   <button onClick={() => setNoteOpen(entryKey(ex.id, athlete.id))}
-                                    style={{ fontFamily: mono, fontSize: '0.56rem', fontWeight: 700, color: C.gray, background: C.white, border: `1px solid ${C.grayLight}`, borderRadius: 6, padding: '2px 6px', lineHeight: 1.3 }}>
+                                    style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.56rem', fontWeight: 700, color: 'var(--muted-light)', background: '#ffffff', border: `1px solid var(--border)`, borderRadius: 6, padding: '2px 6px', lineHeight: 1.3 }}>
                                     + notatka
                                   </button>
                                 )}
@@ -1335,17 +1335,16 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                 </table>
               </div>
 
-              <div style={{ display: 'flex', gap: 10, marginTop: '1.25rem' }}>
-                <button onClick={() => router.push(`/coach/groups/${group.id}/summary`)} style={{ padding: '0.8rem 1.1rem', borderRadius: 12, border: `1.5px solid ${C.grayLight}`, background: C.white, color: C.navy, fontWeight: 700, fontSize: '0.85rem' }}>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <Button variant="ghost" onClick={() => router.push(`/coach/groups/${group.id}/summary`)}>
                   📊 Podsumowanie
-                </button>
-                <button onClick={() => router.push(`/coach/groups/${group.id}`)} style={{ flex: 1, padding: '0.8rem', borderRadius: 12, border: 'none', background: C.navy, color: C.gold, fontWeight: 900, fontSize: '0.9rem' }}>
+                </Button>
+                <Button variant="dark" onClick={() => router.push(`/coach/groups/${group.id}`)} style={{ flex: 1, color: 'var(--gold)', fontWeight: 900 }}>
                   Gotowe — wróć do grupy
-                </button>
+                </Button>
               </div>
             </>
           )}
-        </main>
       </div>
 
       {openCell && (

@@ -3,14 +3,6 @@
 import { useState } from 'react'
 import type { CSSProperties } from 'react'
 
-const C = {
-  navy: '#0D1B2A', navyLight: '#1A2E45', navyBorder: '#243652',
-  gold: '#F5C842', white: '#FFFFFF', offWhite: '#F4F6F9',
-  gray: '#8A9BB0', grayLight: '#E8ECF2', red: '#EF4444', green: '#22C55E',
-}
-const mono = "'Space Mono', monospace"
-const sans = "'Space Grotesk', sans-serif"
-
 type WarmupSet = { reps?: string; weight_kg?: string; note?: string }
 type ExerciseLibraryItem = { id: number; name: string; category?: string | null }
 type BlockExercise = {
@@ -59,33 +51,20 @@ function EditCell({ value, onCommit, align = 'center', placeholder, renderDispla
       onChange={e => setDraft(e.target.value)}
       onBlur={commit}
       onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false) }}
-      style={{ width: '100%', border: 'none', background: '#FFFBEB', outline: `2px solid ${C.gold}`, borderRadius: 3,
-        fontFamily: mono, fontSize: '0.72rem', color: C.navy, textAlign: align, padding: '2px 4px' }}
+      style={{ width: '100%', border: 'none', background: '#fffbeb', outline: '2px solid var(--gold)', borderRadius: 3,
+        fontFamily: 'var(--font-inter),sans-serif', fontSize: '12px', color: 'var(--ink)', textAlign: align, padding: '2px 4px' }}
     />
   )
   return (
     <div onClick={start} title="Kliknij aby edytować"
-      onMouseEnter={e => (e.currentTarget.style.background = '#F8F9FA')}
+      onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg)')}
       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
       style={{ cursor: 'text', minHeight: 22, display: 'flex', alignItems: 'center',
         justifyContent: align === 'left' ? 'flex-start' : 'center',
-        fontFamily: mono, fontSize: '0.72rem', color: value ? C.navy : '#CBD5E1',
+        fontFamily: 'var(--font-inter),sans-serif', fontSize: '12px', color: value ? 'var(--ink)' : 'var(--muted-light)',
         padding: '2px 4px', borderRadius: 3, transition: 'background 0.1s' }}>
-      {renderDisplay ? renderDisplay(value) : (value || <span style={{ fontStyle: 'italic', fontSize: '0.65rem' }}>{placeholder ?? '—'}</span>)}
+      {renderDisplay ? renderDisplay(value) : (value || <span style={{ fontStyle: 'italic', fontSize: '11px' }}>{placeholder ?? '—'}</span>)}
     </div>
-  )
-}
-
-// ─── tiny action button ───────────────────────────────────────────────────────
-function Btn({ children, onClick, color = C.navy, bg = C.offWhite, title }: {
-  children: React.ReactNode; onClick: () => void; color?: string; bg?: string; title?: string
-}) {
-  return (
-    <button onClick={onClick} title={title}
-      style={{ border: `1px solid ${C.grayLight}`, background: bg, color, borderRadius: 6,
-        padding: '3px 8px', fontFamily: mono, fontSize: '0.62rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-      {children}
-    </button>
   )
 }
 
@@ -110,7 +89,7 @@ async function exportXlsx(plan: Plan, days: Day[], blocks: Block[], wCols: numbe
   const TEXT  = '0D1B2A'
 
   function border(style: 'thin'|'medium'|'hair' = 'thin', color = 'D1D5DB'): any {
-    const s = { style, color: { argb: `FF${color}` } } 
+    const s = { style, color: { argb: `FF${color}` } }
     return { top: s, bottom: s, left: s, right: s }
   }
 
@@ -602,40 +581,37 @@ export default function PlanTableView({ plan, weeks, days, blocks, onBlocksChang
   }
 
   const th = (extra?: CSSProperties): CSSProperties => ({
-    padding: '5px 8px', background: C.navy, color: C.gold,
-    fontFamily: mono, fontSize: '0.57rem', fontWeight: 700,
-    letterSpacing: '0.05em', textTransform: 'uppercase', whiteSpace: 'nowrap',
-    border: `1px solid ${C.navyLight}`, textAlign: 'center', ...extra,
+    padding: '5px 8px', whiteSpace: 'nowrap', textAlign: 'center', ...extra,
   })
   const td = (extra?: CSSProperties): CSSProperties => ({
-    padding: '3px 5px', border: `1px solid ${C.grayLight}`,
-    fontFamily: mono, fontSize: '0.72rem', color: C.navy,
+    padding: '3px 5px', fontFamily: 'var(--font-inter),sans-serif', fontSize: '12px',
     verticalAlign: 'middle', textAlign: 'center', ...extra,
   })
+  const warmHeadStyle: CSSProperties = { background: 'var(--navy-600)', color: 'var(--gold-light)' }
+  const serieHeadStyle: CSSProperties = { background: 'var(--navy-800)', color: '#fff' }
 
   // fixed col count before warmup: Blok + # + Nazwa + 🔗 + Komentarz = 5
   const fixedCols = 5
 
   return (
-    <div style={{ fontFamily: sans }}>
+    <div>
       {/* toolbar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '1rem', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 9, padding: '0.35rem 0.65rem' }}>
-          <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray }}>Rozgrzewka (R):</span>
-          <button onClick={() => setWarmupCols(v => Math.max(0, v - 1))} style={{ border: `1px solid ${C.grayLight}`, background: C.offWhite, borderRadius: 4, width: 20, height: 20, fontWeight: 800, cursor: 'pointer', color: C.navy, lineHeight: 1 }}>−</button>
-          <span style={{ fontFamily: mono, fontWeight: 800, minWidth: 14, textAlign: 'center', fontSize: '0.82rem' }}>{warmupCols}</span>
-          <button onClick={() => setWarmupCols(v => Math.min(6, v + 1))} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 4, width: 20, height: 20, fontWeight: 800, cursor: 'pointer', lineHeight: 1 }}>+</button>
+      <div className="coach-tabelka-toolbar">
+        <div className="coach-warmup-counter">
+          <span>Rozgrzewka (R):</span>
+          <button onClick={() => setWarmupCols(v => Math.max(0, v - 1))}>−</button>
+          <b>{warmupCols}</b>
+          <button onClick={() => setWarmupCols(v => Math.min(6, v + 1))}>+</button>
         </div>
-        <Btn onClick={onAddWeek} bg={C.navy} color={C.gold}>+ Tydzień</Btn>
-        <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.grayLight }}>|</span>
-        <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray }}>Kliknij komórkę aby edytować · Enter zatwierdza</span>
+        <button className="coach-btn coach-btn-dark coach-btn-small" onClick={onAddWeek}>+ Tydzień</button>
+        <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: 11, color: 'var(--muted)' }}>
+          Kliknij komórkę aby edytować · Enter zatwierdza
+        </span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-          <button onClick={() => doExport('xlsx')} disabled={exporting !== null}
-            style={{ border: 'none', background: '#217346', color: C.white, borderRadius: 8, padding: '0.4rem 0.8rem', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer' }}>
+          <button className="coach-btn coach-btn-excel" onClick={() => doExport('xlsx')} disabled={exporting !== null}>
             {exporting === 'xlsx' ? '...' : '⬇ Excel'}
           </button>
-          <button onClick={() => doExport('pdf')} disabled={exporting !== null}
-            style={{ border: 'none', background: '#B91C1C', color: C.white, borderRadius: 8, padding: '0.4rem 0.8rem', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer' }}>
+          <button className="coach-btn" style={{ background: '#b91c1c', color: '#fff' }} onClick={() => doExport('pdf')} disabled={exporting !== null}>
             {exporting === 'pdf' ? '...' : '⬇ PDF'}
           </button>
         </div>
@@ -648,10 +624,8 @@ export default function PlanTableView({ plan, weeks, days, blocks, onBlocksChang
             <div key={week.id}>
               {/* week header */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '0.75rem' }}>
-                <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                  Tydzień {week.week_number}
-                </div>
-                <Btn onClick={() => onAddDay(week.id)}>+ Trening</Btn>
+                <div className="coach-week-label">Tydzień {week.week_number}</div>
+                <button className="coach-btn coach-btn-ghost coach-btn-small" onClick={() => onAddDay(week.id)}>+ Trening</button>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -662,12 +636,12 @@ export default function PlanTableView({ plan, weeks, days, blocks, onBlocksChang
                     <div key={day.id}>
                       {/* day header */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '0.35rem' }}>
-                        <div style={{ fontWeight: 800, fontSize: '0.9rem', color: C.navy }}>{day.day_name}</div>
-                        <Btn onClick={() => onAddBlock(day.id)}>+ Blok</Btn>
+                        <div className="coach-training-pill-name">{day.day_name}</div>
+                        <button className="coach-btn coach-btn-ghost coach-btn-small" onClick={() => onAddBlock(day.id)}>+ Blok</button>
                       </div>
 
-                      <div style={{ overflowX: 'auto', borderRadius: 10, boxShadow: '0 2px 10px rgba(13,27,42,0.06)', border: `1.5px solid ${C.grayLight}` }}>
-                        <table style={{ borderCollapse: 'collapse', minWidth: '100%', background: C.white }}>
+                      <div className="coach-plan-table-wrap">
+                        <table className="coach-plan-table">
                           <thead>
                             <tr>
                               <th style={th({ width: 32 })}>Blok</th>
@@ -676,44 +650,42 @@ export default function PlanTableView({ plan, weeks, days, blocks, onBlocksChang
                               <th style={th({ width: 20, padding: '5px 2px' })}>🔗</th>
                               <th style={th({ minWidth: 130, textAlign: 'left' })}>Komentarz</th>
                               {Array.from({ length: warmupCols }, (_, i) => (
-                                <th key={i} colSpan={3} style={th({ minWidth: 180, background: '#132D1E', color: '#86EFAC' })}>R{i + 1}</th>
+                                <th key={i} colSpan={3} className="coach-warm-group" style={th({ minWidth: 180, ...warmHeadStyle })}>R{i + 1}</th>
                               ))}
-                              <th style={th({ width: 38, background: '#1E3A5F', color: '#93C5FD' })}>Serie</th>
-                              <th style={th({ width: 52, background: '#1E3A5F', color: '#93C5FD' })}>Powt.</th>
-                              <th style={th({ minWidth: 75, background: '#1E3A5F', color: '#93C5FD' })}>Ciężar</th>
-                              <th style={th({ width: 72, background: '#1E3A5F', color: '#93C5FD' })}>Tempo</th>
-                              <th style={th({ width: 38, background: '#1E3A5F', color: '#93C5FD' })}>RIR</th>
-                              <th style={th({ minWidth: 110, background: '#1E3A5F', color: '#93C5FD', textAlign: 'left' })}>Kom.</th>
-                              <th style={th({ width: 36, background: C.navyLight })}></th>
+                              <th style={th({ width: 38, ...serieHeadStyle })}>Serie</th>
+                              <th style={th({ width: 52, ...serieHeadStyle })}>Powt.</th>
+                              <th style={th({ minWidth: 75, ...serieHeadStyle })}>Ciężar</th>
+                              <th style={th({ width: 72, ...serieHeadStyle })}>Tempo</th>
+                              <th style={th({ width: 38, ...serieHeadStyle })}>RIR</th>
+                              <th style={th({ minWidth: 110, ...serieHeadStyle, textAlign: 'left' })}>Kom.</th>
+                              <th style={th({ width: 36 })}></th>
                             </tr>
                             {warmupCols > 0 && (
                               <tr>
-                                {[...Array(fixedCols)].map((_, i) => <td key={i} style={{ ...td(), background: C.offWhite, padding: 0, border: `1px solid ${C.grayLight}` }} />)}
+                                {[...Array(fixedCols)].map((_, i) => <td key={i} style={{ ...td(), padding: 0 }} />)}
                                 {Array.from({ length: warmupCols }).flatMap((_, i) => [
-                                  <td key={`sh${i}a`} style={td({ background: '#F0FDF4', fontSize: '0.57rem', color: '#16A34A', fontWeight: 700 })}>powt.</td>,
-                                  <td key={`sh${i}b`} style={td({ background: '#F0FDF4', fontSize: '0.57rem', color: '#16A34A', fontWeight: 700 })}>ciężar</td>,
-                                  <td key={`sh${i}c`} style={td({ background: '#F0FDF4', fontSize: '0.57rem', color: '#16A34A', fontWeight: 700, textAlign: 'left' })}>komentarz</td>,
+                                  <td key={`sh${i}a`} className="coach-pt-warm" style={td({ fontSize: '10px', fontWeight: 700 })}>powt.</td>,
+                                  <td key={`sh${i}b`} className="coach-pt-warm" style={td({ fontSize: '10px', fontWeight: 700 })}>ciężar</td>,
+                                  <td key={`sh${i}c`} className="coach-pt-warm" style={td({ fontSize: '10px', fontWeight: 700, textAlign: 'left' })}>komentarz</td>,
                                 ])}
-                                {[...Array(7)].map((_, i) => <td key={`s${i}`} style={{ ...td(), background: '#EFF6FF', padding: 0 }} />)}
+                                {[...Array(7)].map((_, i) => <td key={`s${i}`} style={{ ...td(), background: '#eff6ff', padding: 0 }} />)}
                               </tr>
                             )}
                           </thead>
                           <tbody>
                             {dayBlocks.map((block, bi) => {
                               const exs = (block.workout_block_exercises || []).sort((a, b) => a.exercise_order - b.exercise_order)
-                              const rowBg = bi % 2 === 0 ? C.white : '#FAFBFC'
 
                               const addExRow = (
                                 <tr key={`add-${block.id}`}>
-                                  {bi === 0 || true ? null : null}
-                                  <td style={td({ background: C.navy, color: C.gold, fontWeight: 800, fontSize: '0.82rem', verticalAlign: 'middle', borderRight: `2px solid ${C.gold}` })}>{blockLabel(bi)}</td>
-                                  <td colSpan={fixedCols - 1 + warmupCols * 3 + 7} style={td({ background: rowBg })}>
+                                  <td className="coach-pt-block" style={td()}>{blockLabel(bi)}</td>
+                                  <td colSpan={fixedCols - 1 + warmupCols * 3 + 7} style={td()}>
                                     <button onClick={() => onAddExercise(block.id)}
-                                      style={{ border: `1px dashed ${C.grayLight}`, background: 'transparent', color: C.gray, borderRadius: 5, padding: '2px 12px', fontFamily: mono, fontSize: '0.6rem', cursor: 'pointer' }}>
+                                      style={{ border: '1px dashed var(--border)', background: 'transparent', color: 'var(--muted)', borderRadius: 5, padding: '2px 12px', fontFamily: 'var(--font-inter),sans-serif', fontSize: '10px', cursor: 'pointer' }}>
                                       + ćwiczenie
                                     </button>
                                   </td>
-                                  <td style={td({ background: rowBg })}></td>
+                                  <td style={td()}></td>
                                 </tr>
                               )
 
@@ -723,13 +695,13 @@ export default function PlanTableView({ plan, weeks, days, blocks, onBlocksChang
                                 ...exs.map((ex, i) => {
                                   const name = fmtName(ex.exercise?.name || ex.exercise_code || '')
                                   return (
-                                    <tr key={ex.id ?? `${block.id}-${i}`} style={{ background: rowBg }}>
+                                    <tr key={ex.id ?? `${block.id}-${i}`}>
                                       {i === 0 && (
-                                        <td rowSpan={exs.length + 1} style={td({ background: C.navy, color: C.gold, fontWeight: 800, fontSize: '0.82rem', verticalAlign: 'middle', borderRight: `2px solid ${C.gold}` })}>
+                                        <td rowSpan={exs.length + 1} className="coach-pt-block" style={td()}>
                                           {blockLabel(bi)}
                                         </td>
                                       )}
-                                      <td style={td({ color: C.gray })}>{i + 1}</td>
+                                      <td style={td({ color: 'var(--muted-light)' })}>{i + 1}</td>
                                       <td style={td({ textAlign: 'left', minWidth: 150 })}>
                                         <EditCell value={name} onCommit={v => updateExercise(block.id, ex.id, 'exercise_code', v)} align="left" placeholder="nazwa" />
                                       </td>
@@ -739,62 +711,61 @@ export default function PlanTableView({ plan, weeks, days, blocks, onBlocksChang
                                           onCommit={v => updateExercise(block.id, ex.id, 'exercise_url', v || null)}
                                           placeholder="+"
                                           renderDisplay={val => val
-                                            ? <span title={val} style={{ cursor: 'text', fontSize: '0.9rem' }}>🔗</span>
-                                            : <span style={{ color: C.grayLight, fontSize: '0.75rem', cursor: 'text' }}>+</span>}
+                                            ? <span title={val} style={{ cursor: 'text', fontSize: '14px' }}>🔗</span>
+                                            : <span style={{ color: 'var(--border)', fontSize: '12px', cursor: 'text' }}>+</span>}
                                         />
                                       </td>
-                                      <td style={td({ textAlign: 'left' })}>
+                                      <td className="coach-pt-comment" style={td({ textAlign: 'left' })}>
                                         <EditCell value={ex.coach_comment || ''} onCommit={v => updateExercise(block.id, ex.id, 'coach_comment', v || null)} align="left" placeholder="komentarz" />
                                       </td>
                                       {Array.from({ length: warmupCols }).flatMap((_, r) => {
                                         const ws = ex.warmup_sets?.[r]
-                                        const bg = '#F0FDF4'
                                         return [
-                                          <td key={`w${ex.id}-${r}-reps`} style={td({ background: bg })}>
+                                          <td key={`w${ex.id}-${r}-reps`} className="coach-pt-warm" style={td()}>
                                             <EditCell value={ws?.reps || ''} onCommit={v => updateWarmupSet(block.id, ex.id, r, 'reps', v)} placeholder="powt." />
                                           </td>,
-                                          <td key={`w${ex.id}-${r}-kg`} style={td({ background: bg })}>
+                                          <td key={`w${ex.id}-${r}-kg`} className="coach-pt-warm" style={td()}>
                                             <EditCell value={ws?.weight_kg || ''} onCommit={v => updateWarmupSet(block.id, ex.id, r, 'weight_kg', v)} placeholder="ciężar" />
                                           </td>,
-                                          <td key={`w${ex.id}-${r}-note`} style={td({ background: bg, textAlign: 'left' })}>
+                                          <td key={`w${ex.id}-${r}-note`} className="coach-pt-warm" style={td({ textAlign: 'left' })}>
                                             <EditCell value={ws?.note || ''} onCommit={v => updateWarmupSet(block.id, ex.id, r, 'note', v)} align="left" placeholder="komentarz" />
                                           </td>,
                                         ]
                                       })}
-                                      <td style={td({ background: '#EFF6FF', fontWeight: 800 })}>
+                                      <td style={td({ background: '#eff6ff', fontWeight: 700 })}>
                                         <EditCell value={ex.sets?.toString() || ''} onCommit={v => updateExercise(block.id, ex.id, 'sets', parseInt(v) || 1)} />
                                       </td>
-                                      <td style={td({ background: '#EFF6FF' })}>
+                                      <td style={td({ background: '#eff6ff' })}>
                                         <EditCell value={ex.reps || ''} onCommit={v => updateExercise(block.id, ex.id, 'reps', v || null)} placeholder="powt." />
                                       </td>
-                                      <td style={td({ background: '#EFF6FF' })}>
+                                      <td style={td({ background: '#eff6ff' })}>
                                         <EditCell value={ex.weight_kg?.toString() || ''} onCommit={v => updateExercise(block.id, ex.id, 'weight_kg', v ? parseFloat(v) : null)} placeholder="—" />
                                       </td>
-                                      <td style={td({ background: '#EFF6FF' })}>
+                                      <td style={td({ background: '#eff6ff' })}>
                                         <EditCell value={ex.tempo || ''} onCommit={v => updateExercise(block.id, ex.id, 'tempo', v || null)} placeholder="—" />
                                       </td>
-                                      <td style={td({ background: '#EFF6FF' })}>
+                                      <td style={td({ background: '#eff6ff' })}>
                                         <EditCell value={ex.rir?.toString() || ''} onCommit={v => updateExercise(block.id, ex.id, 'rir', v ? parseInt(v) : null)} placeholder="—" />
                                       </td>
-                                      <td style={td({ background: '#EFF6FF', textAlign: 'left' })}>
+                                      <td style={td({ background: '#eff6ff', textAlign: 'left' })}>
                                         <EditCell value={''} onCommit={() => {}} align="left" placeholder="notatka" />
                                       </td>
-                                      <td style={td({ background: C.offWhite, padding: '2px' })}>
+                                      <td style={td({ padding: '2px' })}>
                                         <button onClick={() => onAddExercise(block.id)} title="Edytuj w oknie"
-                                          style={{ border: 'none', background: 'transparent', color: C.gray, cursor: 'pointer', fontSize: '0.75rem', padding: '2px 4px' }}>✏️</button>
+                                          style={{ border: 'none', background: 'transparent', color: 'var(--muted)', cursor: 'pointer', fontSize: '12px', padding: '2px 4px' }}>✏️</button>
                                       </td>
                                     </tr>
                                   )
                                 }),
                                 // + ćwiczenie row at bottom of block
-                                <tr key={`add-ex-${block.id}`} style={{ background: rowBg }}>
-                                  <td colSpan={fixedCols + warmupCols * 3 + 6} style={td({ background: rowBg, padding: '3px 8px' })}>
+                                <tr key={`add-ex-${block.id}`}>
+                                  <td colSpan={fixedCols + warmupCols * 3 + 6} style={td({ padding: '3px 8px' })}>
                                     <button onClick={() => onAddExercise(block.id)}
-                                      style={{ border: `1px dashed ${C.grayLight}`, background: 'transparent', color: C.gray, borderRadius: 5, padding: '2px 10px', fontFamily: mono, fontSize: '0.6rem', cursor: 'pointer' }}>
+                                      style={{ border: '1px dashed var(--border)', background: 'transparent', color: 'var(--muted)', borderRadius: 5, padding: '2px 10px', fontFamily: 'var(--font-inter),sans-serif', fontSize: '10px', cursor: 'pointer' }}>
                                       + ćwiczenie w bloku {blockLabel(bi)}
                                     </button>
                                   </td>
-                                  <td style={td({ background: C.offWhite })}></td>
+                                  <td style={td()}></td>
                                 </tr>,
                               ]
                             })}
@@ -804,15 +775,15 @@ export default function PlanTableView({ plan, weeks, days, blocks, onBlocksChang
 
                       {/* add block button below table */}
                       <div style={{ marginTop: 6 }}>
-                        <Btn onClick={() => onAddBlock(day.id)}>+ Blok do {day.day_name}</Btn>
+                        <button className="coach-btn coach-btn-ghost coach-btn-small" onClick={() => onAddBlock(day.id)}>+ Blok do {day.day_name}</button>
                       </div>
                     </div>
                   )
                 })}
 
                 {weekDays.length === 0 && (
-                  <div style={{ color: C.gray, fontFamily: mono, fontSize: '0.72rem', padding: '0.5rem 0' }}>
-                    Brak treningów — <button onClick={() => onAddDay(week.id)} style={{ border: 'none', background: 'none', color: C.gold, cursor: 'pointer', fontFamily: mono, fontSize: '0.72rem', fontWeight: 700 }}>dodaj pierwszy</button>
+                  <div style={{ color: 'var(--muted)', fontFamily: 'var(--font-inter),sans-serif', fontSize: 12, padding: '0.5rem 0' }}>
+                    Brak treningów — <button onClick={() => onAddDay(week.id)} style={{ border: 'none', background: 'none', color: 'var(--gold)', cursor: 'pointer', fontFamily: 'var(--font-inter),sans-serif', fontSize: 12, fontWeight: 700 }}>dodaj pierwszy</button>
                   </div>
                 )}
               </div>
@@ -821,8 +792,8 @@ export default function PlanTableView({ plan, weeks, days, blocks, onBlocksChang
         })}
 
         {weeks.length === 0 && (
-          <div style={{ textAlign: 'center', color: C.gray, padding: '2rem' }}>
-            Brak tygodni — <button onClick={onAddWeek} style={{ border: 'none', background: 'none', color: C.gold, cursor: 'pointer', fontWeight: 700 }}>dodaj tydzień</button>
+          <div style={{ textAlign: 'center', color: 'var(--muted)', padding: '2rem' }}>
+            Brak tygodni — <button onClick={onAddWeek} style={{ border: 'none', background: 'none', color: 'var(--gold)', cursor: 'pointer', fontWeight: 700 }}>dodaj tydzień</button>
           </div>
         )}
       </div>

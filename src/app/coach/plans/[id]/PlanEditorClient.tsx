@@ -2,11 +2,13 @@
 // src/app/coach/plans/[id]/PlanEditorClient.tsx
 
 import { useState } from 'react'
-import type { CSSProperties } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
+import { LayoutGrid, Table2, ClipboardList, Plus, X, Move, Trash2, Copy, Pencil } from 'lucide-react'
 import PlanTableView from './PlanTableView'
 import PlanWellnessConfig from '@/components/PlanWellnessConfig'
+import { SetPageMeta } from '@/components/coach/PageMetaContext'
+import { Modal, Button, Field } from '@/components/coach/ui'
 
 type Plan = {
   id: number
@@ -86,66 +88,6 @@ type MoveItem =
   | { type: 'block'; block: Block }
   | { type: 'day'; day: Day }
 
-const C = {
-  navy: '#0D1B2A',
-  navyLight: '#1A2E45',
-  navyBorder: '#243652',
-  gold: '#F5C842',
-  white: '#FFFFFF',
-  offWhite: '#F4F6F9',
-  gray: '#8A9BB0',
-  grayLight: '#E8ECF2',
-  green: '#22C55E',
-  red: '#EF4444',
-}
-
-const sans = "'Space Grotesk', sans-serif"
-const mono = "'Space Mono', monospace"
-
-function inputStyle(extra?: CSSProperties): CSSProperties {
-  return {
-    width: '100%',
-    minHeight: 42,
-    border: `1.5px solid ${C.grayLight}`,
-    borderRadius: 10,
-    background: C.offWhite,
-    color: C.navy,
-    padding: '0 0.75rem',
-    fontFamily: sans,
-    fontSize: '0.9rem',
-    outline: 'none',
-    ...extra,
-  }
-}
-
-function labelStyle(): CSSProperties {
-  return {
-    display: 'block',
-    fontFamily: mono,
-    fontSize: '0.62rem',
-    color: C.gray,
-    letterSpacing: '0.08em',
-    textTransform: 'uppercase',
-    marginBottom: 5,
-    fontWeight: 700,
-  }
-}
-
-function Card({ children, style, className }: { children: React.ReactNode; style?: CSSProperties; className?: string }) {
-  return (
-    <div className={className} style={{
-      background: C.white,
-      border: `1.5px solid ${C.grayLight}`,
-      borderRadius: 14,
-      overflow: 'hidden',
-      boxShadow: '0 4px 20px rgba(13,27,42,0.05)',
-      ...style,
-    }}>
-      {children}
-    </div>
-  )
-}
-
 function formatExerciseName(name: string) {
   return name.replace(/-/g, ' ')
 }
@@ -187,7 +129,8 @@ function exercisePayloadWithoutWarmup<T extends { warmup_sets?: WarmupSet[] }>(p
   return rest
 }
 
-function ExerciseModal({
+// Inline ćwiczenie edit form — osadzony w bloku (mockup: .coach-exercise-edit-form), nie modal.
+function ExerciseEditForm({
   exercise,
   exercises,
   onSave,
@@ -305,151 +248,121 @@ function ExerciseModal({
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(13,27,42,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: sans }}>
-      <div style={{ width: '100%', maxWidth: 620, background: C.white, borderRadius: 18, border: `1.5px solid ${C.grayLight}`, maxHeight: '92vh', overflowY: 'auto' }}>
-        <div style={{ background: C.navy, padding: '1.1rem 1.25rem', color: C.white }}>
-          <div style={{ fontFamily: mono, fontSize: '0.66rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 5 }}>
-            {isNew ? 'Nowe cwiczenie' : 'Edycja cwiczenia'}
-          </div>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>{isNew ? 'Dodaj do bloku' : 'Ustaw parametry'}</h2>
-        </div>
+    <div className="coach-exercise-edit-form">
+      <div className="coach-scheme-row">
+        <button type="button" className={`coach-scheme-btn ${!useCustomName ? 'coach-active' : ''}`} onClick={() => setUseCustomName(false)}>
+          Z biblioteki
+        </button>
+        <button type="button" className={`coach-scheme-btn ${useCustomName ? 'coach-active' : ''}`} onClick={() => setUseCustomName(true)}>
+          Własna nazwa
+        </button>
+      </div>
 
-        <div className="exercise-modal-inner" style={{ padding: '1rem 1.25rem 1.25rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: '1rem' }}>
-            <button
-              onClick={() => setUseCustomName(false)}
-              style={{ padding: '0.75rem', borderRadius: 10, border: 'none', background: !useCustomName ? C.navy : C.offWhite, color: !useCustomName ? C.gold : C.navy, fontWeight: 800 }}
-            >
-              Z biblioteki
-            </button>
-            <button
-              onClick={() => setUseCustomName(true)}
-              style={{ padding: '0.75rem', borderRadius: 10, border: 'none', background: useCustomName ? C.navy : C.offWhite, color: useCustomName ? C.gold : C.navy, fontWeight: 800 }}
-            >
-              Wlasna nazwa
-            </button>
-          </div>
+      {!useCustomName ? (
+        <Field label="Ćwiczenie">
+          <select value={exerciseId} onChange={e => setExerciseId(e.target.value)}>
+            <option value="">Wybierz ćwiczenie</option>
+            {exercises.map(ex => (
+              <option key={ex.id} value={ex.id}>{formatExerciseName(ex.name)}{ex.category ? ` (${ex.category})` : ''}</option>
+            ))}
+          </select>
+        </Field>
+      ) : (
+        <Field label="Nazwa ćwiczenia">
+          <input value={exerciseCode} onChange={e => setExerciseCode(e.target.value)} placeholder="np. rdl, tgu, chest press" />
+        </Field>
+      )}
 
-          {!useCustomName ? (
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={labelStyle()}>Cwiczenie</label>
-              <select value={exerciseId} onChange={e => setExerciseId(e.target.value)} style={inputStyle({ appearance: 'none' })}>
-                <option value="">Wybierz cwiczenie</option>
-                {exercises.map(ex => (
-                  <option key={ex.id} value={ex.id}>{formatExerciseName(ex.name)}{ex.category ? ` (${ex.category})` : ''}</option>
-                ))}
-              </select>
-            </div>
-          ) : (
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={labelStyle()}>Nazwa cwiczenia</label>
-              <input value={exerciseCode} onChange={e => setExerciseCode(e.target.value)} placeholder="np. rdl, tgu, chest press" style={inputStyle()} />
-            </div>
-          )}
+      <div className="coach-field-grid-5">
+        <Field label="Serie">
+          <input type="number" value={sets} onChange={e => setSets(e.target.value)} style={{ textAlign: 'center' }} />
+        </Field>
+        <Field label="Powt.">
+          <input value={reps} onChange={e => setReps(e.target.value)} placeholder="8-10" style={{ textAlign: 'center' }} />
+        </Field>
+        <Field label="Ciężar">
+          <input type="number" value={weightKg} onChange={e => setWeightKg(e.target.value)} placeholder="-" style={{ textAlign: 'center' }} />
+        </Field>
+        <Field label="Tempo">
+          <input value={tempo} onChange={e => setTempo(e.target.value)} placeholder="3-1-2-0" style={{ textAlign: 'center' }} />
+        </Field>
+        <Field label="RIR">
+          <input type="number" value={rir} onChange={e => setRir(e.target.value)} placeholder="-" style={{ textAlign: 'center' }} />
+        </Field>
+      </div>
 
-          <div className="exercise-params-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: '1rem' }}>
-            <div>
-              <label style={labelStyle()}>Serie</label>
-              <input type="number" value={sets} onChange={e => setSets(e.target.value)} style={inputStyle({ fontFamily: mono, textAlign: 'center' })} />
-            </div>
-            <div>
-              <label style={labelStyle()}>Powt.</label>
-              <input value={reps} onChange={e => setReps(e.target.value)} placeholder="8-10" style={inputStyle({ fontFamily: mono, textAlign: 'center' })} />
-            </div>
-            <div>
-              <label style={labelStyle()}>Ciężar</label>
-              <input type="number" value={weightKg} onChange={e => setWeightKg(e.target.value)} placeholder="-" style={inputStyle({ fontFamily: mono, textAlign: 'center' })} />
-            </div>
-            <div>
-              <label style={labelStyle()}>Tempo</label>
-              <input value={tempo} onChange={e => setTempo(e.target.value)} placeholder="3-1-2-0" style={inputStyle({ fontFamily: mono, textAlign: 'center' })} />
-            </div>
-            <div>
-              <label style={labelStyle()}>RIR</label>
-              <input type="number" value={rir} onChange={e => setRir(e.target.value)} placeholder="-" style={inputStyle({ fontFamily: mono, textAlign: 'center' })} />
-            </div>
-          </div>
+      <div className="coach-chip-select-row">
+        {['2', '3', '4', '5'].map(value => (
+          <button key={value} type="button" className={`coach-chip-select ${sets === value ? 'coach-active' : ''}`} onClick={() => setSets(value)}>
+            {value} serie
+          </button>
+        ))}
+      </div>
+      <div className="coach-chip-select-row">
+        {['3-1-2-0', '4-0-1-0', '3-0-1-0'].map(value => (
+          <button key={value} type="button" className={`coach-chip-select ${tempo === value ? 'coach-active' : ''}`} onClick={() => setTempo(value)}>
+            {value}
+          </button>
+        ))}
+      </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: '1rem' }}>
+      <label className="coach-exercise-edit-form-checkbox">
+        <input type="checkbox" checked={isWarmup} onChange={e => setIsWarmup(e.target.checked)} />
+        Dodaj serie rozgrzewkowe
+      </label>
+
+      {isWarmup && (
+        <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px', marginBottom: 10, background: '#fff' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 8 }}>
             <div>
-              <div style={labelStyle()}>Szybkie serie</div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                {['2', '3', '4', '5'].map(value => (
-                  <button key={value} onClick={() => setSets(value)} style={{ flex: 1, padding: '0.5rem', borderRadius: 9, border: `1.5px solid ${sets === value ? C.gold : C.grayLight}`, background: sets === value ? C.navy : C.offWhite, color: sets === value ? C.gold : C.navy, fontFamily: mono, fontWeight: 800 }}>{value}</button>
-                ))}
-              </div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink)' }}>Serie rozgrzewkowe</div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--font-inter),sans-serif' }}>Każda seria może mieć inną liczbę powtórzeń i ciężar.</div>
             </div>
-            <div>
-              <div style={labelStyle()}>Tempo</div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                {['3-1-2-0', '4-0-1-0', '3-0-1-0'].map(value => (
-                  <button key={value} onClick={() => setTempo(value)} style={{ flex: 1, padding: '0.5rem', borderRadius: 9, border: `1.5px solid ${tempo === value ? C.gold : C.grayLight}`, background: tempo === value ? C.navy : C.offWhite, color: tempo === value ? C.gold : C.navy, fontFamily: mono, fontSize: '0.68rem', fontWeight: 800 }}>{value}</button>
-                ))}
-              </div>
-            </div>
+            <button type="button" className="coach-btn coach-btn-dark coach-btn-small" onClick={addWarmupSet}>Dodaj</button>
           </div>
 
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.75rem', background: C.offWhite, borderRadius: 10, color: C.navy, fontWeight: 700, marginBottom: isWarmup ? '0.65rem' : '1rem' }}>
-            <input type="checkbox" checked={isWarmup} onChange={e => setIsWarmup(e.target.checked)} style={{ accentColor: C.gold, width: 16, height: 16 }} />
-            Dodaj serie rozgrzewkowe
-          </label>
-
-          {isWarmup && (
-            <div style={{ border: `1.5px solid ${C.grayLight}`, borderRadius: 12, padding: '0.85rem', marginBottom: '1rem', background: '#FAFBFC' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', marginBottom: '0.75rem' }}>
-                <div>
-                  <div style={labelStyle()}>Serie rozgrzewkowe</div>
-                  <div style={{ color: C.gray, fontSize: '0.78rem' }}>Kazda seria moze miec inna liczbe powtorzen i ciezar.</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {warmupSets.map((set, index) => (
+              <div key={index} style={{ display: 'grid', gridTemplateColumns: '38px 1fr 1fr 1.4fr 30px', gap: 6, alignItems: 'center' }}>
+                <div style={{ height: 32, borderRadius: 8, background: 'var(--navy-900)', color: 'var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11 }}>
+                  R{index + 1}
                 </div>
-                <button onClick={addWarmupSet} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 9, padding: '0.55rem 0.75rem', fontWeight: 800 }}>
-                  Dodaj
+                <input value={set.reps || ''} onChange={e => updateWarmupSet(index, 'reps', e.target.value)} placeholder="powt." style={{ textAlign: 'center' }} />
+                <input value={set.weight_kg || ''} onChange={e => updateWarmupSet(index, 'weight_kg', e.target.value)} placeholder="kg" style={{ textAlign: 'center' }} />
+                <input value={set.note || ''} onChange={e => updateWarmupSet(index, 'note', e.target.value)} placeholder="komentarz" />
+                <button type="button" onClick={() => removeWarmupSet(index)} className="coach-icon-btn coach-danger" style={{ width: 30, height: 30 }}>
+                  <X size={13} />
                 </button>
               </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {warmupSets.map((set, index) => (
-                  <div className="warmup-set-row" key={index} style={{ display: 'grid', gridTemplateColumns: '48px 1fr 1fr 1.4fr 38px', gap: 7, alignItems: 'center' }}>
-                    <div style={{ height: 40, borderRadius: 9, background: C.navy, color: C.gold, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: mono, fontWeight: 800, fontSize: '0.72rem' }}>
-                      R{index + 1}
-                    </div>
-                    <input value={set.reps || ''} onChange={e => updateWarmupSet(index, 'reps', e.target.value)} placeholder="powt." style={inputStyle({ minHeight: 40, fontFamily: mono, textAlign: 'center' })} />
-                    <input value={set.weight_kg || ''} onChange={e => updateWarmupSet(index, 'weight_kg', e.target.value)} placeholder="kg" style={inputStyle({ minHeight: 40, fontFamily: mono, textAlign: 'center' })} />
-                    <input className="warmup-set-note" value={set.note || ''} onChange={e => updateWarmupSet(index, 'note', e.target.value)} placeholder="komentarz" style={inputStyle({ minHeight: 40 })} />
-                    <button onClick={() => removeWarmupSet(index)} style={{ height: 40, border: `1.5px solid ${C.grayLight}`, background: C.white, color: C.gray, borderRadius: 9, fontWeight: 800 }}>
-                      x
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {saveError && (
-            <div style={{ border: `1.5px solid ${C.red}`, background: '#FEF2F2', color: C.red, borderRadius: 10, padding: '0.75rem', marginBottom: '1rem', fontSize: '0.84rem', fontWeight: 700 }}>
-              {saveError}
-            </div>
-          )}
-
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={labelStyle()}>Link do filmu / instrukcji</label>
-            <input value={exerciseUrl} onChange={e => setExerciseUrl(e.target.value)} placeholder="https://youtube.com/..." style={inputStyle()} />
-          </div>
-
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={labelStyle()}>Komentarz dla zawodniczki</label>
-            <textarea value={comment} onChange={e => setComment(e.target.value)} placeholder="Wskazowki techniczne, zakres ruchu, uwagi..." rows={3} style={{ ...inputStyle({ padding: '0.75rem', resize: 'none', minHeight: 86 }), display: 'block' }} />
-          </div>
-
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={onClose} style={{ padding: '0.875rem 1rem', borderRadius: 10, border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.gray, fontWeight: 700 }}>Anuluj</button>
-            {!isNew && (
-              <button onClick={handleDelete} disabled={saving} style={{ padding: '0.875rem 1rem', borderRadius: 10, border: `1.5px solid ${C.red}`, background: C.white, color: C.red, fontWeight: 700 }}>Usun</button>
-            )}
-            <button onClick={handleSave} disabled={saving || !canSave} style={{ flex: 1, padding: '0.875rem', borderRadius: 10, border: 'none', background: !canSave ? C.grayLight : C.navy, color: !canSave ? C.gray : C.gold, fontWeight: 800 }}>
-              {saving ? 'Zapisuje...' : isNew ? 'Dodaj cwiczenie' : 'Zapisz zmiany'}
-            </button>
+            ))}
           </div>
         </div>
+      )}
+
+      {saveError && (
+        <div style={{ border: '1px solid #c23b3b', background: '#fef2f2', color: '#c23b3b', borderRadius: 8, padding: '8px 10px', marginBottom: 10, fontSize: 12, fontWeight: 700, fontFamily: 'var(--font-inter),sans-serif' }}>
+          {saveError}
+        </div>
+      )}
+
+      <Field label="Link do filmu / instrukcji">
+        <input value={exerciseUrl} onChange={e => setExerciseUrl(e.target.value)} placeholder="https://youtube.com/..." />
+      </Field>
+
+      <Field label="Komentarz dla zawodniczki">
+        <textarea value={comment} onChange={e => setComment(e.target.value)} placeholder="Wskazowki techniczne, zakres ruchu, uwagi..." rows={3} />
+      </Field>
+
+      <div className="coach-inline-form-actions">
+        <Button variant="ghost" onClick={onClose}>Anuluj</Button>
+        {!isNew && (
+          <button className="coach-btn" style={{ border: '1px solid #c23b3b', color: '#c23b3b', background: '#fff' }} onClick={handleDelete} disabled={saving}>
+            Usuń
+          </button>
+        )}
+        <Button variant="dark" onClick={handleSave} disabled={saving || !canSave}>
+          {saving ? 'Zapisuję...' : isNew ? 'Dodaj ćwiczenie' : 'Zapisz zmiany'}
+        </Button>
       </div>
     </div>
   )
@@ -518,33 +431,35 @@ function MoveModal({
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 110, background: 'rgba(13,27,42,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: sans }}>
-      <div style={{ width: '100%', maxWidth: 520, background: C.white, borderRadius: 18, border: `1.5px solid ${C.grayLight}`, overflow: 'hidden' }}>
-        <div style={{ background: C.navy, padding: '1.1rem 1.25rem', color: C.white }}>
-          <div style={{ fontFamily: mono, fontSize: '0.66rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 5 }}>Organizacja planu</div>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>{title}</h2>
+    <Modal
+      open
+      onClose={onClose}
+      eyebrow="Organizacja planu"
+      title={title}
+      sub={hint}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Anuluj</Button>
+          <Button variant="dark" onClick={handleMove} disabled={!targetId || saving}>
+            {saving ? 'Przenosze...' : 'Przenies'}
+          </Button>
+        </>
+      }
+    >
+      <Field label="Miejsce docelowe">
+        <select value={targetId} onChange={event => setTargetId(event.target.value)}>
+          <option value="">Wybierz...</option>
+          {options.map(option => (
+            <option key={option.id} value={option.id}>{option.label}</option>
+          ))}
+        </select>
+      </Field>
+      {options.length === 0 && (
+        <div style={{ color: 'var(--muted)', fontSize: 13, fontFamily: 'var(--font-inter),sans-serif' }}>
+          Brak innych miejsc docelowych. Dodaj najpierw tydzien, trening albo blok.
         </div>
-        <div style={{ padding: '1.25rem' }}>
-          <p style={{ color: C.gray, fontSize: '0.86rem', marginBottom: '1rem' }}>{hint}</p>
-          <label style={labelStyle()}>Miejsce docelowe</label>
-          <select value={targetId} onChange={event => setTargetId(event.target.value)} style={inputStyle({ appearance: 'none', marginBottom: '1rem' })}>
-            <option value="">Wybierz...</option>
-            {options.map(option => (
-              <option key={option.id} value={option.id}>{option.label}</option>
-            ))}
-          </select>
-          {options.length === 0 && (
-            <div style={{ color: C.gray, fontSize: '0.84rem', marginBottom: '1rem' }}>Brak innych miejsc docelowych. Dodaj najpierw tydzien, trening albo blok.</div>
-          )}
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={onClose} style={{ padding: '0.875rem 1rem', borderRadius: 10, border: `1.5px solid ${C.grayLight}`, background: C.offWhite, color: C.gray, fontWeight: 700 }}>Anuluj</button>
-            <button onClick={handleMove} disabled={!targetId || saving} style={{ flex: 1, padding: '0.875rem', borderRadius: 10, border: 'none', background: !targetId ? C.grayLight : C.navy, color: !targetId ? C.gray : C.gold, fontWeight: 800 }}>
-              {saving ? 'Przenosze...' : 'Przenies'}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+      )}
+    </Modal>
   )
 }
 
@@ -1017,414 +932,295 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
 
   return (
     <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: ${C.offWhite}; }
-        button, input, select, textarea { font-family: inherit; }
+      <SetPageMeta title={plan.name} backHref="/coach/plans" backLabel="Plany" />
 
-        @media (max-width: 768px) {
-          .plan-header-grid {
-            grid-template-columns: 1fr !important;
-            gap: 10px !important;
-          }
-          .plan-header-right {
-            width: 100% !important;
-            align-items: flex-start !important;
-          }
-          .plan-header-actions {
-            flex-wrap: wrap !important;
-            gap: 6px !important;
-            width: 100% !important;
-          }
-          .plan-header-actions button {
-            font-size: 0.72rem !important;
-            padding: 0.55rem 0.65rem !important;
-          }
-          .plan-header-status {
-            text-align: left !important;
-          }
-          .plan-notes-row {
-            flex-direction: column !important;
-            gap: 6px !important;
-          }
-          .plan-body-grid {
-            grid-template-columns: 1fr !important;
-          }
-          .plan-sidebar-card {
-            position: static !important;
-          }
-          .plan-sidebar-days {
-            display: flex !important;
-            flex-wrap: nowrap !important;
-            overflow-x: auto !important;
-            gap: 6px !important;
-            padding-bottom: 4px !important;
-          }
-          .plan-sidebar-week {
-            min-width: 0 !important;
-          }
-          .plan-sidebar-day-row {
-            min-width: 120px !important;
-            flex-shrink: 0 !important;
-          }
-          .exercise-params-grid {
-            grid-template-columns: repeat(3, 1fr) !important;
-          }
-          .exercise-modal-inner {
-            padding: 0.85rem !important;
-          }
-          .warmup-set-row {
-            grid-template-columns: 40px 1fr 1fr 34px !important;
-          }
-          .warmup-set-note { display: none !important; }
-          .block-header-row {
-            flex-wrap: wrap !important;
-            gap: 6px !important;
-          }
-          .day-header-row {
-            display: flex !important;
-            flex-wrap: wrap !important;
-            gap: 8px !important;
-          }
-          .block-header-row {
-            flex-wrap: wrap !important;
-          }
-          .view-toggle-wrap {
-            flex-wrap: wrap !important;
-          }
-          .plan-sidebar-days {
-            -webkit-overflow-scrolling: touch !important;
-            scrollbar-width: none !important;
-          }
-          .plan-sidebar-days::-webkit-scrollbar { display: none; }
-        }
-      `}</style>
+      <div className="coach-content">
+        {globalError && (
+          <div style={{ position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 200, background: '#fef2f2', border: '1.5px solid #c23b3b', borderRadius: 12, padding: '0.75rem 1.25rem', color: '#c23b3b', fontWeight: 700, fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.86rem', boxShadow: 'var(--shadow)', maxWidth: 520, width: 'calc(100vw - 2rem)', textAlign: 'center' }}>
+            {globalError}
+          </div>
+        )}
 
-      {globalError && (
-        <div style={{ position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 200, background: '#FEF2F2', border: `1.5px solid ${C.red}`, borderRadius: 12, padding: '0.75rem 1.25rem', color: C.red, fontWeight: 700, fontFamily: sans, fontSize: '0.86rem', boxShadow: '0 8px 24px rgba(0,0,0,0.15)', maxWidth: 520, width: 'calc(100vw - 2rem)', textAlign: 'center' }}>
-          ❌ {globalError}
-        </div>
-      )}
+        {showWellness && (
+          <PlanWellnessConfig planId={plan.id} onClose={() => setShowWellness(false)} />
+        )}
 
-      {showWellness && (
-        <PlanWellnessConfig planId={plan.id} onClose={() => setShowWellness(false)} />
-      )}
+        {movingItem && (
+          <MoveModal
+            item={movingItem}
+            plans={allPlans}
+            weeks={targetWeeks}
+            days={targetDays}
+            blocks={targetBlocks}
+            onMove={handleMove}
+            onClose={() => setMovingItem(null)}
+          />
+        )}
 
-      {editingExercise && (
-        <ExerciseModal
-          exercise={editingExercise}
-          exercises={exercises}
-          onSave={saved => { handleExerciseSave(editingExercise.block_id, saved); setEditingExercise(null) }}
-          onDelete={() => { handleExerciseDelete(editingExercise.block_id, editingExercise.id); setEditingExercise(null) }}
-          onClose={() => setEditingExercise(null)}
-        />
-      )}
-      {movingItem && (
-        <MoveModal
-          item={movingItem}
-          plans={allPlans}
-          weeks={targetWeeks}
-          days={targetDays}
-          blocks={targetBlocks}
-          onMove={handleMove}
-          onClose={() => setMovingItem(null)}
-        />
-      )}
-
-      <div style={{ minHeight: '100vh', background: C.offWhite, fontFamily: sans, color: C.navy }}>
-        <header style={{ background: C.navy, padding: '1rem 1.25rem 1.25rem', position: 'sticky', top: 0, zIndex: 10 }}>
-          <div className="plan-header-grid" style={{ maxWidth: 1180, margin: '0 auto', display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr) auto', gap: 12, alignItems: 'center' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <label style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block' }}>Edytor planu</label>
-              <input
-                value={planName}
-                onChange={event => setPlanName(event.target.value)}
-                onBlur={savePlanName}
-                style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', color: C.white, fontWeight: 800, fontSize: '1.35rem' }}
+        <div className="coach-editor-hero">
+          <div className="coach-editor-hero-left" style={{ flex: 1, minWidth: 240 }}>
+            <div className="coach-eyebrow">Edytor planu</div>
+            <input
+              value={planName}
+              onChange={event => setPlanName(event.target.value)}
+              onBlur={savePlanName}
+              style={{ display: 'block', width: '100%', background: 'transparent', border: 'none', outline: 'none', color: '#fff', fontWeight: 600, fontSize: 20, margin: '2px 0 10px', fontFamily: 'inherit' }}
+            />
+            <div className="coach-editor-notes-row">
+              <textarea
+                value={planNotes}
+                onChange={e => setPlanNotes(e.target.value)}
+                placeholder="Notatki dla zawodniczek (skróty, wskazówki) — widoczne w panelu ℹ️ podczas treningu..."
+                rows={2}
               />
-              <div className="plan-notes-row" style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
-                <textarea
-                  value={planNotes}
-                  onChange={e => setPlanNotes(e.target.value)}
-                  placeholder="Notatki dla zawodniczek (skróty, wskazówki) — widoczne w panelu ℹ️ podczas treningu..."
-                  rows={2}
-                  style={{ flex: 1, background: 'rgba(255,255,255,0.07)', border: `1px solid ${C.navyBorder}`, borderRadius: 8, color: C.white, padding: '0.4rem 0.6rem', fontFamily: sans, fontSize: '0.78rem', resize: 'none', outline: 'none', minWidth: 0 }}
-                />
-                <button onClick={savePlanNotes} disabled={savingNotes}
-                  style={{ flexShrink: 0, padding: '0.45rem 0.75rem', background: notesSaved ? '#22C55E' : C.gold, color: C.navy, border: 'none', borderRadius: 8, fontWeight: 800, fontSize: '0.72rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                  {savingNotes ? '...' : notesSaved ? '✓ Zapisano' : 'Zapisz notatki'}
-                </button>
-              </div>
-            </div>
-            <div className="plan-header-right" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
-              <div className="plan-header-actions view-toggle-wrap" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <div style={{ display: 'flex', background: C.navyLight, borderRadius: 9, border: `1.5px solid ${C.navyBorder}`, overflow: 'hidden' }}>
-                  <button onClick={() => setViewMode('blocks')} style={{ padding: '0.5rem 0.75rem', border: 'none', background: viewMode === 'blocks' ? C.gold : 'transparent', color: viewMode === 'blocks' ? C.navy : C.gray, fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer' }}>⊞ Bloki</button>
-                  <button onClick={() => setViewMode('table')} style={{ padding: '0.5rem 0.75rem', border: 'none', background: viewMode === 'table' ? C.gold : 'transparent', color: viewMode === 'table' ? C.navy : C.gray, fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer' }}>⊟ Tabelka</button>
-                </div>
-                <button onClick={() => setShowWellness(true)} title="Skonfiguruj pola gotowości do treningu" style={{ border: `1.5px solid ${C.gold}`, background: C.gold, color: C.navy, borderRadius: 9, padding: '0.5rem 0.75rem', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer' }}>
-                  📋 Feedback treningowy
-                </button>
-                <button
-                  onClick={() => router.push('/coach/plans')}
-                  style={{ border: `1.5px solid ${C.navyBorder}`, background: C.navyLight, color: C.white, borderRadius: 10, padding: '0.7rem 0.85rem', fontWeight: 800 }}
-                >
-                  Powrot
-                </button>
-                <button
-                  onClick={saveWholePlan}
-                  disabled={savingPlan}
-                  style={{ border: 'none', background: savingPlan ? C.grayLight : C.gold, color: C.navy, borderRadius: 10, padding: '0.7rem 0.95rem', fontWeight: 900, minWidth: 126 }}
-                >
-                  {savingPlan ? 'Zapisuje...' : 'Zapisz plan'}
-                </button>
-              </div>
-              <div className="plan-header-status" style={{ fontFamily: mono, fontSize: '0.62rem', color: planSaveMessage === 'Plan zapisany' ? C.green : planSaveMessage ? C.red : savingName ? C.gold : C.gray, minWidth: 126, textAlign: 'right' }}>
-                {planSaveMessage || (savingName ? 'zapisuje nazwe...' : 'gotowy do zapisu')}
-              </div>
+              <button className="coach-btn coach-btn-gold coach-btn-small" onClick={savePlanNotes} disabled={savingNotes} style={{ flexShrink: 0 }}>
+                {savingNotes ? '...' : notesSaved ? '✓ Zapisano' : 'Zapisz notatki'}
+              </button>
             </div>
           </div>
-        </header>
 
-        <div className="plan-body-grid" style={{ maxWidth: viewMode === 'table' ? 1600 : 1180, margin: '0 auto', display: 'grid', gridTemplateColumns: viewMode === 'table' ? '1fr' : '280px minmax(0, 1fr)', gap: 16, padding: '1rem' }}>
-          {viewMode === 'table' && (
-            <PlanTableView
-              plan={plan}
-              weeks={localWeeks}
-              days={localDays}
-              blocks={localBlocks}
-              onBlocksChange={next => { setLocalBlocks(next); setTargetBlocks(next) }}
-              onAddWeek={addWeek}
-              onAddDay={addDay}
-              onAddBlock={addBlock}
-              onAddExercise={blockId => setEditingExercise({ block_id: blockId, exercise_order: (localBlocks.find(b => b.id === blockId)?.workout_block_exercises?.length ?? 0) + 1, sets: 3, is_warmup: false })}
-            />
-          )}
-          {viewMode === 'blocks' && <>
-          <aside>
-            <Card style={{ position: 'sticky', top: 102 }} className="plan-sidebar-card">
-              <div style={{ padding: '1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.875rem' }}>
-                  <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Struktura</div>
-                  <button onClick={addWeek} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 9, padding: '0.45rem 0.6rem', fontSize: '0.72rem', fontWeight: 800 }}>+ tydz.</button>
-                </div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
+            <div className="coach-editor-hero-right">
+              <div className="coach-view-toggle">
+                <button className={viewMode === 'blocks' ? 'coach-active' : ''} onClick={() => setViewMode('blocks')}>
+                  <LayoutGrid size={14} /> Bloki
+                </button>
+                <button className={viewMode === 'table' ? 'coach-active' : ''} onClick={() => setViewMode('table')}>
+                  <Table2 size={14} /> Tabelka
+                </button>
+              </div>
+              <button className="coach-btn coach-btn-gold coach-btn-small" onClick={() => setShowWellness(true)} title="Skonfiguruj pola gotowości do treningu">
+                <ClipboardList size={14} /> Feedback treningowy
+              </button>
+              <button className="coach-btn coach-btn-dark" onClick={saveWholePlan} disabled={savingPlan} style={{ minWidth: 126 }}>
+                {savingPlan ? 'Zapisuje...' : 'Zapisz plan'}
+              </button>
+            </div>
+            <div className="coach-editor-status">
+              {planSaveMessage || (savingName ? 'zapisuje nazwe...' : 'gotowy do zapisu')}
+            </div>
+          </div>
+        </div>
 
-                <div className="plan-sidebar-days" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {localWeeks.map(week => {
-                    const weekDays = localDays.filter(day => day.week_id === week.id).sort((a, b) => a.day_order - b.day_order)
-                    return (
-                      <div className="plan-sidebar-week" key={week.id}>
-                        <div style={{ fontFamily: mono, fontSize: '0.66rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>
-                          Tydzien {week.week_number}
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          {weekDays.map(day => {
-                            const isActive = selectedDayId === day.id
-                            return (
-                              <div className="plan-sidebar-day-row" key={day.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 6, alignItems: 'stretch' }}>
-                                <button onClick={() => setSelectedDayId(day.id)} style={{ width: '100%', border: `1.5px solid ${isActive ? C.gold : C.grayLight}`, background: isActive ? C.navy : C.offWhite, color: isActive ? C.gold : C.navy, borderRadius: 10, padding: '0.65rem 0.75rem', textAlign: 'left' }}>
-                                  <div style={{ fontWeight: 800, fontSize: '0.86rem' }}>{day.day_name}</div>
-                                  <div style={{ fontFamily: mono, color: isActive ? C.gray : C.gray, fontSize: '0.62rem', marginTop: 2 }}>
-                                    {localBlocks.filter(block => block.day_id === day.id).length} blokow
-                                  </div>
-                                </button>
-                                <button
-                                  onClick={() => deleteDay(day.id)}
-                                  title="Usun trening"
-                                  style={{ width: 42, border: `1.5px solid ${C.grayLight}`, background: C.white, color: C.red, borderRadius: 10, fontWeight: 900 }}
-                                >
-                                  x
-                                </button>
-                              </div>
-                            )
-                          })}
-                          <button onClick={() => addDay(week.id)} style={{ width: '100%', border: `1.5px dashed ${C.grayLight}`, background: C.white, color: C.gray, borderRadius: 10, padding: '0.6rem', fontFamily: mono, fontSize: '0.65rem', fontWeight: 700 }}>
-                            + dodaj trening
+        {viewMode === 'table' ? (
+          <PlanTableView
+            plan={plan}
+            weeks={localWeeks}
+            days={localDays}
+            blocks={localBlocks}
+            onBlocksChange={next => { setLocalBlocks(next); setTargetBlocks(next) }}
+            onAddWeek={addWeek}
+            onAddDay={addDay}
+            onAddBlock={addBlock}
+            onAddExercise={blockId => setEditingExercise({ block_id: blockId, exercise_order: (localBlocks.find(b => b.id === blockId)?.workout_block_exercises?.length ?? 0) + 1, sets: 3, is_warmup: false })}
+          />
+        ) : (
+          <div className="coach-editor-layout">
+            <aside className="coach-editor-sidebar">
+              <div className="coach-editor-sidebar-head">
+                <span className="coach-label">Struktura</span>
+                <button className="coach-btn coach-btn-dark coach-btn-small" onClick={addWeek}><Plus size={12} /> tydz.</button>
+              </div>
+
+              {localWeeks.map(week => {
+                const weekDays = localDays.filter(day => day.week_id === week.id).sort((a, b) => a.day_order - b.day_order)
+                return (
+                  <div className="coach-week-block" key={week.id}>
+                    <div className="coach-week-label">Tydzien {week.week_number}</div>
+                    {weekDays.map(day => {
+                      const isActive = selectedDayId === day.id
+                      return (
+                        <div key={day.id} className={`coach-training-pill ${isActive ? 'coach-active' : ''}`} onClick={() => setSelectedDayId(day.id)}>
+                          <div>
+                            <div className="coach-training-pill-name">{day.day_name}</div>
+                            <div className="coach-training-pill-count">{localBlocks.filter(block => block.day_id === day.id).length} blokow</div>
+                          </div>
+                          <button className="coach-training-pill-del" onClick={event => { event.stopPropagation(); deleteDay(day.id) }} title="Usun trening">
+                            <X size={13} />
                           </button>
                         </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            </Card>
-          </aside>
+                      )
+                    })}
+                    <button className="coach-add-training-btn" onClick={() => addDay(week.id)}>+ dodaj trening</button>
+                  </div>
+                )
+              })}
+            </aside>
 
-          <main>
-            {!selectedDayId || !currentDay ? (
-              <Card>
-                <div style={{ padding: '2rem', textAlign: 'center', color: C.gray }}>Wybierz trening z listy albo dodaj nowy tydzien.</div>
-              </Card>
-            ) : (
-              <>
-                <Card style={{ marginBottom: '1rem' }}>
-                  <div className="day-header-row" style={{ padding: '1rem', display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, alignItems: 'center' }}>
-                    <div>
-                      <div style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 5 }}>
-                        Tydzien {currentWeek?.week_number || '-'}
-                      </div>
+            <main className="coach-editor-main">
+              {!selectedDayId || !currentDay ? (
+                <div className="coach-empty-training">
+                  <h3>Wybierz trening z listy</h3>
+                  <p>Albo dodaj nowy tydzień po lewej, żeby zacząć.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="coach-training-head-card">
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="coach-training-head-eyebrow">Tydzien {currentWeek?.week_number || '-'}</div>
                       <input
                         value={currentDay.day_name}
                         onChange={event => setLocalDays(prev => prev.map(day => day.id === selectedDayId ? { ...day, day_name: event.target.value } : day))}
                         onBlur={event => renameDay(selectedDayId, event.target.value)}
-                        style={{ width: '100%', border: 'none', background: 'transparent', outline: 'none', fontWeight: 800, fontSize: '1.45rem', color: C.navy }}
+                        className="coach-training-head-name"
+                        style={{ display: 'block', width: '100%', border: 'none', background: 'transparent', outline: 'none', fontFamily: 'inherit', fontWeight: 600, fontSize: 22, color: 'var(--ink)' }}
                       />
                     </div>
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                      <button onClick={() => addBlock()} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 9, padding: '0.55rem 0.85rem', fontWeight: 800, fontSize: '0.84rem' }}>+ Blok</button>
-                      <button onClick={() => setMovingItem({ type: 'day', day: currentDay })} title="Przenieś trening" style={iconBtn()}>↕</button>
-                      <button onClick={() => deleteDay(selectedDayId)} title="Usuń trening" style={iconBtn('#FEF2F2', C.red)}>🗑</button>
+                    <div className="coach-training-head-actions">
+                      <button className="coach-btn coach-btn-dark coach-btn-small" onClick={() => addBlock()}><Plus size={14} /> Blok</button>
+                      <button onClick={() => setMovingItem({ type: 'day', day: currentDay })} title="Przenieś trening" className="coach-icon-btn" data-tip="Przenieś trening">
+                        <Move size={14} />
+                      </button>
+                      <button onClick={() => deleteDay(selectedDayId)} title="Usuń trening" className="coach-icon-btn coach-danger" data-tip="Usuń trening">
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                   </div>
-                  {/* Notatka wstępna trenera */}
-                  <div style={{ borderTop: `1.5px solid ${C.grayLight}`, padding: '0.875rem 1rem', background: '#FFFBEC' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                      <span style={{ fontSize: '1rem' }}>📣</span>
-                      <span style={{ fontFamily: mono, fontSize: '0.62rem', color: '#92660A', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>
-                        Przemowa przed treningiem — widoczna jako pierwsza dla zawodniczek
-                      </span>
-                    </div>
+
+                  <div className="coach-msg-card coach-pre">
+                    <div className="coach-msg-card-label"><span>📣</span> Przemowa przed treningiem — widoczna jako pierwsza dla zawodniczek</div>
                     <textarea
                       value={currentDay.coach_intro || ''}
                       onChange={event => setLocalDays(prev => prev.map(day => day.id === selectedDayId ? { ...day, coach_intro: event.target.value } : day))}
                       onBlur={event => saveCoachIntro(selectedDayId, event.target.value)}
                       placeholder="Motywacja, wskazówki, na co zwrócić uwagę... Zawodniczki zobaczą to zanim zaczną ćwiczyć."
                       rows={3}
-                      style={{ width: '100%', border: `1.5px solid #F5C84260`, borderRadius: 10, background: C.white, color: C.navy, padding: '0.625rem 0.75rem', fontFamily: sans, fontSize: '0.86rem', resize: 'vertical', outline: 'none', lineHeight: 1.5 }}
                     />
                   </div>
-                  {/* Notatka po treningu */}
-                  <div style={{ borderTop: `1.5px solid ${C.grayLight}`, padding: '0.875rem 1rem', background: '#EFF6FF' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                      <span style={{ fontSize: '1rem' }}>💙</span>
-                      <span style={{ fontFamily: mono, fontSize: '0.62rem', color: '#1E40AF', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>
-                        Wiadomość po treningu — widoczna na końcu strony
-                      </span>
-                    </div>
+
+                  <div className="coach-msg-card coach-post">
+                    <div className="coach-msg-card-label"><span>💙</span> Wiadomość po treningu — widoczna na końcu strony</div>
                     <textarea
                       value={currentDay.coach_closing || ''}
                       onChange={event => setLocalDays(prev => prev.map(day => day.id === selectedDayId ? { ...day, coach_closing: event.target.value } : day))}
                       onBlur={event => saveCoachClosing(selectedDayId, event.target.value)}
                       placeholder="Gratulacje, recovery, co dalej, kolejny trening... Zawodniczki zobaczą to na samym końcu, po wypełnieniu raportu."
                       rows={3}
-                      style={{ width: '100%', border: `1.5px solid #3B82F640`, borderRadius: 10, background: C.white, color: C.navy, padding: '0.625rem 0.75rem', fontFamily: sans, fontSize: '0.86rem', resize: 'vertical', outline: 'none', lineHeight: 1.5 }}
                     />
                   </div>
-                </Card>
 
-                {currentDayBlocks.map(block => (
-                  <Card key={block.id} style={{ marginBottom: '1rem', overflow: 'visible' }}>
-                    {/* Block header */}
-                    <div className="block-header-row" style={{ padding: '0.75rem 1rem', borderBottom: `1.5px solid ${C.grayLight}`, display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <input
-                        value={block.block_name}
-                        onChange={event => setLocalBlocks(prev => prev.map(item => item.id === block.id ? { ...item, block_name: event.target.value } : item))}
-                        onBlur={event => renameBlock(block.id, event.target.value)}
-                        style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', fontWeight: 800, fontSize: '1rem', color: C.navy, minWidth: 0 }}
-                      />
-                      {/* rounds */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: C.offWhite, borderRadius: 8, padding: '0.28rem 0.55rem', border: `1.5px solid ${C.grayLight}` }}>
-                        <span style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, letterSpacing: '0.06em' }}>🔁</span>
-                        <input
-                          type="number" min={1} max={10} value={block.rounds}
-                          onChange={event => updateBlockRounds(block.id, parseInt(event.target.value) || 1)}
-                          style={{ width: 28, border: 'none', background: 'transparent', outline: 'none', textAlign: 'center', fontFamily: mono, color: C.navy, fontWeight: 800, fontSize: '0.9rem' }}
-                        />
-                        <span style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray }}>rund</span>
-                      </div>
-                      {/* icon buttons */}
-                      <button onClick={() => copyBlockToAllDays(block)} title="Kopiuj blok do wszystkich treningów" style={iconBtn()}>📋</button>
-                      <button onClick={() => setMovingItem({ type: 'block', block })} title="Przenieś blok" style={iconBtn()}>↕</button>
-                      <button onClick={() => deleteBlock(block.id)} title="Usuń blok" style={iconBtn('#FEF2F2', C.red)}>🗑</button>
-                    </div>
+                  {currentDayBlocks.map(block => {
+                    const isAddingHere = !!editingExercise && !editingExercise.id && editingExercise.block_id === block.id
+                    return (
+                      <div className="coach-block-card" key={block.id}>
+                        <div className="coach-block-card-head">
+                          <input
+                            value={block.block_name}
+                            onChange={event => setLocalBlocks(prev => prev.map(item => item.id === block.id ? { ...item, block_name: event.target.value } : item))}
+                            onBlur={event => renameBlock(block.id, event.target.value)}
+                            className="coach-block-card-title"
+                            style={{ border: 'none', background: 'transparent', outline: 'none', flex: 1, minWidth: 0, fontFamily: 'inherit' }}
+                          />
+                          <div className="coach-block-card-actions">
+                            <div className="coach-rounds-chip">
+                              <span>🔁</span>
+                              <input
+                                type="number" min={1} max={10} value={block.rounds}
+                                onChange={event => updateBlockRounds(block.id, parseInt(event.target.value) || 1)}
+                              />
+                              <span>rund</span>
+                            </div>
+                            <button onClick={() => copyBlockToAllDays(block)} title="Kopiuj blok do wszystkich treningów" className="coach-icon-btn" data-tip="Kopiuj do treningów">
+                              <Copy size={14} />
+                            </button>
+                            <button onClick={() => setMovingItem({ type: 'block', block })} title="Przenieś blok" className="coach-icon-btn" data-tip="Przenieś blok">
+                              <Move size={14} />
+                            </button>
+                            <button onClick={() => deleteBlock(block.id)} title="Usuń blok" className="coach-icon-btn coach-danger" data-tip="Usuń blok">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
 
-                    <div style={{ padding: '0.75rem 1rem' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        {(block.workout_block_exercises || [])
-                          .sort((a, b) => a.exercise_order - b.exercise_order)
-                          .map((exercise, index) => {
-                            const name = formatExerciseName(exercise.exercise?.name || exercise.exercise_code || 'Cwiczenie')
-                            const warmupCount = cleanWarmupSets(exercise.warmup_sets || []).length
-                            return (
-                              <div key={exercise.id} style={{ display: 'grid', gridTemplateColumns: '32px 1fr auto', gap: 10, alignItems: 'center', padding: '0.6rem 0.75rem', border: `1.5px solid ${C.grayLight}`, borderRadius: 10, background: C.offWhite }}>
-                                <div style={{ width: 28, height: 28, borderRadius: 8, background: C.navy, color: C.gold, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: mono, fontWeight: 800, fontSize: '0.75rem' }}>
-                                  {index + 1}
-                                </div>
-                                <div style={{ minWidth: 0 }}>
-                                  <div style={{ fontWeight: 700, color: C.navy, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    {name}
-                                    {exercise.exercise_url && (
-                                      <a href={exercise.exercise_url} target="_blank" rel="noopener noreferrer" title="Otwórz film/instrukcję" style={{ fontSize: '0.85rem', textDecoration: 'none' }}>🔗</a>
-                                    )}
+                        <div className="coach-block-card-body">
+                          {(block.workout_block_exercises || [])
+                            .sort((a, b) => a.exercise_order - b.exercise_order)
+                            .map((exercise, index) => {
+                              const isEditingThis = !!editingExercise && editingExercise.id != null && editingExercise.id === exercise.id
+                              if (isEditingThis && editingExercise) {
+                                return (
+                                  <ExerciseEditForm
+                                    key={exercise.id}
+                                    exercise={editingExercise}
+                                    exercises={exercises}
+                                    onSave={saved => { handleExerciseSave(editingExercise.block_id, saved); setEditingExercise(null) }}
+                                    onDelete={() => { handleExerciseDelete(editingExercise.block_id, editingExercise.id); setEditingExercise(null) }}
+                                    onClose={() => setEditingExercise(null)}
+                                  />
+                                )
+                              }
+                              const name = formatExerciseName(exercise.exercise?.name || exercise.exercise_code || 'Cwiczenie')
+                              const warmupCount = cleanWarmupSets(exercise.warmup_sets || []).length
+                              return (
+                                <div className="coach-exercise-row" key={exercise.id}>
+                                  <div className="coach-exercise-order">{index + 1}</div>
+                                  <div className="coach-exercise-body">
+                                    <div className="coach-exercise-name">
+                                      {name}
+                                      {exercise.exercise_url && (
+                                        <a href={exercise.exercise_url} target="_blank" rel="noopener noreferrer" title="Otwórz film/instrukcję" style={{ marginLeft: 6, textDecoration: 'none' }}>🔗</a>
+                                      )}
+                                    </div>
+                                    <div className="coach-exercise-chips">
+                                      <span className="coach-ex-chip">{exercise.sets}×{exercise.reps || '—'}</span>
+                                      {exercise.tempo && <span className="coach-ex-chip">{exercise.tempo}</span>}
+                                      {exercise.weight_kg && <span className="coach-ex-chip">{exercise.weight_kg} kg</span>}
+                                      {exercise.rir !== null && exercise.rir !== undefined && <span className="coach-ex-chip">RIR {exercise.rir}</span>}
+                                      {exercise.is_warmup && <span className="coach-ex-chip coach-warmup">🔥 rozgrzewka ×{warmupCount || 1}</span>}
+                                    </div>
+                                    {exercise.coach_comment && <div className="coach-exercise-comment">{exercise.coach_comment}</div>}
                                   </div>
-                                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 4 }}>
-                                    <span style={chipStyle(C.navy, C.gold)}>{exercise.sets}×{exercise.reps || '—'}</span>
-                                    {exercise.tempo && <span style={chipStyle(C.navy, C.gold)}>{exercise.tempo}</span>}
-                                    {exercise.weight_kg && <span style={chipStyle(C.grayLight, C.gray)}>{exercise.weight_kg} kg</span>}
-                                    {exercise.rir !== null && exercise.rir !== undefined && <span style={chipStyle(C.grayLight, C.gray)}>RIR {exercise.rir}</span>}
-                                    {exercise.is_warmup && <span style={chipStyle('#FEF9C3', '#854D0E')}>🔥 rozgrzewka ×{warmupCount || 1}</span>}
+                                  <div className="coach-exercise-actions">
+                                    <button onClick={() => setMovingItem({ type: 'exercise', exercise: { ...exercise, block_id: block.id }, fromBlockId: block.id })} title="Przenieś" className="coach-icon-btn" data-tip="Przenieś">
+                                      <Move size={14} />
+                                    </button>
+                                    <button onClick={() => setEditingExercise({ ...exercise, block_id: block.id })} title="Edytuj" className="coach-icon-btn" data-tip="Edytuj">
+                                      <Pencil size={14} />
+                                    </button>
+                                    <button onClick={() => deleteExercise(block.id, exercise.id)} title="Usuń" className="coach-icon-btn coach-danger" data-tip="Usuń">
+                                      <X size={14} />
+                                    </button>
                                   </div>
-                                  {exercise.coach_comment && <div style={{ color: C.gray, fontSize: '0.76rem', marginTop: 4, fontStyle: 'italic' }}>{exercise.coach_comment}</div>}
                                 </div>
-                                <div style={{ display: 'flex', gap: 4 }}>
-                                  <button onClick={() => setMovingItem({ type: 'exercise', exercise: { ...exercise, block_id: block.id }, fromBlockId: block.id })} title="Przenieś" style={iconBtn()}>↕</button>
-                                  <button onClick={() => setEditingExercise({ ...exercise, block_id: block.id })} title="Edytuj" style={iconBtn(C.navy + '10', C.navy)}>✏️</button>
-                                  <button onClick={() => deleteExercise(block.id, exercise.id)} title="Usuń" style={iconBtn('#FEF2F2', C.red)}>✕</button>
-                                </div>
-                              </div>
-                            )
-                          })}
+                              )
+                            })}
+
+                          {isAddingHere && editingExercise && (
+                            <ExerciseEditForm
+                              exercise={editingExercise}
+                              exercises={exercises}
+                              onSave={saved => { handleExerciseSave(block.id, saved); setEditingExercise(null) }}
+                              onDelete={() => { handleExerciseDelete(block.id, editingExercise.id); setEditingExercise(null) }}
+                              onClose={() => setEditingExercise(null)}
+                            />
+                          )}
+
+                          {!isAddingHere && (
+                            <button
+                              className="coach-add-exercise-btn"
+                              onClick={() => setEditingExercise({ block_id: block.id, exercise_order: (block.workout_block_exercises || []).length + 1, sets: 3, is_warmup: false })}
+                            >
+                              + dodaj ćwiczenie
+                            </button>
+                          )}
+                        </div>
                       </div>
+                    )
+                  })}
 
-                      <button
-                        onClick={() => setEditingExercise({ block_id: block.id, exercise_order: (block.workout_block_exercises || []).length + 1, sets: 3, is_warmup: false })}
-                        style={{ width: '100%', marginTop: '0.65rem', padding: '0.65rem', border: `1.5px dashed ${C.grayLight}`, borderRadius: 10, background: C.white, color: C.gray, fontFamily: mono, fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer' }}
-                      >
-                        + dodaj ćwiczenie
-                      </button>
+                  {currentDayBlocks.length === 0 && (
+                    <div className="coach-empty-training">
+                      <h3>Ten trening nie ma jeszcze blokow</h3>
+                      <p>Dodaj pierwszy blok i zacznij wpisywac cwiczenia.</p>
+                      <button className="coach-btn coach-btn-dark" onClick={() => addBlock()}>Dodaj blok</button>
                     </div>
-                  </Card>
-                ))}
-
-                {currentDayBlocks.length === 0 && (
-                  <Card>
-                    <div style={{ padding: '2rem 1rem', textAlign: 'center' }}>
-                      <div style={{ fontWeight: 800, color: C.navy, marginBottom: 6 }}>Ten trening nie ma jeszcze blokow</div>
-                      <div style={{ color: C.gray, fontSize: '0.86rem', marginBottom: '1rem' }}>Dodaj pierwszy blok i zacznij wpisywac cwiczenia.</div>
-                      <button onClick={() => addBlock()} style={{ border: 'none', background: C.navy, color: C.gold, borderRadius: 10, padding: '0.85rem 1rem', fontWeight: 800 }}>Dodaj blok</button>
-                    </div>
-                  </Card>
-                )}
-              </>
-            )}
-          </main>
-          </>}
-        </div>
+                  )}
+                </>
+              )}
+            </main>
+          </div>
+        )}
       </div>
     </>
   )
-}
-
-function iconBtn(bg = C.offWhite, color = C.navy): CSSProperties {
-  return {
-    width: 32, height: 32, border: `1.5px solid ${C.grayLight}`, background: bg,
-    color, borderRadius: 8, fontWeight: 800, fontSize: '0.9rem', display: 'flex',
-    alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
-  }
-}
-
-function chipStyle(background: string, color: string): CSSProperties {
-  return {
-    display: 'inline-flex',
-    alignItems: 'center',
-    minHeight: 22,
-    padding: '2px 8px',
-    borderRadius: 7,
-    background,
-    color,
-    fontFamily: mono,
-    fontWeight: 800,
-    fontSize: '0.68rem',
-  }
 }

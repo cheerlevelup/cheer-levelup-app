@@ -10,14 +10,15 @@ import { variantHasPrescription, analyzeWorkout, CATEGORY_ORDER, CATEGORY_LABEL,
 import type { ExerciseInput, TaskVariant } from '@/lib/stimulus'
 import { loadPdf, pl, drawHeaderBar, drawFooter, TABLE_STYLES } from '@/lib/groupPdf'
 import { coerceVariant, cleanVariantName, type CleanVariant } from '@/lib/variants'
+import { Card, Button, StatusPill } from '@/components/coach/ui'
 
-const C = {
-  navy: '#0D1B2A', navyLight: '#1A2E45', navyBorder: '#243652',
-  gold: '#F5C842', white: '#FFFFFF', offWhite: '#F4F6F9',
-  gray: '#8A9BB0', grayLight: '#E8ECF2', green: '#22C55E', red: '#EF4444', orange: '#F97316',
+// Semantyczne kolory spójne z resztą panelu trenera (StatusPill / coach-theme.css)
+const SEM = {
+  red: '#c23b3b', redBg: '#fdecec',
+  amber: '#c07f1e', amberBg: '#fdf1de',
+  green: '#1f9d64', greenBg: '#e3f8ee',
 }
-const sans = "'Space Grotesk', sans-serif"
-const mono = "'Space Mono', monospace"
+const INTER = 'var(--font-inter),sans-serif'
 
 type Group = { id: number; name: string }
 type Athlete = { id: number; full_name: string }
@@ -89,7 +90,7 @@ function SetsSummary({ sets, ex, modified }: { sets: SetRow[]; ex: Exercise; mod
       skipped: !!s.skipped,
     }))
     .filter(s => s.reps || s.tempo || s.weight || s.skipped)
-  if (ss.length === 0) return <span style={{ fontFamily: mono, fontSize: '0.72rem', color: C.grayLight }}>—</span>
+  if (ss.length === 0) return <span style={{ fontFamily: INTER, fontSize: '0.72rem', color: 'var(--muted-light)' }}>—</span>
 
   // Ciężar: 0 = masa ciała (BW), puste = nic, reszta z „kg”
   const fmtWeight = (w: string) => (w === '0' ? 'BW' : /[a-zA-Z%]/.test(w) ? w : `${w} kg`)
@@ -100,14 +101,14 @@ function SetsSummary({ sets, ex, modified }: { sets: SetRow[]; ex: Exercise; mod
         const tempoMod = !!s.tempo && s.tempo !== prescTempo
         return (
           <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 7, lineHeight: 1.5 }}>
-            <span style={{ fontFamily: mono, fontSize: '0.55rem', color: s.skipped ? C.red : C.gray, minWidth: 24, flexShrink: 0 }}>S{i + 1}</span>
+            <span style={{ fontFamily: INTER, fontSize: '0.62rem', color: s.skipped ? SEM.red : 'var(--muted-light)', minWidth: 24, flexShrink: 0 }}>S{i + 1}</span>
             {s.skipped ? (
-              <span style={{ fontFamily: mono, fontSize: '0.72rem', color: C.red, textDecoration: 'line-through' }}>nie zrob.</span>
+              <span style={{ fontFamily: INTER, fontSize: '0.72rem', color: SEM.red, textDecoration: 'line-through' }}>nie zrob.</span>
             ) : (
-              <span style={{ fontFamily: mono, fontSize: '0.74rem', color: C.navy }}>
+              <span style={{ fontFamily: INTER, fontSize: '0.78rem', color: 'var(--ink)' }}>
                 {s.reps || '—'}
                 {s.weight !== '' ? <> × <strong style={{ fontWeight: 700 }}>{fmtWeight(s.weight)}</strong></> : null}
-                {tempoMod ? <span style={{ color: C.gray }}> · {s.tempo}</span> : null}
+                {tempoMod ? <span style={{ color: 'var(--muted)' }}> · {s.tempo}</span> : null}
               </span>
             )}
           </div>
@@ -209,35 +210,35 @@ function ExternalLoadCell({ entry, ex, red, green, orange }: { entry: Entry | un
   const sets = entry?.sets
   const exV = effectiveEx(ex, entry)   // rozpiska wg wybranego wariantu (jeśli jest)
   const hasAny = (sets || []).some(s => s.skipped || s.reps || s.weight) || (!!exV.reps && (sets?.length ?? 0) > 0)
-  if (!hasAny) return <span style={{ fontFamily: mono, fontSize: '0.72rem', color: C.grayLight }}>—</span>
+  if (!hasAny) return <span style={{ fontFamily: INTER, fontSize: '0.72rem', color: 'var(--muted-light)' }}>—</span>
   const modified = isModifiedEntry(entry, exV)
   const m = exerciseMetrics(sets, exV, modified)
   // Przy modyfikacji liczba serii jest indywidualna — mianownik z jej własnych serii, nie z planu grupy
   const planned = modified ? (m.setCount + m.skipped) : (exV.sets_planned ?? 0)
-  const accent = red ? '#C81E1E' : green ? '#15803D' : orange ? '#B45309' : C.gray
+  const accent = red ? SEM.red : green ? SEM.green : orange ? SEM.amber : 'var(--muted)'
   const variant = cleanVariantName(entry?.variant)
   // Modyfikacja TEJ zawodniczki (zamiana / masa własna) — „na maksa” to cecha kolumny, nie modyfikacja.
   // Masę własną pomijamy w etykiecie, gdy bierze się z wariantu (pokażemy ją przy wariancie).
   const modLabel = entry?.exercise_override ? entry.exercise_override : entry?.bodyweight ? 'masa własna' : ''
   const Row = (label: string, val: string, dim?: boolean) => (
-    <div><span style={{ color: C.gray }}>{label}</span> <strong style={{ fontWeight: 700, color: dim ? C.grayLight : C.navy }}>{val}</strong></div>
+    <div><span style={{ color: 'var(--muted)' }}>{label}</span> <strong style={{ fontWeight: 700, color: dim ? 'var(--muted-light)' : 'var(--ink)' }}>{val}</strong></div>
   )
   return (
-    <div style={{ fontFamily: mono, fontSize: '0.7rem', color: C.navy, lineHeight: 1.5 }}>
+    <div style={{ fontFamily: INTER, fontSize: '0.72rem', color: 'var(--ink)', lineHeight: 1.5 }}>
       {variant && (
-        <div title={`Wariant: ${variant}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%', fontFamily: sans, fontSize: '0.6rem', fontWeight: 700, color: C.white, background: C.navy, borderRadius: 999, padding: '2px 8px 2px 3px', marginBottom: 3 }}>
-          <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 15, height: 15, borderRadius: '50%', background: C.gold, color: C.navy, fontFamily: mono, fontSize: '0.62rem', fontWeight: 700, lineHeight: 1 }}>⋔</span>
+        <div title={`Wariant: ${variant}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%', fontFamily: INTER, fontSize: '0.62rem', fontWeight: 700, color: '#fff', background: 'var(--navy-900)', borderRadius: 999, padding: '2px 8px 2px 3px', marginBottom: 3 }}>
+          <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 15, height: 15, borderRadius: '50%', background: 'var(--gold)', color: 'var(--navy-900)', fontSize: '0.62rem', fontWeight: 700, lineHeight: 1 }}>⋔</span>
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{variant}</span>
         </div>
       )}
       {modLabel && (
-        <div title={`Modyfikacja: ${modLabel}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%', fontFamily: sans, fontSize: '0.58rem', fontWeight: 700, color: '#854F0B', background: '#FEF6E0', border: '1px solid #F7D27A', borderRadius: 999, padding: '1px 7px 1px 2px', marginBottom: 3 }}>
-          <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, borderRadius: '50%', background: C.gold, color: C.navy, fontFamily: mono, fontSize: '0.56rem', fontWeight: 700, lineHeight: 1 }}>⇄</span>
+        <div title={`Modyfikacja: ${modLabel}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%', fontFamily: INTER, fontSize: '0.6rem', fontWeight: 700, color: SEM.amber, background: SEM.amberBg, borderRadius: 999, padding: '1px 7px 1px 2px', marginBottom: 3 }}>
+          <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, borderRadius: '50%', background: 'var(--gold)', color: 'var(--navy-900)', fontSize: '0.56rem', fontWeight: 700, lineHeight: 1 }}>⇄</span>
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{modLabel}</span>
         </div>
       )}
       {(red || green || orange) && (
-        <div style={{ fontSize: '0.52rem', fontWeight: 700, color: accent, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 2 }}>
+        <div style={{ fontSize: '0.56rem', fontWeight: 700, color: accent, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 2 }}>
           {red ? (isRepsExercise(exV) ? '● najmniej powt.' : '● najniższy load') : green ? '● najwięcej powt.' : '● niepełne'}
         </div>
       )}
@@ -255,21 +256,17 @@ const WELLNESS_COLS = 'minmax(130px, 1.2fr) repeat(5, minmax(60px, 0.8fr)) minma
 // Kolor wartości wg progów — od razu widać słabe wyniki.
 // 'good-high': im więcej tym lepiej (gotowość, energia)
 // 'good-low':  im mniej tym lepiej (stres, zakwasy)
-function scoreColor(v: number, kind: 'good-high' | 'good-low' | 'sleep') {
-  const green = { bg: '#E9F7EF', fg: '#15803D' }
-  const amber = { bg: '#FEF3E2', fg: '#B45309' }
-  const red = { bg: '#FDEDED', fg: '#C81E1E' }
-  if (kind === 'sleep') return v >= 7.5 ? green : v >= 6 ? amber : red
-  if (kind === 'good-high') return v >= 7 ? green : v >= 4 ? amber : red
-  return v <= 3 ? green : v <= 6 ? amber : red
+function scoreTone(v: number, kind: 'good-high' | 'good-low' | 'sleep'): 'green' | 'amber' | 'red' {
+  if (kind === 'sleep') return v >= 7.5 ? 'green' : v >= 6 ? 'amber' : 'red'
+  if (kind === 'good-high') return v >= 7 ? 'green' : v >= 4 ? 'amber' : 'red'
+  return v <= 3 ? 'green' : v <= 6 ? 'amber' : 'red'
 }
 
 function Score({ value, kind }: { value?: number | null; kind: 'good-high' | 'good-low' | 'sleep' }) {
-  if (value == null) return <span style={{ justifySelf: 'center', fontFamily: mono, fontSize: '0.72rem', color: C.grayLight }}>–</span>
-  const c = scoreColor(value, kind)
+  if (value == null) return <span style={{ justifySelf: 'center', fontFamily: INTER, fontSize: '0.72rem', color: 'var(--muted-light)' }}>–</span>
   return (
-    <span style={{ justifySelf: 'center', fontFamily: mono, fontSize: '0.74rem', fontWeight: 700, color: c.fg, background: c.bg, borderRadius: 7, padding: '2px 8px', minWidth: 44, textAlign: 'center' }}>
-      {value}{kind === 'sleep' ? 'h' : '/10'}
+    <span style={{ justifySelf: 'center' }}>
+      <StatusPill label={`${value}${kind === 'sleep' ? 'h' : '/10'}`} tone={scoreTone(value, kind)} />
     </span>
   )
 }
@@ -503,103 +500,62 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
     }
   }
 
-  const sectionLabel: React.CSSProperties = {
-    fontFamily: mono, fontSize: '0.64rem', color: C.gray, letterSpacing: '0.08em',
-    textTransform: 'uppercase', fontWeight: 700, marginBottom: 8,
-  }
-
   return (
     <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: ${C.offWhite}; }
-        button { cursor: pointer; font-family: inherit; }
-        .gs-table { border-collapse: separate; border-spacing: 0; width: 100%; table-layout: fixed; }
-        .gs-table th, .gs-table td { border-bottom: 1px solid ${C.grayLight}; border-right: 1px solid ${C.grayLight}; vertical-align: top; }
-        .gs-table th:last-child, .gs-table td:last-child { border-right: none; }
-        .gs-table tbody tr:last-child td { border-bottom: none; }
-        .gs-sticky { background: ${C.white}; }
-        .gs-row td { transition: background 0.12s ease; }
-        .gs-row:nth-child(even) td, .gs-row:nth-child(even) .gs-sticky { background: #FBFCFE; }
-        .gs-row:hover td, .gs-row:hover .gs-sticky { background: #EFF4FB; }
-        .gs-wrow { transition: background 0.12s ease; }
-        .gs-wrow:hover { background: #F7FAFD; }
-      `}</style>
-      <div style={{ minHeight: '100vh', background: C.offWhite, fontFamily: sans, color: C.navy }}>
-        <header style={{ background: C.navy, padding: '1rem 1.25rem 1.2rem', position: 'sticky', top: 0, zIndex: 10 }}>
-          <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-              <button onClick={() => router.push(`/coach/groups/${group.id}`)} style={{ border: 'none', background: C.navyLight, color: C.gray, borderRadius: 10, padding: '0.55rem 0.75rem', fontFamily: mono, fontSize: '0.68rem', fontWeight: 700 }}>
-                ← {group.name}
-              </button>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                {trainings.length > 0 && (
-                  <select
-                    value={selectedId ?? ''}
-                    onChange={e => setSelectedId(parseInt(e.target.value))}
-                    style={{ border: `1.5px solid ${C.navyBorder}`, background: C.navyLight, color: C.white, borderRadius: 8, padding: '0.45rem 0.6rem', fontFamily: mono, fontSize: '0.78rem', outline: 'none' }}
-                  >
-                    {trainings.map(t => (
-                      <option key={t.id} value={t.id}>{t.training_date}</option>
-                    ))}
-                  </select>
-                )}
-                {selected && exercises.length > 0 && (
-                  <button onClick={exportSummaryPdf} disabled={exportingPdf}
-                    style={{ border: 'none', background: exportingPdf ? C.navyBorder : C.gold, color: C.navy, borderRadius: 8, padding: '0.5rem 0.8rem', fontWeight: 800, fontSize: '0.78rem' }}>
-                    ⬇ {exportingPdf ? 'Generuję...' : 'PDF'}
-                  </button>
-                )}
-              </div>
-            </div>
-            <h1 style={{ color: C.white, fontSize: '1.25rem', fontWeight: 800, marginTop: '0.8rem' }}>
-              Podsumowanie treningu
-            </h1>
-            {selected && (
-              <p style={{ color: C.gray, fontSize: '0.8rem', marginTop: 3 }}>{formatDatePl(selected.training_date)}</p>
-            )}
-          </div>
-        </header>
+        <div className="coach-plan-toolbar">
+          {trainings.length > 0 && (
+            <select
+              className="coach-sort-select"
+              value={selectedId ?? ''}
+              onChange={e => setSelectedId(parseInt(e.target.value))}
+            >
+              {trainings.map(t => (
+                <option key={t.id} value={t.id}>{t.training_date}</option>
+              ))}
+            </select>
+          )}
+          {selected && (
+            <span style={{ fontSize: 12.5, color: 'var(--muted)', fontFamily: INTER }}>{formatDatePl(selected.training_date)}</span>
+          )}
+          {selected && exercises.length > 0 && (
+            <Button variant="dark" onClick={exportSummaryPdf} disabled={exportingPdf} style={{ marginLeft: 'auto' }}>
+              {exportingPdf ? 'Generuję...' : '⬇ PDF'}
+            </Button>
+          )}
+        </div>
 
-        <main style={{ maxWidth: 1100, margin: '0 auto', padding: '1.25rem 1rem 5rem' }}>
-          {trainings.length === 0 ? (
-            <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, padding: '1.5rem', textAlign: 'center', color: C.gray }}>
+        {trainings.length === 0 ? (
+          <Card>
+            <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--muted)' }}>
               Jeszcze nie było żadnego treningu.
             </div>
-          ) : loading ? (
-            <div style={{ textAlign: 'center', color: C.gray, padding: '2rem', fontFamily: mono, fontSize: '0.8rem' }}>
-              Wczytuję dane treningu...
-            </div>
-          ) : (
-            <>
-              {exercises.length > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
-                  <button onClick={exportSummaryPdf} disabled={exportingPdf}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0.7rem 1.1rem', borderRadius: 12, border: 'none', background: exportingPdf ? C.grayLight : C.navy, color: exportingPdf ? C.gray : C.gold, fontWeight: 800, fontSize: '0.88rem', boxShadow: '0 4px 14px rgba(13,27,42,0.12)' }}>
-                    ⬇ {exportingPdf ? 'Generuję PDF...' : 'Pobierz podsumowanie (PDF)'}
-                  </button>
-                </div>
-              )}
-              {/* ── TABELA: ZAWODNICZKI × ĆWICZENIA ── */}
-              <div style={sectionLabel}>Ćwiczenia i ciężary</div>
-              {exercises.length === 0 ? (
-                <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, padding: '1.25rem', textAlign: 'center', color: C.gray, marginBottom: '1.5rem' }}>
+          </Card>
+        ) : loading ? (
+          <div style={{ textAlign: 'center', color: 'var(--muted)', padding: '2rem', fontFamily: INTER, fontSize: '0.8rem' }}>
+            Wczytuję dane treningu...
+          </div>
+        ) : (
+          <>
+            {/* ── TABELA: ZAWODNICZKI × ĆWICZENIA ── */}
+            <div className="coach-section-label">Ćwiczenia i ciężary</div>
+            {exercises.length === 0 ? (
+              <Card>
+                <div style={{ padding: '1.25rem', textAlign: 'center', color: 'var(--muted)' }}>
                   Ten trening nie ma jeszcze wpisanych ćwiczeń.
                 </div>
-              ) : (
-                <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, overflow: 'hidden', marginBottom: '1.5rem', boxShadow: '0 4px 20px rgba(13,27,42,0.06)' }}>
-                  <table className="gs-table">
+              </Card>
+            ) : (
+              <Card style={{ padding: 0 }}>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="coach-track-table" style={{ tableLayout: 'fixed' }}>
                     <thead>
                       <tr>
-                        <th className="gs-sticky" style={{ width: 168, padding: '0.7rem 0.85rem', textAlign: 'left', fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', background: C.offWhite }}>
-                          Zawodniczka
-                        </th>
+                        <th style={{ width: 170 }}>Zawodniczka</th>
                         {exercises.map(ex => (
-                          <th key={ex.id} style={{ padding: '0.6rem 0.75rem', fontWeight: 800, fontSize: '0.82rem', color: C.navy, background: C.offWhite, textAlign: 'left' }}>
-                            {ex.name}
+                          <th key={ex.id} style={{ minWidth: 160 }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', textTransform: 'none', letterSpacing: 0 }}>{ex.name}</div>
                             {(ex.sets_planned || ex.reps || ex.tempo) && (
-                              <div style={{ fontFamily: mono, fontSize: '0.6rem', fontWeight: 400, color: C.gray, marginTop: 3 }}>
+                              <div style={{ fontFamily: INTER, fontSize: '0.62rem', fontWeight: 400, color: 'var(--muted)', marginTop: 3, textTransform: 'none' }}>
                                 {[
                                   ex.sets_planned && ex.reps ? `${ex.sets_planned} × ${ex.reps}`
                                     : ex.sets_planned ? `${ex.sets_planned} ser.`
@@ -617,42 +573,42 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
                       {athletes.map(athlete => {
                         const absent = absentIds.has(athlete.id)
                         return (
-                        <tr key={athlete.id} className="gs-row">
-                          <td className="gs-sticky" style={{ padding: '0.6rem 0.85rem', fontWeight: 700, fontSize: '0.84rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: absent ? C.gray : C.navy, textDecoration: absent ? 'line-through' : 'none' }}>
+                        <tr key={athlete.id}>
+                          <td className="coach-track-name" style={{ color: absent ? 'var(--muted)' : 'var(--ink)', textDecoration: absent ? 'line-through' : 'none' }}>
                             {athlete.full_name}
                           </td>
                           {absent ? (
-                            <td colSpan={exercises.length} style={{ padding: '0.5rem 0.85rem', fontFamily: mono, fontSize: '0.68rem', color: C.gray, fontStyle: 'italic' }}>nieobecna</td>
+                            <td colSpan={exercises.length} style={{ fontFamily: INTER, fontSize: '0.7rem', color: 'var(--muted)', fontStyle: 'italic' }}>nieobecna</td>
                           ) : exercises.map(ex => {
                             const entry = entryMap.get(entryKey(ex.id, athlete.id))
                             const hasContent = entry && (entry.sets?.length || entry.pain || entry.pain_vas != null || entry.pain_comment || entry.comment || entry.exercise_override)
                             return (
-                              <td key={ex.id} style={{ padding: '0.5rem 0.7rem' }}>
+                              <td key={ex.id}>
                                 {hasContent ? (
                                   <>
                                     {entry!.exercise_override && (
-                                      <div title={`Zamiana ćwiczenia: ${entry!.exercise_override}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%', fontFamily: sans, fontSize: '0.64rem', fontWeight: 700, color: '#854F0B', background: '#FEF6E0', border: '1px solid #F7D27A', borderRadius: 999, padding: '2px 9px 2px 2px', marginBottom: 5 }}>
-                                        <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, borderRadius: '50%', background: C.gold, color: C.navy, fontFamily: mono, fontSize: '0.62rem', fontWeight: 700, lineHeight: 1 }}>⇄</span>
+                                      <div title={`Zamiana ćwiczenia: ${entry!.exercise_override}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%', fontFamily: INTER, fontSize: '0.64rem', fontWeight: 700, color: SEM.amber, background: SEM.amberBg, borderRadius: 999, padding: '2px 9px 2px 2px', marginBottom: 5 }}>
+                                        <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, borderRadius: '50%', background: 'var(--gold)', color: 'var(--navy-900)', fontSize: '0.62rem', fontWeight: 700, lineHeight: 1 }}>⇄</span>
                                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry!.exercise_override}</span>
                                       </div>
                                     )}
                                     <SetsSummary sets={entry!.sets || []} ex={ex} modified={isModifiedEntry(entry, ex)} />
                                     {(entry!.pain || entry!.pain_vas != null || entry!.pain_comment) && (
                                       <div style={{ marginTop: 5 }}>
-                                        <span style={{ fontFamily: mono, fontSize: '0.6rem', fontWeight: 700, color: C.white, background: (entry!.pain_vas != null && entry!.pain_vas! >= 5) ? C.red : C.orange, borderRadius: 6, padding: '1px 6px' }}>
+                                        <span style={{ fontFamily: INTER, fontSize: '0.62rem', fontWeight: 700, color: '#fff', background: (entry!.pain_vas != null && entry!.pain_vas! >= 5) ? SEM.red : SEM.amber, borderRadius: 6, padding: '1px 6px' }}>
                                           ból{entry!.pain_vas != null ? ` VAS ${entry!.pain_vas}` : ''}
                                         </span>
                                         {entry!.pain_comment && (
-                                          <div style={{ fontSize: '0.72rem', color: C.red, marginTop: 2 }}>{entry!.pain_comment}</div>
+                                          <div style={{ fontSize: '0.72rem', color: SEM.red, marginTop: 2 }}>{entry!.pain_comment}</div>
                                         )}
                                       </div>
                                     )}
                                     {entry!.comment && (
-                                      <div style={{ fontSize: '0.72rem', color: C.gray, marginTop: 5, fontStyle: 'italic' }}>💬 {entry!.comment}</div>
+                                      <div style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: 5, fontStyle: 'italic' }}>💬 {entry!.comment}</div>
                                     )}
                                   </>
                                 ) : (
-                                  <span style={{ fontFamily: mono, fontSize: '0.72rem', color: C.grayLight }}>—</span>
+                                  <span style={{ fontFamily: INTER, fontSize: '0.72rem', color: 'var(--muted-light)' }}>—</span>
                                 )}
                               </td>
                             )
@@ -663,33 +619,33 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
                     </tbody>
                   </table>
                 </div>
-              )}
+              </Card>
+            )}
 
-              {/* ── ANALIZA BODŹCA TRENINGOWEGO ── */}
-              {exercises.length > 0 && (
-                <>
-                  <div style={sectionLabel}>Analiza bodźca treningowego</div>
-                  <StimulusSection exercises={exercises.map(toStimulusInput)} />
-                  <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, margin: '0 0 1.5rem', lineHeight: 1.5 }}>
-                    Na podstawie liczby powtórzeń, tempa i TUT system szacuje, jaki bodziec został zaprogramowany przez trenera. To analiza konstrukcji programu, nie pomiar rzeczywistej odpowiedzi organizmu.
-                  </div>
-                </>
-              )}
+            {/* ── ANALIZA BODŹCA TRENINGOWEGO ── */}
+            {exercises.length > 0 && (
+              <>
+                <div className="coach-section-label">Analiza bodźca treningowego</div>
+                <StimulusSection exercises={exercises.map(toStimulusInput)} />
+                <div style={{ fontFamily: INTER, fontSize: '0.66rem', color: 'var(--muted)', margin: '0 0 0.5rem', lineHeight: 1.5 }}>
+                  Na podstawie liczby powtórzeń, tempa i TUT system szacuje, jaki bodziec został zaprogramowany przez trenera. To analiza konstrukcji programu, nie pomiar rzeczywistej odpowiedzi organizmu.
+                </div>
+              </>
+            )}
 
-              {/* ── EXTERNAL LOAD ── */}
-              {exercises.length > 0 && (
-                <>
-                  <div style={sectionLabel}>External Load</div>
-                  <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, overflow: 'hidden', marginBottom: '0.75rem', boxShadow: '0 4px 20px rgba(13,27,42,0.06)' }}>
-                    <table className="gs-table">
+            {/* ── EXTERNAL LOAD ── */}
+            {exercises.length > 0 && (
+              <>
+                <div className="coach-section-label">External Load</div>
+                <Card style={{ padding: 0 }}>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="coach-track-table" style={{ tableLayout: 'fixed' }}>
                       <thead>
                         <tr>
-                          <th className="gs-sticky" style={{ width: 168, padding: '0.7rem 0.85rem', textAlign: 'left', fontFamily: mono, fontSize: '0.62rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.08em', background: C.offWhite }}>
-                            Zawodniczka
-                          </th>
+                          <th style={{ width: 170 }}>Zawodniczka</th>
                           {exercises.map(ex => (
-                            <th key={ex.id} style={{ padding: '0.6rem 0.75rem', fontWeight: 800, fontSize: '0.82rem', color: C.navy, background: C.offWhite, textAlign: 'left' }}>
-                              {ex.name}
+                            <th key={ex.id} style={{ minWidth: 150 }}>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', textTransform: 'none', letterSpacing: 0 }}>{ex.name}</div>
                             </th>
                           ))}
                         </tr>
@@ -698,12 +654,12 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
                         {athletes.map(athlete => {
                           const absent = absentIds.has(athlete.id)
                           return (
-                          <tr key={athlete.id} className="gs-row">
-                            <td className="gs-sticky" style={{ padding: '0.6rem 0.85rem', fontWeight: 700, fontSize: '0.84rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: absent ? C.gray : C.navy, textDecoration: absent ? 'line-through' : 'none' }}>
+                          <tr key={athlete.id}>
+                            <td className="coach-track-name" style={{ color: absent ? 'var(--muted)' : 'var(--ink)', textDecoration: absent ? 'line-through' : 'none' }}>
                               {athlete.full_name}
                             </td>
                             {absent ? (
-                              <td colSpan={exercises.length} style={{ padding: '0.5rem 0.85rem', fontFamily: mono, fontSize: '0.68rem', color: C.gray, fontStyle: 'italic' }}>nieobecna</td>
+                              <td colSpan={exercises.length} style={{ fontFamily: INTER, fontSize: '0.7rem', color: 'var(--muted)', fontStyle: 'italic' }}>nieobecna</td>
                             ) : exercises.map(ex => {
                               const entry = entryMap.get(entryKey(ex.id, athlete.id))
                               const exV = effectiveEx(ex, entry)
@@ -712,7 +668,7 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
                               const green = !red && greenByExercise.get(ex.id) === athlete.id
                               const orange = !red && !green && isUnderdone(entry, exV, m)
                               return (
-                                <td key={ex.id} style={{ padding: '0.5rem 0.7rem', background: red ? '#FDEDED' : green ? '#E9F7EF' : orange ? '#FEF3E2' : undefined }}>
+                                <td key={ex.id} style={{ background: red ? SEM.redBg : green ? SEM.greenBg : orange ? SEM.amberBg : undefined }}>
                                   <ExternalLoadCell entry={entry} ex={ex} red={red} green={green} orange={orange} />
                                 </td>
                               )
@@ -723,92 +679,92 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
                       </tbody>
                     </table>
                   </div>
-                  <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, margin: '0 0 0.4rem', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                    <span><span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: '#C81E1E', verticalAlign: 'middle' }} /> najniższy relative load (ciężar zewn./masa ciała); przy „na maksa” — najmniej powtórzeń</span>
-                    <span><span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: '#15803D', verticalAlign: 'middle' }} /> ćwiczenie na powtórzenia (AMRAP / masa własna) — najwięcej powtórzeń</span>
-                    <span><span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: '#B45309', verticalAlign: 'middle' }} /> niepełne (seria/powt.) — bez ćwiczeń zmodyfikowanych</span>
-                  </div>
-                  <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, margin: '0 0 1.5rem' }}>
-                    zew. = Σ powtórzeń × ciężar · TUT = Σ powtórzeń × czas tempa (w sekundach) · ⇄ = modyfikacja
-                  </div>
-                </>
-              )}
-
-              {/* ── GOTOWOŚĆ ── */}
-              <div style={sectionLabel}>Gotowość treningowa</div>
-              <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, overflow: 'auto', marginBottom: '1.5rem', boxShadow: '0 4px 20px rgba(13,27,42,0.06)' }}>
-                <div style={{ minWidth: 720 }}>
-                  {/* Nagłówek kolumn — pozwala porównywać metryki w pionie */}
-                  <div style={{ display: 'grid', gridTemplateColumns: WELLNESS_COLS, gap: 8, alignItems: 'center', padding: '0.6rem 1rem', background: C.offWhite, borderBottom: `1px solid ${C.grayLight}`, fontFamily: mono, fontSize: '0.55rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>
-                    <span>Zawodniczka</span>
-                    <span style={{ justifySelf: 'center' }}>😴 Sen</span>
-                    <span style={{ justifySelf: 'center' }}>✅ Gotow.</span>
-                    <span style={{ justifySelf: 'center' }}>⚡ Energia</span>
-                    <span style={{ justifySelf: 'center' }}>😬 Stres</span>
-                    <span style={{ justifySelf: 'center' }}>💪 Zakwasy</span>
-                    <span>💬 Uwagi</span>
-                  </div>
-                  {athletes.map((a, i) => {
-                    const w = wellnessByAthlete.get(a.id)
-                    return (
-                      <div key={a.id} className="gs-wrow" style={{ display: 'grid', gridTemplateColumns: WELLNESS_COLS, gap: 8, alignItems: 'center', padding: '0.5rem 1rem', borderTop: i > 0 ? `1px solid ${C.grayLight}` : 'none' }}>
-                        <span style={{ fontWeight: 700, fontSize: '0.84rem' }}>{a.full_name}</span>
-                        {w ? (
-                          <>
-                            <Score value={w.sleep_hours} kind="sleep" />
-                            <Score value={w.readiness} kind="good-high" />
-                            <Score value={w.energy} kind="good-high" />
-                            <Score value={w.stress} kind="good-low" />
-                            <Score value={w.muscle_sorness} kind="good-low" />
-                            <span style={{ fontSize: '0.76rem', color: C.gray, fontStyle: 'italic', lineHeight: 1.4 }}>
-                              {w.concerns ? `„${w.concerns}”` : ''}
-                            </span>
-                          </>
-                        ) : (
-                          <span style={{ gridColumn: '2 / -1', justifySelf: 'start', fontFamily: mono, fontSize: '0.68rem', color: C.gray }}>nie uzupełniono</span>
-                        )}
-                      </div>
-                    )
-                  })}
+                </Card>
+                <div style={{ fontFamily: INTER, fontSize: '0.62rem', color: 'var(--muted)', margin: '10px 0 0.4rem', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                  <span><span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: SEM.red, verticalAlign: 'middle' }} /> najniższy relative load (ciężar zewn./masa ciała); przy „na maksa” — najmniej powtórzeń</span>
+                  <span><span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: SEM.green, verticalAlign: 'middle' }} /> ćwiczenie na powtórzenia (AMRAP / masa własna) — najwięcej powtórzeń</span>
+                  <span><span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: SEM.amber, verticalAlign: 'middle' }} /> niepełne (seria/powt.) — bez ćwiczeń zmodyfikowanych</span>
                 </div>
-              </div>
+                <div style={{ fontFamily: INTER, fontSize: '0.62rem', color: 'var(--muted)', margin: '0 0 0.5rem' }}>
+                  zew. = Σ powtórzeń × ciężar · TUT = Σ powtórzeń × czas tempa (w sekundach) · ⇄ = modyfikacja
+                </div>
+              </>
+            )}
 
-              {/* ── FEEDBACK ── */}
-              <div style={sectionLabel}>Feedback po treningu</div>
-              <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, overflow: 'hidden' }}>
+            {/* ── GOTOWOŚĆ ── */}
+            <div className="coach-section-label">Gotowość treningowa</div>
+            <Card style={{ padding: 0, overflow: 'auto' }}>
+              <div style={{ minWidth: 720 }}>
+                {/* Nagłówek kolumn — pozwala porównywać metryki w pionie */}
+                <div style={{ display: 'grid', gridTemplateColumns: WELLNESS_COLS, gap: 8, alignItems: 'center', padding: '0.7rem 1rem', background: 'var(--bg)', borderBottom: '1px solid var(--border)', fontFamily: INTER, fontSize: '0.62rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>
+                  <span>Zawodniczka</span>
+                  <span style={{ justifySelf: 'center' }}>😴 Sen</span>
+                  <span style={{ justifySelf: 'center' }}>✅ Gotow.</span>
+                  <span style={{ justifySelf: 'center' }}>⚡ Energia</span>
+                  <span style={{ justifySelf: 'center' }}>😬 Stres</span>
+                  <span style={{ justifySelf: 'center' }}>💪 Zakwasy</span>
+                  <span>💬 Uwagi</span>
+                </div>
                 {athletes.map((a, i) => {
-                  const f = feedbackByAthlete.get(a.id)
+                  const w = wellnessByAthlete.get(a.id)
                   return (
-                    <div key={a.id} style={{ padding: '0.7rem 1rem', borderTop: i > 0 ? `1.5px solid ${C.grayLight}` : 'none', display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: 700, fontSize: '0.86rem', minWidth: 140 }}>{a.full_name}</span>
-                      {f ? (
-                        <span style={{ fontSize: '0.78rem', color: C.navy, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
-                          {f.session_rpe != null && <span style={{ fontFamily: mono, fontSize: '0.7rem' }}>RPE {f.session_rpe}/10</span>}
-                          {f.feeling_after && <span>{FEELING_LABELS[f.feeling_after] || f.feeling_after}</span>}
-                          {f.what_went_well && <span style={{ color: C.green }}>✓ {f.what_went_well}</span>}
-                          {f.pain_after_comment && <span style={{ color: C.red }}>⚠ {f.pain_after_comment}</span>}
-                          {f.general_notes && <span style={{ color: C.gray, fontStyle: 'italic' }}>„{f.general_notes}”</span>}
-                        </span>
+                    <div key={a.id} style={{ display: 'grid', gridTemplateColumns: WELLNESS_COLS, gap: 8, alignItems: 'center', padding: '0.6rem 1rem', borderTop: i > 0 ? '1px solid var(--border)' : 'none' }}>
+                      <span style={{ fontWeight: 700, fontSize: '0.86rem', color: 'var(--ink)' }}>{a.full_name}</span>
+                      {w ? (
+                        <>
+                          <Score value={w.sleep_hours} kind="sleep" />
+                          <Score value={w.readiness} kind="good-high" />
+                          <Score value={w.energy} kind="good-high" />
+                          <Score value={w.stress} kind="good-low" />
+                          <Score value={w.muscle_sorness} kind="good-low" />
+                          <span style={{ fontFamily: INTER, fontSize: '0.76rem', color: 'var(--muted)', fontStyle: 'italic', lineHeight: 1.4 }}>
+                            {w.concerns ? `„${w.concerns}”` : ''}
+                          </span>
+                        </>
                       ) : (
-                        <span style={{ fontFamily: mono, fontSize: '0.7rem', color: C.gray }}>nie uzupełniono</span>
+                        <span style={{ gridColumn: '2 / -1', justifySelf: 'start', fontFamily: INTER, fontSize: '0.7rem', color: 'var(--muted)' }}>nie uzupełniono</span>
                       )}
                     </div>
                   )
                 })}
               </div>
+            </Card>
 
-              {selected && (
-                <button
-                  onClick={() => router.push(`/coach/groups/${group.id}/training/${selected.id}`)}
-                  style={{ marginTop: '1.25rem', width: '100%', padding: '0.875rem', borderRadius: 12, border: `1.5px solid ${C.grayLight}`, background: C.white, color: C.navy, fontWeight: 800, fontSize: '0.9rem' }}
-                >
-                  ✏️ Edytuj ten trening
-                </button>
-              )}
-            </>
-          )}
-        </main>
-      </div>
+            {/* ── FEEDBACK ── */}
+            <div className="coach-section-label">Feedback po treningu</div>
+            <Card style={{ padding: 0 }}>
+              {athletes.map((a, i) => {
+                const f = feedbackByAthlete.get(a.id)
+                return (
+                  <div key={a.id} style={{ padding: '0.75rem 1rem', borderTop: i > 0 ? '1px solid var(--border)' : 'none', display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 700, fontSize: '0.86rem', minWidth: 140, color: 'var(--ink)' }}>{a.full_name}</span>
+                    {f ? (
+                      <span style={{ fontFamily: INTER, fontSize: '0.78rem', color: 'var(--ink)', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                        {f.session_rpe != null && <span style={{ fontWeight: 700 }}>RPE {f.session_rpe}/10</span>}
+                        {f.feeling_after && <span>{FEELING_LABELS[f.feeling_after] || f.feeling_after}</span>}
+                        {f.what_went_well && <span style={{ color: SEM.green }}>✓ {f.what_went_well}</span>}
+                        {f.pain_after_comment && <span style={{ color: SEM.red }}>⚠ {f.pain_after_comment}</span>}
+                        {f.general_notes && <span style={{ color: 'var(--muted)', fontStyle: 'italic' }}>„{f.general_notes}”</span>}
+                      </span>
+                    ) : (
+                      <span style={{ fontFamily: INTER, fontSize: '0.72rem', color: 'var(--muted)' }}>nie uzupełniono</span>
+                    )}
+                  </div>
+                )
+              })}
+            </Card>
+
+            {selected && (
+              <Button
+                variant="ghost"
+                onClick={() => router.push(`/coach/groups/${group.id}/training/${selected.id}`)}
+                style={{ width: '100%', justifyContent: 'center', padding: '0.9rem' }}
+              >
+                ✏️ Edytuj ten trening
+              </Button>
+            )}
+          </>
+        )}
     </>
   )
 }

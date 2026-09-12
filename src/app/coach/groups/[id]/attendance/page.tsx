@@ -1,15 +1,16 @@
 export const dynamic = 'force-dynamic'
 
-// src/app/coach/groups/[id]/summary/page.tsx
+// src/app/coach/groups/[id]/attendance/page.tsx
+// Obecność grupy zorganizowanej — wydzielona z dawnej zakładki Statystyki.
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
-import GroupSummaryClient from './GroupSummaryClient'
+import GroupAttendanceClient from './GroupAttendanceClient'
 
 interface Props {
   params: Promise<{ id: string }>
 }
 
-export default async function GroupSummaryPage({ params }: Props) {
+export default async function GroupAttendancePage({ params }: Props) {
   const supabase = await createClient()
   const { data: { user }, error } = await supabase.auth.getUser()
   if (error || !user) redirect('/login')
@@ -35,31 +36,15 @@ export default async function GroupSummaryPage({ params }: Props) {
 
   const { data: trainings } = await supabase
     .from('group_trainings')
-    .select('*')
+    .select('id, group_id, training_date, absent_athlete_ids')
     .eq('group_id', groupId)
-    .order('training_date', { ascending: false })
-
-  // Najnowsza masa ciała każdej zawodniczki (do relative load)
-  const athleteIds = (athletes || []).map(a => a.id)
-  const bodyWeights: Record<number, number> = {}
-  if (athleteIds.length) {
-    const { data: bw } = await supabase
-      .from('wellness_logs')
-      .select('athlete_id, body_weight_kg, created_at')
-      .in('athlete_id', athleteIds)
-      .not('body_weight_kg', 'is', null)
-      .order('created_at', { ascending: false })
-    for (const r of bw || []) {
-      if (bodyWeights[r.athlete_id] == null && r.body_weight_kg != null) bodyWeights[r.athlete_id] = r.body_weight_kg
-    }
-  }
+    .order('training_date', { ascending: true })
 
   return (
-    <GroupSummaryClient
+    <GroupAttendanceClient
       group={group}
       athletes={athletes || []}
       trainings={trainings || []}
-      bodyWeights={bodyWeights}
     />
   )
 }

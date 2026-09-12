@@ -13,12 +13,7 @@ import {
   type VariantBreakdown, type AthleteBreakdown,
 } from '@/lib/stimulus'
 
-const C = {
-  navy: '#0D1B2A', gold: '#F5C842', white: '#FFFFFF', offWhite: '#F4F6F9',
-  gray: '#8A9BB0', grayLight: '#E8ECF2',
-}
-const sans = "'Space Grotesk', sans-serif"
-const mono = "'Space Mono', monospace"
+const INTER = 'var(--font-inter),sans-serif'
 
 const PATTERN_LABEL: Record<string, string> = {
   squat: 'squat', hinge: 'hinge', push: 'push', pull: 'pull',
@@ -29,21 +24,50 @@ const CHAR_LABEL: Record<string, string> = {
   eccentric: 'ekscentryczne', isometric: 'izometryczne', plyometric: 'plyometryczne',
 }
 
+// Semantyczne kolory spójne z resztą panelu (StatusPill / coach-theme.css)
+const SEM = {
+  red: '#c23b3b', redBg: '#fdecec',
+  amber: '#c07f1e', amberBg: '#fdf1de',
+  green: '#1f9d64', greenBg: '#e3f8ee',
+}
 const CONF_COLOR: Record<Confidence, string> = {
-  wysoka: '#15803D', srednia: '#B45309', niska: '#C81E1E',
+  wysoka: SEM.green, srednia: SEM.amber, niska: SEM.red,
 }
 
 // Pasek profilu — proporcje 5 kategorii w jednej linii.
 function ProfileBar({ profile, height = 8 }: { profile: StimulusProfile; height?: number }) {
   const segs = CATEGORY_ORDER.filter(c => profile[c] > 0.005)
   if (segs.length === 0) {
-    return <div style={{ height, borderRadius: 999, background: C.grayLight }} />
+    return <div style={{ height, borderRadius: 999, background: 'var(--border)' }} />
   }
   return (
-    <div style={{ display: 'flex', height, borderRadius: 999, overflow: 'hidden', background: C.grayLight }}>
+    <div style={{ display: 'flex', height, borderRadius: 999, overflow: 'hidden', background: 'var(--border)' }}>
       {segs.map(c => (
         <div key={c} title={`${CATEGORY_LABEL[c]} ${pct(profile[c])}%`}
           style={{ width: `${profile[c] * 100}%`, background: CATEGORY_COLOR[c] }} />
+      ))}
+    </div>
+  )
+}
+
+// Rozkład kategorii jako pionowa lista wierszy (nazwa + mini pasek + %) —
+// zgodnie z układem .coach-stat-bar-row używanym gdzie indziej w panelu.
+function CategoryBars({ profile, short }: { profile: StimulusProfile; short?: boolean }) {
+  const segs = CATEGORY_ORDER.filter(c => profile[c] > 0.005)
+  if (segs.length === 0) return null
+  return (
+    <div>
+      {segs.map(c => (
+        <div key={c} className="coach-stat-bar-row">
+          <span className="coach-stat-bar-name" style={{ display: 'flex', alignItems: 'center', gap: 6, width: short ? 110 : 150 }}>
+            <span style={{ width: 7, height: 7, borderRadius: 2, background: CATEGORY_COLOR[c], flexShrink: 0 }} />
+            {short ? CATEGORY_SHORT[c] : CATEGORY_LABEL[c]}
+          </span>
+          <div className="coach-bar-track" style={{ flex: 1 }}>
+            <div className="coach-bar-fill" style={{ width: `${profile[c] * 100}%`, background: CATEGORY_COLOR[c] }} />
+          </div>
+          <span className="coach-stat-bar-pct">{pct(profile[c])}%</span>
+        </div>
       ))}
     </div>
   )
@@ -54,7 +78,7 @@ export function StimulusBadge({ ex }: { ex: ExerciseInput }) {
   const a = analyzeWorkout([ex]).exercises[0]
   if (!a.dominant) {
     return (
-      <div style={{ marginTop: 5, fontFamily: mono, fontSize: '0.54rem', color: C.gray }}>
+      <div style={{ marginTop: 5, fontFamily: INTER, fontSize: '0.58rem', color: 'var(--muted)' }}>
         bodziec: nieokreślony{a.isMax ? ' (na maksa)' : ''}
       </div>
     )
@@ -63,19 +87,19 @@ export function StimulusBadge({ ex }: { ex: ExerciseInput }) {
   return (
     <div style={{ marginTop: 5 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: sans, fontSize: '0.56rem', fontWeight: 700, color: C.navy, background: `${col}22`, border: `1px solid ${col}`, borderRadius: 999, padding: '1px 7px' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: INTER, fontSize: '0.6rem', fontWeight: 700, color: 'var(--ink)', background: `${col}22`, border: `1px solid ${col}`, borderRadius: 999, padding: '1px 7px' }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: col }} />
           {CATEGORY_SHORT[a.dominant]}
         </span>
-        <span style={{ fontFamily: mono, fontSize: '0.5rem', color: C.gray }}>{CHARACTER_LABEL[a.character]}</span>
-        {a.explosive && <span style={{ fontFamily: mono, fontSize: '0.5rem', fontWeight: 700, color: '#92600A', background: '#FEF6E0', borderRadius: 4, padding: '0 4px' }}>⚡ explo</span>}
+        <span style={{ fontFamily: INTER, fontSize: '0.54rem', color: 'var(--muted)' }}>{CHARACTER_LABEL[a.character]}</span>
+        {a.explosive && <span style={{ fontFamily: INTER, fontSize: '0.54rem', fontWeight: 700, color: SEM.amber, background: SEM.amberBg, borderRadius: 4, padding: '0 4px' }}>⚡ explo</span>}
       </div>
       <div style={{ marginTop: 4 }}><ProfileBar profile={a.profile} height={5} /></div>
-      <div style={{ fontFamily: mono, fontSize: '0.5rem', color: C.gray, marginTop: 3 }}>
+      <div style={{ fontFamily: INTER, fontSize: '0.54rem', color: 'var(--muted)', marginTop: 3 }}>
         TUT {fmtSeconds(a.tutPerSet)}/seria · pewność {CONFIDENCE_LABEL[a.confidence]}
       </div>
       {(a.mode === 'individual' || a.variantsDefined.length > 0) && (
-        <div style={{ fontFamily: mono, fontSize: '0.5rem', fontWeight: 700, color: '#92600A', marginTop: 2 }}>
+        <div style={{ fontFamily: INTER, fontSize: '0.54rem', fontWeight: 700, color: SEM.amber, marginTop: 2 }}>
           {a.mode === 'individual' ? 'tryb indyw.' : ''}
           {a.variantsDefined.length > 0 ? `${a.mode === 'individual' ? ' · ' : ''}${a.variantsDefined.length} war.` : ''}
         </div>
@@ -89,7 +113,7 @@ function TagPills({ items, map, color }: { items: string[]; map: Record<string, 
   return (
     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
       {items.map(t => (
-        <span key={t} style={{ fontFamily: mono, fontSize: '0.56rem', fontWeight: 700, color, background: `${color}14`, border: `1px solid ${color}40`, borderRadius: 6, padding: '1px 6px' }}>
+        <span key={t} style={{ fontFamily: INTER, fontSize: '0.6rem', fontWeight: 700, color, background: `${color}14`, border: `1px solid ${color}40`, borderRadius: 6, padding: '1px 6px' }}>
           {map[t] || t}
         </span>
       ))}
@@ -101,27 +125,27 @@ function VariantBlock({ a }: { a: ExerciseAnalysis }) {
   const hasVariants = a.variantsDefined.length > 0 || a.variantUsage.length > 0
   if (a.mode !== 'individual' && !hasVariants) return null
   return (
-    <div style={{ margin: '7px 0 2px', padding: '7px 9px', background: C.offWhite, border: `1px solid ${C.grayLight}`, borderRadius: 9 }}>
+    <div style={{ margin: '7px 0 2px', padding: '7px 9px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 9 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span style={{ fontFamily: mono, fontSize: '0.56rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tryb</span>
-        <span style={{ fontFamily: sans, fontSize: '0.66rem', fontWeight: 700, color: a.mode === 'individual' ? '#6B4E0B' : C.navy, background: a.mode === 'individual' ? '#FEF6E0' : C.white, border: `1px solid ${a.mode === 'individual' ? '#F7D27A' : C.grayLight}`, borderRadius: 6, padding: '1px 7px' }}>
+        <span style={{ fontFamily: INTER, fontSize: '0.6rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tryb</span>
+        <span style={{ fontFamily: INTER, fontSize: '0.68rem', fontWeight: 700, color: a.mode === 'individual' ? SEM.amber : 'var(--ink)', background: a.mode === 'individual' ? SEM.amberBg : '#fff', border: `1px solid ${a.mode === 'individual' ? '#f0d9ae' : 'var(--border)'}`, borderRadius: 6, padding: '1px 7px' }}>
           {a.mode === 'individual' ? 'indywidualny — analiza z danych zawodniczek' : 'grupowy — analiza z nagłówka'}
         </span>
       </div>
       {hasVariants && (
         <div style={{ marginTop: 6 }}>
-          <div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>
+          <div style={{ fontFamily: INTER, fontSize: '0.6rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>
             Warianty{a.variantUsage.length > 0 ? ' użyte' : ''}
           </div>
           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
             {a.variantUsage.length > 0
               ? a.variantUsage.map(v => (
-                <span key={v.variant} style={{ fontFamily: sans, fontSize: '0.66rem', color: C.navy, background: C.white, border: `1px solid ${C.grayLight}`, borderRadius: 6, padding: '1px 7px' }}>
+                <span key={v.variant} style={{ fontFamily: INTER, fontSize: '0.68rem', color: 'var(--ink)', background: '#fff', border: '1px solid var(--border)', borderRadius: 6, padding: '1px 7px' }}>
                   {v.variant} <strong>· {v.count} {v.count === 1 ? 'zawodniczka' : 'zawodniczki'}</strong>
                 </span>
               ))
               : a.variantsDefined.map(v => (
-                <span key={v} style={{ fontFamily: sans, fontSize: '0.66rem', color: C.gray, background: C.white, border: `1px solid ${C.grayLight}`, borderRadius: 6, padding: '1px 7px' }}>
+                <span key={v} style={{ fontFamily: INTER, fontSize: '0.68rem', color: 'var(--muted)', background: '#fff', border: '1px solid var(--border)', borderRadius: 6, padding: '1px 7px' }}>
                   {v}
                 </span>
               ))}
@@ -138,30 +162,30 @@ function VariantBreakdownBlock({ rows }: { rows: VariantBreakdown[] }) {
   if (rows.length < 2) return null
   return (
     <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+      <div style={{ fontFamily: INTER, fontSize: '0.6rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
         Bodziec per wariant
       </div>
       {rows.map((r, i) => (
-        <div key={i} style={{ padding: '6px 8px', background: C.offWhite, border: `1px solid ${C.grayLight}`, borderRadius: 8 }}>
+        <div key={i} style={{ padding: '6px 8px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: sans, fontSize: '0.7rem', fontWeight: 700, color: C.navy }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: INTER, fontSize: '0.72rem', fontWeight: 700, color: 'var(--ink)' }}>
               {r.dominant && <span style={{ width: 8, height: 8, borderRadius: '50%', background: CATEGORY_COLOR[r.dominant] }} />}
               {r.variant ?? 'podstawa (bez wariantu)'}
-              <span style={{ fontFamily: mono, fontSize: '0.56rem', fontWeight: 700, color: '#6B4E0B', background: '#FEF6E0', border: '1px solid #F7D27A', borderRadius: 5, padding: '0 5px' }}>
+              <span style={{ fontFamily: INTER, fontSize: '0.6rem', fontWeight: 700, color: SEM.amber, background: SEM.amberBg, border: '1px solid #f0d9ae', borderRadius: 5, padding: '0 5px' }}>
                 {r.athleteCount} {r.athleteCount === 1 ? 'zawodniczka' : 'zawodniczki'}
               </span>
             </span>
-            <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray }}>
+            <span style={{ fontFamily: INTER, fontSize: '0.6rem', color: 'var(--muted)' }}>
               {r.dominant ? CATEGORY_SHORT[r.dominant] : (r.isMax ? 'na maksa' : '—')}
               {r.dominant ? ` · ${CHARACTER_LABEL[r.character]}` : ''}
               {r.explosive ? ' · ⚡' : ''}
             </span>
           </div>
           <ProfileBar profile={r.profile} height={6} />
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 5, fontFamily: mono, fontSize: '0.56rem', color: C.gray }}>
-            <span>TUT/seria <strong style={{ color: C.navy }}>{fmtSeconds(r.tutPerSet)}</strong></span>
-            {r.repsPerSet != null && <span>powt./seria <strong style={{ color: C.navy }}>{r.repsPerSet % 1 === 0 ? r.repsPerSet : r.repsPerSet.toFixed(1)}</strong></span>}
-            <span>powt. całk. <strong style={{ color: C.navy }}>{r.totalReps || '—'}</strong></span>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 5, fontFamily: INTER, fontSize: '0.6rem', color: 'var(--muted)' }}>
+            <span>TUT/seria <strong style={{ color: 'var(--ink)' }}>{fmtSeconds(r.tutPerSet)}</strong></span>
+            {r.repsPerSet != null && <span>powt./seria <strong style={{ color: 'var(--ink)' }}>{r.repsPerSet % 1 === 0 ? r.repsPerSet : r.repsPerSet.toFixed(1)}</strong></span>}
+            <span>powt. całk. <strong style={{ color: 'var(--ink)' }}>{r.totalReps || '—'}</strong></span>
           </div>
         </div>
       ))}
@@ -175,32 +199,32 @@ function AthleteBreakdownBlock({ rows }: { rows: AthleteBreakdown[] }) {
   if (rows.length === 0) return null
   return (
     <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+      <div style={{ fontFamily: INTER, fontSize: '0.6rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
         Bodziec per zawodniczka
       </div>
       {rows.map(r => (
-        <div key={r.athleteId} style={{ padding: '6px 8px', background: C.white, border: `1px solid ${C.grayLight}`, borderRadius: 8 }}>
+        <div key={r.athleteId} style={{ padding: '6px 8px', background: '#fff', border: '1px solid var(--border)', borderRadius: 8 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: sans, fontSize: '0.72rem', fontWeight: 700, color: C.navy }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: INTER, fontSize: '0.74rem', fontWeight: 700, color: 'var(--ink)' }}>
               {r.dominant && <span style={{ width: 8, height: 8, borderRadius: '50%', background: CATEGORY_COLOR[r.dominant] }} />}
               {r.name}
               {r.variant && (
-                <span style={{ fontFamily: sans, fontSize: '0.58rem', fontWeight: 700, color: '#6B4E0B', background: '#FEF6E0', border: '1px solid #F7D27A', borderRadius: 5, padding: '0 5px' }}>
+                <span style={{ fontFamily: INTER, fontSize: '0.6rem', fontWeight: 700, color: SEM.amber, background: SEM.amberBg, border: '1px solid #f0d9ae', borderRadius: 5, padding: '0 5px' }}>
                   {r.variant}
                 </span>
               )}
             </span>
-            <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray }}>
+            <span style={{ fontFamily: INTER, fontSize: '0.6rem', color: 'var(--muted)' }}>
               {r.dominant ? CATEGORY_SHORT[r.dominant] : (r.isMax ? 'na maksa' : '—')}
               {r.dominant ? ` · ${CHARACTER_LABEL[r.character]}` : ''}
               {r.explosive ? ' · ⚡' : ''}
             </span>
           </div>
           <ProfileBar profile={r.profile} height={6} />
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 5, fontFamily: mono, fontSize: '0.56rem', color: C.gray }}>
-            <span>TUT/seria <strong style={{ color: C.navy }}>{fmtSeconds(r.tutPerSet)}</strong></span>
-            {r.repsPerSet != null && <span>powt./seria <strong style={{ color: C.navy }}>{r.repsPerSet % 1 === 0 ? r.repsPerSet : r.repsPerSet.toFixed(1)}</strong></span>}
-            <span>powt. całk. <strong style={{ color: C.navy }}>{r.totalReps || '—'}</strong></span>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 5, fontFamily: INTER, fontSize: '0.6rem', color: 'var(--muted)' }}>
+            <span>TUT/seria <strong style={{ color: 'var(--ink)' }}>{fmtSeconds(r.tutPerSet)}</strong></span>
+            {r.repsPerSet != null && <span>powt./seria <strong style={{ color: 'var(--ink)' }}>{r.repsPerSet % 1 === 0 ? r.repsPerSet : r.repsPerSet.toFixed(1)}</strong></span>}
+            <span>powt. całk. <strong style={{ color: 'var(--ink)' }}>{r.totalReps || '—'}</strong></span>
           </div>
         </div>
       ))}
@@ -213,10 +237,10 @@ function ExerciseCard({ a }: { a: ExerciseAnalysis }) {
     ? `${a.repsPerSet % 1 === 0 ? a.repsPerSet : a.repsPerSet.toFixed(1)} powt.${a.mode === 'individual' ? '/seria (śr.)' : ''}`
     : a.isMax ? 'na maksa' : '—'
   return (
-    <div style={{ padding: '0.85rem 1rem', borderTop: `1px solid ${C.grayLight}` }}>
+    <div style={{ padding: '0.85rem 1rem', borderTop: '1px solid var(--border)' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontWeight: 800, fontSize: '0.92rem', color: C.navy }}>{a.name}</span>
-        <span style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray }}>
+        <span style={{ fontWeight: 700, fontSize: '0.92rem', color: 'var(--ink)' }}>{a.name}</span>
+        <span style={{ fontFamily: INTER, fontSize: '0.64rem', color: 'var(--muted)' }}>
           {a.mode === 'individual'
             ? `${a.athleteCount} ${a.athleteCount === 1 ? 'zawodniczka' : 'zawodniczek'} · ${repsLabel}`
             : `${a.sets ? `${a.sets} ser. · ` : ''}${repsLabel}${a.perRepSeconds > 0 ? ` · ${a.perRepSeconds}s/powt.` : ''}`}
@@ -228,33 +252,26 @@ function ExerciseCard({ a }: { a: ExerciseAnalysis }) {
       {a.dominant ? (
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', margin: '8px 0 4px' }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: sans, fontSize: '0.72rem', fontWeight: 700, color: C.navy }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: INTER, fontSize: '0.74rem', fontWeight: 700, color: 'var(--ink)' }}>
               <span style={{ width: 9, height: 9, borderRadius: '50%', background: CATEGORY_COLOR[a.dominant] }} />
               {CATEGORY_LABEL[a.dominant]}
             </span>
-            <span style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray }}>charakter: <strong style={{ color: C.navy }}>{CHARACTER_LABEL[a.character]}</strong></span>
-            {a.explosive && <span style={{ fontFamily: mono, fontSize: '0.6rem', fontWeight: 700, color: '#92600A', background: '#FEF6E0', borderRadius: 5, padding: '1px 6px' }}>⚡ eksplozywne</span>}
-            <span style={{ fontFamily: mono, fontSize: '0.6rem', fontWeight: 700, color: CONF_COLOR[a.confidence] }}>pewność: {CONFIDENCE_LABEL[a.confidence]}</span>
+            <span style={{ fontFamily: INTER, fontSize: '0.64rem', color: 'var(--muted)' }}>charakter: <strong style={{ color: 'var(--ink)' }}>{CHARACTER_LABEL[a.character]}</strong></span>
+            {a.explosive && <span style={{ fontFamily: INTER, fontSize: '0.62rem', fontWeight: 700, color: SEM.amber, background: SEM.amberBg, borderRadius: 5, padding: '1px 6px' }}>⚡ eksplozywne</span>}
+            <span style={{ fontFamily: INTER, fontSize: '0.62rem', fontWeight: 700, color: CONF_COLOR[a.confidence] }}>pewność: {CONFIDENCE_LABEL[a.confidence]}</span>
           </div>
 
           <ProfileBar profile={a.profile} />
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 6 }}>
-            {CATEGORY_ORDER.filter(c => a.profile[c] > 0.005).map(c => (
-              <span key={c} style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray }}>
-                <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 2, background: CATEGORY_COLOR[c], marginRight: 4, verticalAlign: 'middle' }} />
-                {CATEGORY_SHORT[c]} <strong style={{ color: C.navy }}>{pct(a.profile[c])}%</strong>
-              </span>
-            ))}
-          </div>
+          <CategoryBars profile={a.profile} short />
 
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 8, fontFamily: mono, fontSize: '0.62rem', color: C.gray }}>
-            <span>TUT/seria <strong style={{ color: C.navy }}>{fmtSeconds(a.tutPerSet)}</strong></span>
-            <span>TUT całk. <strong style={{ color: C.navy }}>{fmtSeconds(a.totalTut)}</strong></span>
-            <span>powt. całk. <strong style={{ color: C.navy }}>{a.totalReps || '—'}</strong></span>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 8, fontFamily: INTER, fontSize: '0.64rem', color: 'var(--muted)' }}>
+            <span>TUT/seria <strong style={{ color: 'var(--ink)' }}>{fmtSeconds(a.tutPerSet)}</strong></span>
+            <span>TUT całk. <strong style={{ color: 'var(--ink)' }}>{fmtSeconds(a.totalTut)}</strong></span>
+            <span>powt. całk. <strong style={{ color: 'var(--ink)' }}>{a.totalReps || '—'}</strong></span>
           </div>
         </>
       ) : (
-        <div style={{ fontFamily: mono, fontSize: '0.66rem', color: C.gray, marginTop: 6 }}>
+        <div style={{ fontFamily: INTER, fontSize: '0.68rem', color: 'var(--muted)', marginTop: 6 }}>
           Bodziec nieokreślony{
             a.mode === 'individual' ? ' — brak danych indywidualnych zawodniczek.'
             : a.isMax ? ' — ćwiczenie „na maksa” (liczba powtórzeń zależy od zawodniczki).'
@@ -266,8 +283,8 @@ function ExerciseCard({ a }: { a: ExerciseAnalysis }) {
       <VariantBreakdownBlock rows={a.variantBreakdown} />
       <AthleteBreakdownBlock rows={a.athleteBreakdown} />
 
-      <TagPills items={a.patterns} map={PATTERN_LABEL} color="#1A2E45" />
-      <TagPills items={a.characteristics} map={CHAR_LABEL} color="#6B4E0B" />
+      <TagPills items={a.patterns} map={PATTERN_LABEL} color="var(--navy-900)" />
+      <TagPills items={a.characteristics} map={CHAR_LABEL} color={SEM.amber} />
     </div>
   )
 }
@@ -281,41 +298,34 @@ export function StimulusSection({ exercises }: { exercises: ExerciseInput[] }) {
   const charEntries = Object.entries(w.characteristicShare).sort((a, b) => b[1] - a[1])
 
   return (
-    <div style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, overflow: 'hidden', marginBottom: '0.75rem', boxShadow: '0 4px 20px rgba(13,27,42,0.06)' }}>
+    <div className="coach-panel" style={{ marginBottom: '0.75rem' }}>
       {/* Profil całego treningu */}
-      <div style={{ padding: '1rem', background: C.offWhite, borderBottom: `1px solid ${C.grayLight}` }}>
+      <div style={{ padding: '1rem', background: 'var(--bg)', borderBottom: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
-          <span style={{ fontFamily: mono, fontSize: '0.64rem', color: C.gray, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700 }}>Profil treningu</span>
+          <span style={{ fontFamily: INTER, fontSize: '0.66rem', color: 'var(--muted-light)', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700 }}>Profil treningu</span>
           {w.dominant && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 800, fontSize: '0.92rem', color: C.navy }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: '0.92rem', color: 'var(--ink)' }}>
               <span style={{ width: 11, height: 11, borderRadius: '50%', background: CATEGORY_COLOR[w.dominant] }} />
               {CATEGORY_LABEL[w.dominant]}
             </span>
           )}
         </div>
         <ProfileBar profile={w.profile} height={12} />
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 8 }}>
-          {CATEGORY_ORDER.filter(c => w.profile[c] > 0.005).map(c => (
-            <span key={c} style={{ fontFamily: mono, fontSize: '0.64rem', color: C.gray }}>
-              <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: CATEGORY_COLOR[c], marginRight: 5, verticalAlign: 'middle' }} />
-              {CATEGORY_LABEL[c]} <strong style={{ color: C.navy }}>{pct(w.profile[c])}%</strong>
-            </span>
-          ))}
-        </div>
-        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 10, fontFamily: mono, fontSize: '0.64rem', color: C.gray }}>
-          <span>TUT treningu <strong style={{ color: C.navy }}>{fmtSeconds(w.totalTut)}</strong></span>
-          <span>powt. razem <strong style={{ color: C.navy }}>{w.totalReps || '—'}</strong></span>
-          <span>ćwiczeń sklasyfikowanych <strong style={{ color: C.navy }}>{w.classified}/{w.exercises.length}</strong></span>
+        <CategoryBars profile={w.profile} />
+        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 4, fontFamily: INTER, fontSize: '0.66rem', color: 'var(--muted)' }}>
+          <span>TUT treningu <strong style={{ color: 'var(--ink)' }}>{fmtSeconds(w.totalTut)}</strong></span>
+          <span>powt. razem <strong style={{ color: 'var(--ink)' }}>{w.totalReps || '—'}</strong></span>
+          <span>ćwiczeń sklasyfikowanych <strong style={{ color: 'var(--ink)' }}>{w.classified}/{w.exercises.length}</strong></span>
         </div>
 
         {(patternEntries.length > 0 || charEntries.length > 0) && (
           <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginTop: 10 }}>
             {patternEntries.length > 0 && (
               <div>
-                <div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Wzorce ruchu</div>
+                <div style={{ fontFamily: INTER, fontSize: '0.58rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Wzorce ruchu</div>
                 <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                   {patternEntries.map(([k, v]) => (
-                    <span key={k} style={{ fontFamily: mono, fontSize: '0.6rem', color: C.navy, background: C.white, border: `1px solid ${C.grayLight}`, borderRadius: 6, padding: '1px 7px' }}>
+                    <span key={k} style={{ fontFamily: INTER, fontSize: '0.62rem', color: 'var(--ink)', background: '#fff', border: '1px solid var(--border)', borderRadius: 6, padding: '1px 7px' }}>
                       {PATTERN_LABEL[k] || k} <strong>{pct(v)}%</strong>
                     </span>
                   ))}
@@ -324,10 +334,10 @@ export function StimulusSection({ exercises }: { exercises: ExerciseInput[] }) {
             )}
             {charEntries.length > 0 && (
               <div>
-                <div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.gray, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Charakterystyka</div>
+                <div style={{ fontFamily: INTER, fontSize: '0.58rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Charakterystyka</div>
                 <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                   {charEntries.map(([k, v]) => (
-                    <span key={k} style={{ fontFamily: mono, fontSize: '0.6rem', color: C.navy, background: C.white, border: `1px solid ${C.grayLight}`, borderRadius: 6, padding: '1px 7px' }}>
+                    <span key={k} style={{ fontFamily: INTER, fontSize: '0.62rem', color: 'var(--ink)', background: '#fff', border: '1px solid var(--border)', borderRadius: 6, padding: '1px 7px' }}>
                       {CHAR_LABEL[k] || k} <strong>{pct(v)}%</strong>
                     </span>
                   ))}

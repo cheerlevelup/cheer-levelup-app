@@ -3,15 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
-import type { CSSProperties } from 'react'
-
-const C = {
-  navy: '#0D1B2A', navyLight: '#1A2E45', navyBorder: '#243652',
-  gold: '#F5C842', white: '#FFFFFF', offWhite: '#F4F6F9',
-  gray: '#8A9BB0', grayLight: '#E8ECF2', red: '#EF4444', green: '#22C55E',
-}
-const sans = "'Space Grotesk', sans-serif"
-const mono = "'Space Mono', monospace"
+import { SetPageMeta } from '@/components/coach/PageMetaContext'
+import { Card, Field } from '@/components/coach/ui'
 
 const DAY_TEMPLATES: Record<number, string[]> = {
   1: ['Trening 1'],
@@ -31,27 +24,6 @@ const DAY_PRESETS: { label: string; days: string[] }[] = [
   { label: 'Dni tygodnia ×5', days: ['Poniedziałek', 'Wtorek', 'Środa', 'Czwartek', 'Piątek'] },
   { label: 'Własne', days: [] },
 ]
-
-function inp(extra?: CSSProperties): CSSProperties {
-  return {
-    width: '100%', minHeight: 44, border: `1.5px solid ${C.grayLight}`, borderRadius: 10,
-    background: C.offWhite, color: C.navy, padding: '0 0.875rem',
-    fontFamily: sans, fontSize: '0.95rem', outline: 'none', ...extra,
-  }
-}
-function lbl(): CSSProperties {
-  return {
-    display: 'block', fontFamily: mono, fontSize: '0.62rem', color: C.gray,
-    letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, fontWeight: 700,
-  }
-}
-function card(extra?: CSSProperties): CSSProperties {
-  return {
-    background: C.white, border: `1.5px solid ${C.grayLight}`,
-    borderRadius: 14, padding: '1.25rem', marginBottom: '1rem',
-    boxShadow: '0 2px 12px rgba(13,27,42,0.05)', ...extra,
-  }
-}
 
 export default function NewPlanClient(_props?: any) {
   const router = useRouter()
@@ -129,167 +101,127 @@ RIR = powtórzenia w zapasie (kliknij RIR w ćwiczeniu po wyjaśnienie)`
 
   return (
     <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: ${C.offWhite}; }
-        input, textarea, button { font-family: inherit; }
-      `}</style>
+      <SetPageMeta title="Nowy plan" backHref="/coach/plans" backLabel="Plany" />
+      <div className="coach-content">
+        <div className="coach-wizard-hero">
+          <span className="coach-eyebrow">Tworzenie planu</span>
+          <h2>Nowy plan treningowy</h2>
+        </div>
 
-      <div style={{ minHeight: '100vh', background: C.offWhite, fontFamily: sans, color: C.navy }}>
-        {/* Header */}
-        <header style={{ background: C.navy, padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', gap: 16, position: 'sticky', top: 0, zIndex: 10 }}>
-          <button onClick={() => router.push('/coach/plans')}
-            style={{ border: `1.5px solid ${C.navyBorder}`, background: C.navyLight, color: C.white, borderRadius: 9, padding: '0.5rem 0.85rem', fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer' }}>
-            ← Plany
-          </button>
-          <div>
-            <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 3 }}>Tworzenie planu</div>
-            <div style={{ color: C.white, fontWeight: 800, fontSize: '1.1rem' }}>Nowy plan treningowy</div>
-          </div>
-        </header>
+        <Card className="coach-wizard-card">
+          <span className="coach-eyebrow">Podstawowe informacje</span>
 
-        <main style={{ maxWidth: 680, margin: '0 auto', padding: '1.5rem 1rem 3rem' }}>
+          <Field label="Nazwa planu *">
+            <input
+              type="text" value={name} onChange={e => setName(e.target.value)}
+              placeholder="np. Plan siłowy — wrzesień 2026"
+              autoFocus
+            />
+          </Field>
 
-          {/* Plan details */}
-          <div style={card()}>
-            <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '1rem', fontWeight: 700 }}>
-              Podstawowe informacje
-            </div>
+          <Field label="Notatki dla zawodniczek — widoczne pod przyciskiem ℹ️ w widoku treningu">
+            <textarea
+              value={description} onChange={e => setDescription(e.target.value)}
+              placeholder="Skróty, wskazówki, informacje dla zawodniczek..."
+              rows={5}
+            />
+          </Field>
+        </Card>
 
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={lbl()}>Nazwa planu *</label>
-              <input
-                type="text" value={name} onChange={e => setName(e.target.value)}
-                placeholder="np. Plan siłowy — wrzesień 2026"
-                autoFocus
-                style={inp()}
-              />
-            </div>
+        <Card className="coach-wizard-card">
+          <span className="coach-eyebrow">Struktura planu</span>
 
-            <div>
-              <label style={lbl()}>Notatki dla zawodniczek <span style={{ fontWeight: 400, textTransform: 'none', fontSize: '0.7rem' }}>— widoczne pod przyciskiem ℹ️ w widoku treningu</span></label>
-              <textarea
-                value={description} onChange={e => setDescription(e.target.value)}
-                placeholder="Skróty, wskazówki, informacje dla zawodniczek..."
-                rows={5}
-                style={{ ...inp({ minHeight: 110, padding: '0.75rem 0.875rem', resize: 'vertical' }), display: 'block' }}
-              />
-            </div>
-          </div>
-
-          {/* Struktura */}
-          <div style={card()}>
-            <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '1rem', fontWeight: 700 }}>
-              Struktura planu
-            </div>
-
-            {/* Liczba tygodni */}
-            <div style={{ marginBottom: '1.25rem' }}>
-              <label style={lbl()}>Liczba tygodni</label>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {[2, 3, 4, 6, 8, 10, 12].map(n => (
-                  <button key={n} onClick={() => setWeeksCount(n)} style={{
-                    width: 48, height: 44, borderRadius: 9,
-                    border: `1.5px solid ${weeksCount === n ? C.gold : C.grayLight}`,
-                    background: weeksCount === n ? C.navy : C.offWhite,
-                    color: weeksCount === n ? C.gold : C.navy,
-                    fontFamily: mono, fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer',
-                  }}>{n}</button>
-                ))}
-              </div>
-            </div>
-
-            {/* Dni na tydzień */}
-            <div style={{ marginBottom: '1.25rem' }}>
-              <label style={lbl()}>Treningi na tydzień</label>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {[1, 2, 3, 4, 5, 6].map(n => (
-                  <button key={n} onClick={() => setDayCount(n)} style={{
-                    width: 48, height: 44, borderRadius: 9,
-                    border: `1.5px solid ${daysPerWeek === n ? C.gold : C.grayLight}`,
-                    background: daysPerWeek === n ? C.navy : C.offWhite,
-                    color: daysPerWeek === n ? C.gold : C.navy,
-                    fontFamily: mono, fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer',
-                  }}>{n}</button>
-                ))}
-              </div>
-            </div>
-
-            {/* Szablony nazw */}
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={lbl()}>Schemat nazw treningów</label>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: '0.75rem' }}>
-                {DAY_PRESETS.filter(p => p.days.length === 0 || p.days.length === daysPerWeek).map(preset => (
-                  <button key={preset.label} onClick={() => applyPreset(preset)} style={{
-                    borderRadius: 8, border: `1.5px solid ${C.grayLight}`,
-                    background: C.offWhite, color: C.navy,
-                    padding: '0.4rem 0.75rem', fontFamily: mono, fontSize: '0.65rem',
-                    fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
-                  }}>
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-              {/* Edycja nazw dni */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
-                {dayNames.slice(0, daysPerWeek).map((dn, i) => (
-                  <div key={i}>
-                    <div style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, marginBottom: 3 }}>Dzień {i + 1}</div>
-                    <input
-                      value={dn}
-                      onChange={e => {
-                        setCustomDays(true)
-                        setDayNames(prev => prev.map((d, j) => j === i ? e.target.value : d))
-                      }}
-                      style={{ ...inp({ minHeight: 36, fontSize: '0.82rem', padding: '0 0.6rem' }) }}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Podsumowanie */}
-            <div style={{ background: C.offWhite, borderRadius: 10, padding: '0.75rem 1rem', display: 'flex', gap: 24 }}>
-              {[
-                { val: weeksCount, lbl: 'tygodni' },
-                { val: daysPerWeek, lbl: 'treningów/tydz.' },
-                { val: totalDays, lbl: 'treningów łącznie' },
-              ].map(({ val, lbl: l }) => (
-                <div key={l}>
-                  <div style={{ fontFamily: mono, fontWeight: 800, fontSize: '1.2rem', color: C.navy }}>{val}</div>
-                  <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray }}>{l}</div>
-                </div>
+          <Field label="Liczba tygodni">
+            <div className="coach-chip-select-row">
+              {[2, 3, 4, 6, 8, 10, 12].map(n => (
+                <button
+                  key={n}
+                  type="button"
+                  className={`coach-chip-select ${weeksCount === n ? 'coach-active' : ''}`}
+                  onClick={() => setWeeksCount(n)}
+                >
+                  {n}
+                </button>
               ))}
             </div>
-          </div>
+          </Field>
 
-          {error && (
-            <div style={{ background: '#FEF2F2', border: `1.5px solid ${C.red}`, borderRadius: 10, padding: '0.75rem 1rem', marginBottom: '1rem', color: C.red, fontWeight: 700, fontSize: '0.88rem' }}>
-              ❌ {error}
+          <Field label="Treningi na tydzień">
+            <div className="coach-chip-select-row">
+              {[1, 2, 3, 4, 5, 6].map(n => (
+                <button
+                  key={n}
+                  type="button"
+                  className={`coach-chip-select ${daysPerWeek === n ? 'coach-active' : ''}`}
+                  onClick={() => setDayCount(n)}
+                >
+                  {n}
+                </button>
+              ))}
             </div>
-          )}
+          </Field>
 
-          <button
-            onClick={handleCreate}
-            disabled={saving || !name.trim()}
-            style={{
-              width: '100%', padding: '1rem',
-              background: saving || !name.trim() ? C.grayLight : C.navy,
-              color: saving || !name.trim() ? C.gray : C.gold,
-              border: 'none', borderRadius: 12, fontWeight: 900, fontSize: '1rem',
-              cursor: saving || !name.trim() ? 'default' : 'pointer',
-              fontFamily: sans, letterSpacing: '0.02em',
-              transition: 'background 0.15s',
-            }}
-          >
-            {saving ? 'Tworzę plan...' : `Utwórz plan i przejdź do edytora →`}
-          </button>
+          <Field label="Schemat nazw treningów">
+            <div className="coach-scheme-row" style={{ flexWrap: 'wrap' }}>
+              {DAY_PRESETS.filter(p => p.days.length === 0 || p.days.length === daysPerWeek).map(preset => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  className="coach-scheme-btn"
+                  onClick={() => applyPreset(preset)}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
 
-          <div style={{ textAlign: 'center', marginTop: '0.75rem', fontFamily: mono, fontSize: '0.62rem', color: C.gray }}>
-            Możesz edytować wszystko po utworzeniu — dodawać tygodnie, dni i bloki
+            <div className="coach-day-name-grid">
+              {dayNames.slice(0, daysPerWeek).map((dn, i) => (
+                <Field key={i} label={`Dzień ${i + 1}`}>
+                  <input
+                    value={dn}
+                    onChange={e => {
+                      setCustomDays(true)
+                      setDayNames(prev => prev.map((d, j) => j === i ? e.target.value : d))
+                    }}
+                  />
+                </Field>
+              ))}
+            </div>
+          </Field>
+
+          <div className="coach-wizard-summary">
+            {[
+              { val: weeksCount, lbl: 'tygodni' },
+              { val: daysPerWeek, lbl: 'treningów/tydz.' },
+              { val: totalDays, lbl: 'treningów łącznie' },
+            ].map(({ val, lbl: l }) => (
+              <div key={l} className="coach-wizard-summary-item">
+                <div className="coach-num">{val}</div>
+                <div className="coach-lbl">{l}</div>
+              </div>
+            ))}
           </div>
-        </main>
+        </Card>
+
+        {error && (
+          <div style={{ background: '#FEF2F2', border: '1.5px solid #EF4444', borderRadius: 10, padding: '0.75rem 1rem', marginBottom: '1rem', color: '#EF4444', fontWeight: 700, fontSize: '0.88rem', fontFamily: 'var(--font-inter),sans-serif' }}>
+            {error}
+          </div>
+        )}
+
+        <button
+          type="button"
+          className="coach-wizard-submit"
+          onClick={handleCreate}
+          disabled={saving || !name.trim()}
+        >
+          {saving ? 'Tworzę plan...' : 'Utwórz plan i przejdź do edytora →'}
+        </button>
+
+        <div className="coach-wizard-hint">
+          Możesz edytować wszystko po utworzeniu — dodawać tygodnie, dni i bloki
+        </div>
       </div>
     </>
   )
