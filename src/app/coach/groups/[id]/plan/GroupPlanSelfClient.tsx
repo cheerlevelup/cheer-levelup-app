@@ -2,7 +2,7 @@
 // src/app/coach/groups/[id]/plan/GroupPlanSelfClient.tsx
 // Zakładka "Plan" grupy samodzielnej — obciążenia z aktywnego planu (ćwiczenia ×
 // zawodniczki), z modyfikacjami trenera i faktycznymi danymi z treningu.
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { TabsNav, Card } from '@/components/coach/ui'
@@ -133,6 +133,11 @@ export default function GroupPlanSelfClient({ group, athletes, currentPlan, acti
     setPlanExLoading(false)
   }
 
+  useEffect(() => {
+    if (currentPlan && activePlanDays.length > 0) loadPlanExercises()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPlan?.id])
+
   const fmt = (s: string) => s.replace(/-/g, ' ')
 
   return (
@@ -158,11 +163,8 @@ export default function GroupPlanSelfClient({ group, athletes, currentPlan, acti
                 <div style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.6rem', color: 'var(--muted-light)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Obciążenia z planu</div>
                 <div style={{ fontWeight: 800, color: 'var(--navy-900)', marginTop: 2 }}>{currentPlan.name} — ćwiczenia × zawodniczki</div>
               </div>
-              {!planExData && (
-                <button onClick={loadPlanExercises} disabled={planExLoading}
-                  style={{ border: 'none', background: 'var(--navy-900)', color: 'var(--gold)', borderRadius: 8, padding: '0.5rem 0.9rem', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer', opacity: planExLoading ? 0.6 : 1 }}>
-                  {planExLoading ? 'Ładuję...' : '⚡ Załaduj tabelę'}
-                </button>
+              {planExLoading && (
+                <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.72rem', color: 'var(--muted-light)' }}>Ładuję...</span>
               )}
             </div>
             {planExData && (() => {

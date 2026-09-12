@@ -844,7 +844,7 @@
   }
   .coach-track-table td{padding:2px 6px;border-bottom:1px solid var(--border);vertical-align:middle;}
   .coach-track-table tr:last-child td{border-bottom:none;}
-  .coach-track-name{font-size:12px;font-weight:600;color:var(--ink);white-space:nowrap;}
+  .coach-track-name{font-family:var(--font-inter),sans-serif;font-size:11px;font-weight:600;color:var(--ink);white-space:nowrap;}
   .coach-track-progress-cell{min-width:100px;}
   .coach-track-pct{font-size:10.5px;font-weight:700;color:var(--ink);}
   .coach-track-frac{font-size:9px;color:var(--muted-light);font-family:var(--font-inter),sans-serif;}

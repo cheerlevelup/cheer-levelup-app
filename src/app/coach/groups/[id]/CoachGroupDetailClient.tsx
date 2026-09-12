@@ -1337,7 +1337,7 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                               onMouseEnter={e => (e.currentTarget.style.background = '#F0F4FF')}
                               onMouseLeave={e => (e.currentTarget.style.background = rowBg)}>
                               <td style={{ position: 'sticky', left: 0, zIndex: 1, background: 'inherit', whiteSpace: 'nowrap' }}>
-                                <button onClick={() => router.push(`/coach/athletes/${athlete.id}`)} className="coach-track-name" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, font: 'inherit', textAlign: 'left' }}>{athlete.full_name}</button>
+                                <button onClick={() => router.push(`/coach/athletes/${athlete.id}`)} className="coach-track-name" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' }}>{athlete.full_name}</button>
                               </td>
                               <td className="coach-track-progress-cell" style={{ textAlign: 'center' }}>
                                 {progress ? (

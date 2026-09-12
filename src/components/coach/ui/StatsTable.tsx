@@ -15,13 +15,13 @@ const PERIODS = [
 
 function PeriodSelector({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return (
-    <div style={{ display: 'flex', background: 'var(--bg)', border: `1.5px solid var(--border)`, borderRadius: 9, overflow: 'hidden', flexShrink: 0 }}>
+    <div style={{ display: 'flex', background: 'var(--bg)', border: `1.5px solid var(--border)`, borderRadius: 7, overflow: 'hidden', flexShrink: 0 }}>
       {PERIODS.map(p => (
         <button key={p.days} onClick={() => onChange(p.days)} style={{
-          padding: '0.35rem 0.75rem', border: 'none', cursor: 'pointer',
+          padding: '0.22rem 0.55rem', border: 'none', cursor: 'pointer',
           background: value === p.days ? 'var(--navy-900)' : 'transparent',
           color: value === p.days ? 'var(--gold)' : 'var(--muted-light)',
-          fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.65rem', fontWeight: value === p.days ? 800 : 600,
+          fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.58rem', fontWeight: value === p.days ? 800 : 600,
           transition: 'all 0.15s',
         }}>{p.label}</button>
       ))}
@@ -35,10 +35,10 @@ export default function StatsTable({ title, period, onPeriodChange, cols, rows, 
   style?: React.CSSProperties
 }) {
   return (
-    <div style={{ background: '#fff', border: `1.5px solid var(--border)`, borderRadius: 14, overflow: 'hidden', boxShadow: '0 2px 12px rgba(13,27,42,0.06)', ...style }}>
+    <div style={{ background: '#fff', border: `1.5px solid var(--border)`, borderRadius: 10, overflow: 'hidden', boxShadow: '0 2px 12px rgba(13,27,42,0.06)', ...style }}>
       {/* header */}
-      <div style={{ padding: '0.875rem 1.25rem', borderBottom: `1.5px solid var(--border)`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, background: 'var(--bg)' }}>
-        <div style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.62rem', color: 'var(--muted-light)', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>{title}</div>
+      <div style={{ padding: '0.45rem 0.7rem', borderBottom: `1.5px solid var(--border)`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, background: 'var(--bg)' }}>
+        <div style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.56rem', color: 'var(--muted-light)', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>{title}</div>
         <PeriodSelector value={period} onChange={onPeriodChange} />
       </div>
       <div style={{ overflowX: 'auto' }}>
@@ -47,14 +47,14 @@ export default function StatsTable({ title, period, onPeriodChange, cols, rows, 
             <tr style={{ background: 'var(--navy-900)' }}>
               {cols.map((col, i) => (
                 <th key={col.key} style={{
-                  padding: i === 0 ? '0.65rem 1rem' : '0.65rem 0.75rem',
+                  padding: i === 0 ? '0.3rem 0.6rem' : '0.3rem 0.45rem',
                   textAlign: col.left ? 'left' : 'center',
-                  fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.58rem', color: 'var(--gold)',
-                  letterSpacing: '0.08em', textTransform: 'uppercase',
+                  fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.52rem', color: 'var(--gold)',
+                  letterSpacing: '0.06em', textTransform: 'uppercase',
                   borderBottom: `1.5px solid var(--navy-600)`,
                   whiteSpace: 'nowrap', fontWeight: 700,
                 }}>
-                  {col.emoji && <span style={{ marginRight: 4 }}>{col.emoji}</span>}{col.key}
+                  {col.emoji && <span style={{ marginRight: 3 }}>{col.emoji}</span>}{col.key}
                 </th>
               ))}
             </tr>
@@ -66,21 +66,21 @@ export default function StatsTable({ title, period, onPeriodChange, cols, rows, 
                 <tr key={row.id} style={{ background: rowBg, transition: 'background 0.1s' }}
                   onMouseEnter={e => (e.currentTarget.style.background = '#F0F4FF')}
                   onMouseLeave={e => (e.currentTarget.style.background = rowBg)}>
-                  <td style={{ padding: '0.65rem 1rem', borderBottom: `1px solid var(--border)` }}>
-                    <button onClick={() => onAthleteClick(row.id)} style={{ background: 'none', border: 'none', color: 'var(--navy-900)', fontWeight: 700, cursor: 'pointer', padding: 0, fontSize: '0.88rem', textAlign: 'left' }}>
+                  <td style={{ padding: '0.28rem 0.6rem', borderBottom: `1px solid var(--border)` }}>
+                    <button onClick={() => onAthleteClick(row.id)} style={{ background: 'none', border: 'none', color: 'var(--navy-900)', fontFamily: 'var(--font-inter),sans-serif', fontWeight: 700, cursor: 'pointer', padding: 0, fontSize: '0.72rem', textAlign: 'left', whiteSpace: 'nowrap' }}>
                       {row.name}
                     </button>
                   </td>
                   {row.cells.map((cell, ci) => (
-                    <td key={ci} style={{ padding: '0.55rem 0.75rem', textAlign: 'center', borderBottom: `1px solid var(--border)` }}>
+                    <td key={ci} style={{ padding: '0.22rem 0.45rem', textAlign: 'center', borderBottom: `1px solid var(--border)` }}>
                       {cell.v === null || cell.v === undefined
-                        ? <span style={{ color: 'var(--border)', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.7rem' }}>—</span>
+                        ? <span style={{ color: 'var(--border)', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.62rem' }}>—</span>
                         : <span style={{
                             display: 'inline-block',
                             background: cell.color ? cell.color + '1A' : 'var(--bg)',
                             color: cell.color ?? 'var(--navy-900)',
-                            borderRadius: 6, padding: '2px 8px',
-                            fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.75rem', fontWeight: 800,
+                            borderRadius: 5, padding: '1px 6px',
+                            fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.66rem', fontWeight: 800,
                           }}>{cell.v}</span>
                       }
                     </td>
