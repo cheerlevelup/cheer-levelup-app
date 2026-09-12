@@ -33,6 +33,60 @@ export default async function GroupStatsPage({ params }: Props) {
     .order('full_name', { ascending: true })
 
   const athletes = (rawAthletes || []).filter((a: any) => !a.archived)
+  const athleteIdsForSelf = athletes.map((a: any) => a.id)
+
+  const isManaged = (group as any).group_type === 'managed'
+
+  // Grupy samodzielne nie mają datowanych treningów grupowych (group_trainings) —
+  // "Statystyki treningowe" liczymy z przypisanego planu (workout_sessions/feedback).
+  let selfSessions: any[] = []
+  let selfFeedbacks: any[] = []
+  let selfActivePlanDays: any[] = []
+  if (!isManaged && athleteIdsForSelf.length > 0) {
+    const { data: groupAssignments } = await supabase
+      .from('athlete_workout_assignments')
+      .select('plan_id')
+      .eq('group_id', groupId)
+      .eq('is_active', true)
+    const { data: athleteAssignments } = await supabase
+      .from('athlete_workout_assignments')
+      .select('plan_id')
+      .in('athlete_id', athleteIdsForSelf)
+      .eq('is_active', true)
+    const allAssignments = [...(groupAssignments || []), ...(athleteAssignments || [])]
+    const currentPlanId = allAssignments[0]?.plan_id ?? null
+
+    if (currentPlanId) {
+      const { data: weeks } = await supabase
+        .from('workout_weeks')
+        .select('id, plan_id')
+        .eq('plan_id', currentPlanId)
+      const weekIds = (weeks || []).map((w: any) => w.id)
+      if (weekIds.length > 0) {
+        const { data: daysData } = await supabase
+          .from('workout_days')
+          .select('id')
+          .in('week_id', weekIds)
+        selfActivePlanDays = daysData || []
+      }
+    }
+
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+    const { data: sessions } = await supabase
+      .from('workout_sessions')
+      .select('athlete_id, workout_day_id, completed, created_at, date_completed')
+      .in('athlete_id', athleteIdsForSelf)
+    selfSessions = sessions || []
+
+    const { data: feedbacks } = await supabase
+      .from('post_session_feedback')
+      .select('athlete_id, session_rpe, created_at')
+      .in('athlete_id', athleteIdsForSelf)
+      .gte('created_at', thirtyDaysAgo.toISOString())
+    selfFeedbacks = feedbacks || []
+  }
 
   const { data: trainings } = await supabase
     .from('group_trainings')
@@ -83,6 +137,9 @@ export default async function GroupStatsPage({ params }: Props) {
       exercises={exercises}
       entries={entries}
       bodyWeights={bodyWeights}
+      selfSessions={selfSessions}
+      selfFeedbacks={selfFeedbacks}
+      selfActivePlanDays={selfActivePlanDays}
     />
   )
 }

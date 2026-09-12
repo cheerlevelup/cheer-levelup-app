@@ -5,12 +5,13 @@
 //    wybór ćwiczenia i metryki osi Y; oś X = kolejne daty treningów.
 //  • Obecność — tabela daty × zawodniczki + statystyki opuszczonych treningów.
 import { useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Download } from 'lucide-react'
 import { loadPdf, pl, drawHeaderBar, drawFooter, svgToPng, svgMarkupToPng, TABLE_STYLES } from '@/lib/groupPdf'
 import { coerceVariant, cleanVariantName, normExerciseName, groupKey } from '@/lib/variants'
 import { coachTheme } from '@/lib/coach-theme'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
-import { TabsNav, Card, Button, SegmentedControl, Field } from '@/components/coach/ui'
+import { TabsNav, Card, Button, SegmentedControl, Field, StatsTable } from '@/components/coach/ui'
 import GroupSummaryClient from '../summary/GroupSummaryClient'
 
 // Paleta dla zawodniczek (linie wykresu / obecność). Powtarza się przy >16 osobach.
@@ -21,8 +22,11 @@ const PALETTE = [
   '#9333EA', '#CA8A04', '#0284C7', '#15803D',
 ]
 
-type Group = { id: number; name: string }
+type Group = { id: number; name: string; group_type?: string }
 type Athlete = { id: number; full_name: string }
+type SelfSession = { athlete_id: number; workout_day_id: number; completed?: boolean; created_at: string; date_completed?: string | null }
+type SelfFeedback = { athlete_id: number; session_rpe?: number | null; created_at: string }
+type SelfPlanDay = { id: number }
 type Training = { id: number; group_id: number; training_date: string; absent_athlete_ids?: number[] | null }
 type SetRow = { reps?: string; tempo?: string; weight?: string; skipped?: boolean }
 type VariantDef = string | { name?: string; sets?: number | null; reps?: string | null; tempo?: string | null; bodyweight?: boolean | null }
@@ -41,6 +45,82 @@ interface Props {
   exercises: Exercise[]
   entries: Entry[]
   bodyWeights: Record<number, number>
+  selfSessions?: SelfSession[]
+  selfFeedbacks?: SelfFeedback[]
+  selfActivePlanDays?: SelfPlanDay[]
+}
+
+function avg(arr: number[]): number | null {
+  if (!arr.length) return null
+  return arr.reduce((a, b) => a + b, 0) / arr.length
+}
+
+function filterByDays<T extends { [key: string]: any }>(rows: T[], days: number, dateField = 'created_at'): T[] {
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - days)
+  return rows.filter(r => new Date(r[dateField]) >= cutoff)
+}
+
+// Statystyki treningowe dla grup samodzielnych — bez datowanych treningów grupowych,
+// postęp liczony z przypisanego planu (workout_sessions) i feedbacku po sesji.
+function SelfGroupTrainingStats({ athletes, sessions, feedbacks, activePlanDays, onAthleteClick }: {
+  athletes: Athlete[]
+  sessions: SelfSession[]
+  feedbacks: SelfFeedback[]
+  activePlanDays: SelfPlanDay[]
+  onAthleteClick: (id: number) => void
+}) {
+  const [period, setPeriod] = useState(30)
+
+  const sessionIndex: Record<string, SelfSession> = {}
+  for (const s of sessions) {
+    const key = `${s.athlete_id}_${s.workout_day_id}`
+    if (!sessionIndex[key] || new Date(s.created_at) > new Date(sessionIndex[key].created_at)) sessionIndex[key] = s
+  }
+
+  function getProgress(athleteId: number) {
+    if (activePlanDays.length === 0) return null
+    const done = activePlanDays.filter(d => sessionIndex[`${athleteId}_${d.id}`]?.completed).length
+    return { done, total: activePlanDays.length }
+  }
+
+  return (
+    <StatsTable
+      title="Statystyki treningowe"
+      period={period}
+      onPeriodChange={setPeriod}
+      cols={[
+        { key: 'Zawodniczka', left: true },
+        { key: 'Treningi', emoji: '🏋️' },
+        { key: 'Ukończone', emoji: '✅' },
+        { key: '% planu', emoji: '📊' },
+        { key: 'Śr. RPE', emoji: '🔥' },
+        { key: 'Min RPE', emoji: '↓' },
+        { key: 'Max RPE', emoji: '↑' },
+      ]}
+      rows={athletes.map(athlete => {
+        const athFb = filterByDays(feedbacks.filter(f => f.athlete_id === athlete.id), period)
+        const rpeVals = athFb.map(f => f.session_rpe).filter((v): v is number => v != null)
+        const rpeAvg = avg(rpeVals)
+        const completed = filterByDays(sessions.filter(s => s.athlete_id === athlete.id && s.completed), period, 'date_completed').length
+        const progress = getProgress(athlete.id)
+        const pct = progress ? Math.round((progress.done / progress.total) * 100) : null
+        const rpeColor = rpeAvg === null ? undefined : rpeAvg >= 8 ? '#EF4444' : rpeAvg >= 6 ? 'var(--gold)' : 'var(--green)'
+        return {
+          id: athlete.id, name: athlete.full_name,
+          cells: [
+            { v: athFb.length || null },
+            { v: completed || null },
+            { v: pct !== null ? `${pct}%` : null, color: pct === null ? undefined : pct >= 80 ? 'var(--green)' : pct >= 50 ? 'var(--gold)' : '#EF4444' },
+            { v: rpeAvg !== null ? rpeAvg.toFixed(1) : null, color: rpeColor },
+            { v: rpeVals.length ? Math.min(...rpeVals) : null },
+            { v: rpeVals.length ? Math.max(...rpeVals) : null },
+          ],
+        }
+      })}
+      onAthleteClick={onAthleteClick}
+    />
+  )
 }
 
 type Metric = 'weight_max' | 'reps_sum' | 'volume'
@@ -279,7 +359,8 @@ function chartSvgMarkup(dates: string[], series: { color: string; points: (numbe
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${p}</svg>`
 }
 
-export default function GroupStatsClient({ group, athletes, trainings, exercises, entries, bodyWeights }: Props) {
+export default function GroupStatsClient({ group, athletes, trainings, exercises, entries, bodyWeights, selfSessions = [], selfFeedbacks = [], selfActivePlanDays = [] }: Props) {
+  const router = useRouter()
   const [tab, setTab] = useState<'stats' | 'summary'>('stats')
   // Podsumowanie (osadzone) oczekuje najnowszego treningu jako trainings[0] —
   // ta strona sortuje rosnąco (do wykresów w czasie), więc dajemy mu osobną, malejącą kopię.
@@ -562,6 +643,14 @@ export default function GroupStatsClient({ group, athletes, trainings, exercises
       <div className="coach-content">
         {athletes.length === 0 ? (
           <Card><div className="coach-empty-list">Brak zawodniczek w grupie.</div></Card>
+        ) : group.group_type !== 'managed' ? (
+          <SelfGroupTrainingStats
+            athletes={athletes}
+            sessions={selfSessions}
+            feedbacks={selfFeedbacks}
+            activePlanDays={selfActivePlanDays}
+            onAthleteClick={id => router.push(`/coach/athletes/${id}`)}
+          />
         ) : trainings.length === 0 ? (
           <Card><div className="coach-empty-list">Brak treningów — najpierw przeprowadź lub wgraj trening.</div></Card>
         ) : (

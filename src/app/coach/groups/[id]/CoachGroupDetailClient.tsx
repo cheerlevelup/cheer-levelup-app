@@ -6,33 +6,12 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import ModuleConfigPanel from '@/components/ModuleConfigPanel'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
-import { Card, Modal, Field, Button, TabsNav, SegmentedControl } from '@/components/coach/ui'
+import { Card, Modal, Field, Button, TabsNav, SegmentedControl, StatsTable } from '@/components/coach/ui'
+import { dedupeLogs } from '@/lib/coach/dedupeLogs'
 
 const thStyle: React.CSSProperties = { padding: '0.75rem 0.5rem', textAlign: 'center', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.6rem', color: 'var(--muted-light)', background: 'var(--bg)', borderBottom: `1.5px solid var(--border)`, whiteSpace: 'nowrap', minWidth: 44 }
 function tdWs(bg: string): React.CSSProperties { return { padding: '0.4rem 0.5rem', textAlign: 'center', borderBottom: `1.5px solid var(--border)`, background: bg, verticalAlign: 'middle' } }
 function statTd(bg: string): React.CSSProperties { return { padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid var(--border)`, background: bg, fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.78rem', fontWeight: 700, color: 'var(--navy-900)' } }
-
-type MinimalSetLog = {
-  id?: number
-  created_at?: string | null
-  workout_session_id?: number | null
-  block_exercise_id?: number | null
-  set_number: number
-  is_warmup?: boolean | null
-}
-
-function dedupeLogs<T extends MinimalSetLog>(logs: T[]) {
-  const byKey = new Map<string, T>()
-  for (const log of logs || []) {
-    if (!log.block_exercise_id) continue
-    const key = `${log.workout_session_id || 0}:${log.block_exercise_id}:${log.set_number}:${log.is_warmup ? 'w' : 'm'}`
-    const existing = byKey.get(key)
-    const logTime = new Date(log.created_at || 0).getTime()
-    const existingTime = new Date(existing?.created_at || 0).getTime()
-    if (!existing || logTime >= existingTime || (log.id || 0) > (existing.id || 0)) byKey.set(key, log)
-  }
-  return Array.from(byKey.values())
-}
 
 function CellStatus({ session }: { session: any | null }) {
   if (!session) return <div className="coach-track-status coach-none">○</div>
@@ -838,113 +817,6 @@ function getAthleteWellnessSummary(athleteId: number, logs: any[]) {
 }
 
 
-// ── StatsCard — reusable styled stats table ────────────────────────────────
-
-type StatCell = { v: string | number | null; color?: string }
-type StatRow = { id: number; name: string; cells: StatCell[] }
-type ColDef = { key: string; left?: boolean; emoji?: string }
-
-function StatsCard({ title, period, onPeriodChange, cols, rows, onAthleteClick, style }: {
-  title: string; period: number; onPeriodChange: (v: number) => void
-  cols: ColDef[]; rows: StatRow[]; onAthleteClick: (id: number) => void
-  style?: React.CSSProperties
-}) {
-  return (
-    <div style={{ background: '#fff', border: `1.5px solid var(--border)`, borderRadius: 14, overflow: 'hidden', boxShadow: '0 2px 12px rgba(13,27,42,0.06)', ...style }}>
-      {/* header */}
-      <div style={{ padding: '0.875rem 1.25rem', borderBottom: `1.5px solid var(--border)`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, background: 'var(--bg)' }}>
-        <div style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.62rem', color: 'var(--muted-light)', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>{title}</div>
-        <PeriodSelector value={period} onChange={onPeriodChange} />
-      </div>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-          <thead>
-            <tr style={{ background: 'var(--navy-900)' }}>
-              {cols.map((col, i) => (
-                <th key={col.key} style={{
-                  padding: i === 0 ? '0.65rem 1rem' : '0.65rem 0.75rem',
-                  textAlign: col.left ? 'left' : 'center',
-                  fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.58rem', color: 'var(--gold)',
-                  letterSpacing: '0.08em', textTransform: 'uppercase',
-                  borderBottom: `1.5px solid var(--navy-600)`,
-                  whiteSpace: 'nowrap', fontWeight: 700,
-                }}>
-                  {col.emoji && <span style={{ marginRight: 4 }}>{col.emoji}</span>}{col.key}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, ri) => {
-              const rowBg = ri % 2 === 0 ? '#fff' : '#FAFBFC'
-              return (
-                <tr key={row.id} style={{ background: rowBg, transition: 'background 0.1s' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = '#F0F4FF')}
-                  onMouseLeave={e => (e.currentTarget.style.background = rowBg)}>
-                  <td style={{ padding: '0.65rem 1rem', borderBottom: `1px solid var(--border)` }}>
-                    <button onClick={() => onAthleteClick(row.id)} style={{ background: 'none', border: 'none', color: 'var(--navy-900)', fontWeight: 700, cursor: 'pointer', padding: 0, fontSize: '0.88rem', textAlign: 'left' }}>
-                      {row.name}
-                    </button>
-                  </td>
-                  {row.cells.map((cell, ci) => (
-                    <td key={ci} style={{ padding: '0.55rem 0.75rem', textAlign: 'center', borderBottom: `1px solid var(--border)` }}>
-                      {cell.v === null || cell.v === undefined
-                        ? <span style={{ color: 'var(--border)', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.7rem' }}>—</span>
-                        : <span style={{
-                            display: 'inline-block',
-                            background: cell.color ? cell.color + '1A' : 'var(--bg)',
-                            color: cell.color ?? 'var(--navy-900)',
-                            borderRadius: 6, padding: '2px 8px',
-                            fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.75rem', fontWeight: 800,
-                          }}>{cell.v}</span>
-                      }
-                    </td>
-                  ))}
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}
-
-const PERIODS = [
-  { label: '7 dni', days: 7 },
-  { label: '14 dni', days: 14 },
-  { label: '30 dni', days: 30 },
-]
-
-function PeriodSelector({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  return (
-    <div style={{ display: 'flex', background: 'var(--bg)', border: `1.5px solid var(--border)`, borderRadius: 9, overflow: 'hidden', flexShrink: 0 }}>
-      {PERIODS.map(p => (
-        <button key={p.days} onClick={() => onChange(p.days)} style={{
-          padding: '0.35rem 0.75rem', border: 'none', cursor: 'pointer',
-          background: value === p.days ? 'var(--navy-900)' : 'transparent',
-          color: value === p.days ? 'var(--gold)' : 'var(--muted-light)',
-          fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.65rem', fontWeight: value === p.days ? 800 : 600,
-          transition: 'all 0.15s',
-        }}>{p.label}</button>
-      ))}
-    </div>
-  )
-}
-
-// Value badge — colored pill
-function Val({ v, color, suffix = '' }: { v: string | number | null; color?: string; suffix?: string }) {
-  if (v === null || v === undefined || v === '—') {
-    return <span style={{ color: 'var(--border)', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.72rem' }}>—</span>
-  }
-  const c = color ?? 'var(--navy-900)'
-  return (
-    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 2, background: c + '18', borderRadius: 6, padding: '2px 7px' }}>
-      <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.75rem', fontWeight: 800, color: c }}>{v}{suffix}</span>
-    </div>
-  )
-}
-
 function filterByDays(logs: any[], days: number, dateField = 'date') {
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - days)
@@ -955,200 +827,6 @@ function filterByDays(logs: any[], days: number, dateField = 'date') {
   })
 }
 
-// ── PlanExerciseTable ─────────────────────────────────────────────────────────
-
-type ActualSet = { num: number; weight: number | null; reps: number | null; note?: string | null }
-type ActualEntry = { sets: ActualSet[] }
-
-type PainEntry = { vas: number; comment: string | null }
-
-function PlanExerciseTable({ rows, athletes, overrides, actual, uniqueDays, painByAthleteDay, painByAthleteEx }: {
-  rows: { exId: number; name: string; block: string; day: string; dayId: number; sets: number; reps: string; tempo: string; weight: number | null }[]
-  athletes: any[]
-  overrides: Record<number, Record<number, any>>
-  actual: Record<number, Record<number, ActualEntry>>
-  uniqueDays: { id: number; label: string }[]
-  painByAthleteDay?: Record<number, Set<number>>
-  painByAthleteEx?: Record<number, Record<string, PainEntry>>
-}) {
-  const [selDayId, setSelDayId] = useState(uniqueDays[0]?.id ?? 0)
-  const filtered = rows.filter(r => r.dayId === selDayId)
-
-  function effectiveWeight(exId: number, athleteId: number, planWeight: number | null) {
-    const o = overrides[exId]?.[athleteId]
-    if (!o || o.skip) return planWeight
-    return o.weight_override ?? planWeight
-  }
-  function effectiveSets(exId: number, athleteId: number, planSets: number) {
-    const o = overrides[exId]?.[athleteId]
-    if (!o || o.skip) return planSets
-    return o.sets_override ?? planSets
-  }
-  function effectiveReps(exId: number, athleteId: number, planReps: string) {
-    const o = overrides[exId]?.[athleteId]
-    if (!o || o.skip) return planReps
-    return o.reps_override ?? planReps
-  }
-  function effectiveTempo(exId: number, athleteId: number, planTempo: string) {
-    const o = overrides[exId]?.[athleteId]
-    if (!o || o.skip) return planTempo
-    return o.tempo_override ?? planTempo
-  }
-  function isSkipped(exId: number, athleteId: number) {
-    return overrides[exId]?.[athleteId]?.skip === true
-  }
-  function hasOverride(exId: number, athleteId: number) {
-    const o = overrides[exId]?.[athleteId]
-    return !!o && !o.skip
-  }
-
-  return (
-    <div>
-      {/* Day tabs */}
-      <div style={{ display: 'flex', overflowX: 'auto', borderBottom: `1.5px solid var(--border)`, background: 'var(--bg)' }}>
-        {uniqueDays.map(d => (
-          <button key={d.id} onClick={() => setSelDayId(d.id)}
-            style={{ flexShrink: 0, padding: '0.55rem 1rem', border: 'none', background: selDayId === d.id ? '#fff' : 'transparent', color: selDayId === d.id ? 'var(--navy-900)' : 'var(--muted-light)', fontWeight: selDayId === d.id ? 800 : 500, fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.68rem', borderBottom: selDayId === d.id ? `2px solid var(--gold)` : '2px solid transparent', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-            {d.label}
-          </button>
-        ))}
-      </div>
-      {filtered.length === 0 && (
-        <div style={{ padding: '1.5rem', textAlign: 'center', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.72rem', color: 'var(--muted-light)' }}>Brak ćwiczeń w tym treningu.</div>
-      )}
-      {filtered.length > 0 && (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ borderCollapse: 'collapse', minWidth: '100%' }}>
-            <thead>
-              <tr style={{ background: 'var(--navy-900)' }}>
-                {/* sticky first col: athlete name */}
-                <th style={{ padding: '0.6rem 1rem', textAlign: 'left', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.58rem', color: 'var(--gold)', letterSpacing: '0.07em', textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: `1.5px solid var(--navy-600)`, position: 'sticky', left: 0, zIndex: 2, background: 'var(--navy-900)' }}>Zawodniczka</th>
-                {filtered.map((row, ci) => (
-                  <th key={`${row.exId}-${ci}`} style={{ padding: '0.5rem 0.65rem', textAlign: 'center', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.56rem', color: 'var(--gold)', letterSpacing: '0.05em', textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: `1.5px solid var(--navy-600)`, minWidth: 100, verticalAlign: 'bottom' }}>
-                    <div style={{ color: '#fff', fontWeight: 700, marginBottom: 2 }}>{row.name}</div>
-                    <div style={{ color: 'var(--muted-light)', fontSize: '0.52rem' }}>{row.block}</div>
-                    <div style={{ color: 'var(--muted-light)', fontSize: '0.52rem' }}>{row.sets}×{row.reps || '—'}{row.weight !== null ? ` · ${row.weight}kg` : ''}{row.tempo ? ` · ${row.tempo}` : ''}</div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {athletes.map((a: any, ri: number) => {
-                const rowBg = ri % 2 === 0 ? '#fff' : '#FAFBFC'
-                return (
-                  <tr key={a.id} style={{ background: rowBg }}>
-                    <td style={{ padding: '0.6rem 1rem', fontWeight: 700, color: 'var(--navy-900)', borderBottom: `1px solid var(--border)`, fontSize: '0.88rem', whiteSpace: 'nowrap', position: 'sticky', left: 0, zIndex: 1, background: rowBg }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        {a.full_name}
-                        {painByAthleteDay?.[a.id]?.has(selDayId) && (
-                          <span title="Zawodniczka zgłosiła ból w tym treningu" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, borderRadius: '50%', background: '#EF4444', color: '#fff', fontSize: '0.6rem', fontWeight: 900, flexShrink: 0 }}>!</span>
-                        )}
-                      </div>
-                    </td>
-                    {filtered.map((row, ci) => {
-                      const skip = isSkipped(row.exId, a.id)
-                      const mod = hasOverride(row.exId, a.id)
-                      const planW = effectiveWeight(row.exId, a.id, row.weight)
-                      const planS = effectiveSets(row.exId, a.id, row.sets)
-                      const planR = effectiveReps(row.exId, a.id, row.reps)
-                      const planT = effectiveTempo(row.exId, a.id, row.tempo)
-                      const act = actual[row.exId]?.[a.id] ?? null
-                      const hasAct = act !== null && act.sets.length > 0
-
-                      // Dopasowanie bólu po nazwie ćwiczenia
-                      const exNameKey = row.name.toLowerCase().replace(/-/g, ' ').trim()
-                      const painEntry = painByAthleteEx?.[a.id]
-                        ? Object.entries(painByAthleteEx[a.id]).find(([k]) => k.includes(exNameKey) || exNameKey.includes(k))?.[1] ?? null
-                        : null
-
-                      // Kolory tła: priorytet: pominięte > faktyczne > modyfikacja > brak
-                      const bgColor = skip ? '#FEF2F2' : hasAct ? '#F0FDF4' : mod ? '#1A2E4520' : undefined
-
-                      return (
-                        <td key={`${row.exId}-${ci}`} style={{ padding: '0.4rem 0.6rem', textAlign: 'center', borderBottom: `1px solid var(--border)`, verticalAlign: 'middle', background: bgColor, position: 'relative' }}>
-                          {skip ? (
-                            // CZERWONY — pominięte przez trenera
-                            <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.6rem', color: '#EF4444', fontWeight: 700 }}>pominięte</span>
-                          ) : hasAct ? (
-                            // ZIELONY — faktyczne dane z set_logs
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                              {act.sets.map((s, si) => (
-                                <div key={si} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                  <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.55rem', color: '#16A34A', minWidth: 14 }}>S{s.num}</span>
-                                  <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.72rem', fontWeight: 800, color: '#16A34A' }}>
-                                    {s.weight !== null ? `${s.weight} kg` : '—'}
-                                  </span>
-                                  {s.reps !== null && (
-                                    <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.55rem', color: '#4ADE80' }}>{s.reps}p</span>
-                                  )}
-                                  </div>
-                                  {s.note && <div style={{ fontSize: '0.55rem', color: '#15803D', fontStyle: 'italic', maxWidth: 120, whiteSpace: 'normal', lineHeight: 1.25 }}>&ldquo;{s.note}&rdquo;</div>}
-                                </div>
-                              ))}
-                              {mod && (
-                                <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.5rem', color: 'var(--gold)', marginTop: 1 }}>✎ mod.</span>
-                              )}
-                            </div>
-                          ) : mod ? (
-                            // ZŁOTY — modyfikacja trenera, brak danych treningowych
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-                              {planW !== null && (
-                                <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.72rem', fontWeight: 800, color: 'var(--gold)' }}>{planW} kg</span>
-                              )}
-                              <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.55rem', color: 'var(--gold)' }}>
-                                {planS}×{planR || '—'}{planT ? ` ${planT}` : ''}
-                              </span>
-                              <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.5rem', color: 'var(--gold)' }}>✎ mod.</span>
-                            </div>
-                          ) : (
-                            // SZARY — plan bazowy, brak danych
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-                              {planW !== null ? (
-                                <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.72rem', fontWeight: 700, color: 'var(--muted-light)' }}>{planW} kg</span>
-                              ) : (
-                                <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.65rem', color: 'var(--border)' }}>—</span>
-                              )}
-                              <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.55rem', color: 'var(--border)', whiteSpace: 'nowrap' }}>
-                                {planS}×{planR || '—'}{planT ? ` ${planT}` : ''}
-                              </span>
-                            </div>
-                          )}
-                          {painEntry && (
-                            <div title={`VAS ${painEntry.vas}/10${painEntry.comment ? ` · ${painEntry.comment}` : ''}`}
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: 3, marginTop: 3, padding: '1px 6px', background: '#FEF2F2', border: `1px solid #FCA5A5`, borderRadius: 6, cursor: 'default' }}>
-                              <span style={{ color: '#EF4444', fontWeight: 900, fontSize: '0.62rem' }}>!</span>
-                              <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.58rem', color: '#EF4444', fontWeight: 700 }}>VAS {painEntry.vas}</span>
-                              {painEntry.comment && <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.55rem', color: '#EF4444', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{painEntry.comment}</span>}
-                            </div>
-                          )}
-                        </td>
-                      )
-                    })}
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-      <div style={{ padding: '0.6rem 1rem', borderTop: `1.5px solid var(--border)`, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <div style={{ width: 10, height: 10, borderRadius: 3, background: '#16A34A' }} />
-          <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.6rem', color: 'var(--muted-light)' }}>Faktyczne (z treningu)</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <div style={{ width: 10, height: 10, borderRadius: 3, background: 'var(--gold)' }} />
-          <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.6rem', color: 'var(--muted-light)' }}>Zmodyfikowane przez trenera</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <div style={{ width: 10, height: 10, borderRadius: 3, background: '#EF4444' + '55', border: `1px solid #EF4444` }} />
-          <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.6rem', color: 'var(--muted-light)' }}>Pominięte</span>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 export default function CoachGroupDetailClient({ group, athletes, assignments, days, sessions, plans, wellnessLogs = [], wellnessWeek = [], feedbacks = [], moduleConfigs = [], assignmentsHistory = [], archivedPlans = [] }: any) {
   const router = useRouter()
@@ -1161,7 +839,6 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
   const [localModuleConfigs, setLocalModuleConfigs] = useState<any[]>(moduleConfigs)
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null)
   const [wellnessPeriod, setWellnessPeriod] = useState(14)
-  const [trainingPeriod, setTrainingPeriod] = useState(30)
   const [editingGroup, setEditingGroup] = useState(false)
   const [localGroup, setLocalGroup] = useState(group)
   const [groupSaving, setGroupSaving] = useState(false)
@@ -1190,9 +867,6 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
   }
   const [quickReportAthlete, setQuickReportAthlete] = useState<any | null>(null)
   const [sessionReport, setSessionReport] = useState<{ session: any; athleteId: number; athleteName: string; dayName: string } | null>(null)
-  type PainEntry = { vas: number; comment: string | null }
-  const [planExData, setPlanExData] = useState<{ blocks: any[]; overrides: Record<number, Record<number, any>>; actual: Record<number, Record<number, ActualEntry>>; painByAthleteDay?: Record<number, Set<number>>; painByAthleteEx?: Record<number, Record<string, PainEntry>> } | null>(null)
-  const [planExLoading, setPlanExLoading] = useState(false)
 
   const defaultWellnessPreParams = ['sleep_hours', 'sleep_quality', 'readiness', 'energy', 'stress', 'muscle_soreness', 'hydration', 'recovery_score']
   const defaultWellnessPostParams: string[] = []
@@ -1286,114 +960,6 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
 
   function openSessionReport(session: any, athleteId: number, athleteName: string, dayName: string) {
     setSessionReport({ session, athleteId, athleteName, dayName })
-  }
-
-  async function loadPlanExercises() {
-    if (planExData || planExLoading || !activePlanId) return
-    setPlanExLoading(true)
-    const sb = createClient()
-    const planDayIds = activePlanDays.map((d: any) => d.id)
-    const athleteIds2 = athletes.map((a: any) => a.id)
-
-    // Bloki + ćwiczenia z planu
-    const { data: blocks } = await sb
-      .from('workout_day_blocks')
-      .select('id, day_id, block_name, block_order, rounds, workout_block_exercises(id, exercise_id, exercise_code, exercise_order, sets, reps, weight_kg, tempo, rir, coach_comment, exercise:exercises(name))')
-      .in('day_id', planDayIds)
-      .order('block_order')
-
-    const allExIds = (blocks || []).flatMap((b: any) => (b.workout_block_exercises || []).map((e: any) => e.id))
-
-    // Indywidualne modyfikacje (override planu przez trenera)
-    const { data: ovrs } = allExIds.length > 0
-      ? await sb.from('athlete_exercise_overrides')
-          .select('athlete_id, block_exercise_id, weight_override, sets_override, reps_override, tempo_override, skip')
-          .in('block_exercise_id', allExIds)
-          .in('athlete_id', athleteIds2)
-      : { data: [] }
-
-    const ovrMap: Record<number, Record<number, any>> = {}
-    for (const o of (ovrs || [])) {
-      if (!ovrMap[o.block_exercise_id]) ovrMap[o.block_exercise_id] = {}
-      ovrMap[o.block_exercise_id][o.athlete_id] = o
-    }
-
-    // Faktyczne dane treningowe z set_logs (sesje dla tych dni i zawodniczek)
-    const { data: sessionsForPlan } = await sb
-      .from('workout_sessions')
-      .select('id, athlete_id, workout_day_id')
-      .in('workout_day_id', planDayIds)
-      .in('athlete_id', athleteIds2)
-      .eq('completed', true)
-
-    const sessionIds = (sessionsForPlan || []).map((s: any) => s.id)
-
-    // Mapa: session_id → athlete_id
-    const sessionAthleteMap: Record<number, number> = {}
-    for (const s of (sessionsForPlan || [])) sessionAthleteMap[s.id] = s.athlete_id
-
-    // set_logs dla tych sesji — zbieramy wszystkie serie per zawodniczka per ćwiczenie
-    type _ActualSet = { num: number; weight: number | null; reps: number | null; note?: string | null }
-    type _ActualEntry = { sets: _ActualSet[] }
-    const actualMap: Record<number, Record<number, _ActualEntry>> = {}
-
-    if (sessionIds.length > 0 && allExIds.length > 0) {
-      const { data: logs } = await sb
-        .from('set_logs')
-        .select('id, created_at, workout_session_id, block_exercise_id, set_number, weight, reps_completed, completed, is_warmup, athlete_note')
-        .in('workout_session_id', sessionIds)
-        .in('block_exercise_id', allExIds)
-        .eq('is_warmup', false)
-        .order('set_number', { ascending: true })
-
-      for (const l of dedupeLogs(logs || [])) {
-        const athleteId = sessionAthleteMap[l.workout_session_id]
-        if (!athleteId) continue
-        if (!actualMap[l.block_exercise_id]) actualMap[l.block_exercise_id] = {}
-        if (!actualMap[l.block_exercise_id][athleteId]) actualMap[l.block_exercise_id][athleteId] = { sets: [] }
-        actualMap[l.block_exercise_id][athleteId].sets.push({
-          num: l.set_number,
-          weight: l.weight ?? null,
-          reps: l.reps_completed ?? null,
-          note: l.athlete_note ?? null,
-        })
-      }
-    }
-
-    // Pain logs — mapa athleteId → Set<dayId>
-    const painByAthleteDay: Record<number, Set<number>> = {}
-    // athleteId → normalized exercise name → {vas, comment}
-    type PainEntry = { vas: number; comment: string | null }
-    const painByAthleteEx: Record<number, Record<string, PainEntry>> = {}
-
-    if (sessionIds.length > 0) {
-      const { data: painLogs } = await sb
-        .from('pain_logs')
-        .select('workout_session_id, vas_score, pain_comment, pain_location')
-        .in('workout_session_id', sessionIds)
-
-      const sessionDayMap: Record<number, number> = {}
-      for (const s of (sessionsForPlan || [])) sessionDayMap[s.id] = s.workout_day_id
-
-      for (const p of (painLogs || [])) {
-        if (!p.vas_score && !p.pain_comment) continue
-        const athleteId = sessionAthleteMap[p.workout_session_id]
-        const dayId = sessionDayMap[p.workout_session_id]
-        if (!athleteId) continue
-        if (dayId) {
-          if (!painByAthleteDay[athleteId]) painByAthleteDay[athleteId] = new Set()
-          painByAthleteDay[athleteId].add(dayId)
-        }
-        if (p.pain_location) {
-          const key = p.pain_location.toLowerCase().replace(/-/g, ' ').trim()
-          if (!painByAthleteEx[athleteId]) painByAthleteEx[athleteId] = {}
-          painByAthleteEx[athleteId][key] = { vas: p.vas_score ?? 0, comment: p.pain_comment ?? null }
-        }
-      }
-    }
-
-    setPlanExData({ blocks: blocks || [], overrides: ovrMap, actual: actualMap, painByAthleteDay, painByAthleteEx })
-    setPlanExLoading(false)
   }
 
   const sessionIndex: Record<string, any> = {}
@@ -1571,7 +1137,7 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
               </Card>
 
               {/* ── Wellness stats table ── */}
-              <StatsCard
+              <StatsTable
                 title="Statystyki wellness"
                 period={wellnessPeriod}
                 onPeriodChange={setWellnessPeriod}
@@ -1618,6 +1184,87 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                 })}
                 onAthleteClick={openQuickReport}
               />
+
+              {/* ── Wellness — przegląd tygodniowy (7 dni) ── */}
+              {athletes.length > 0 && (
+                <Card>
+                  <div style={{ padding: '0.875rem 1.25rem', borderBottom: `1.5px solid var(--border)`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.6rem', color: 'var(--muted-light)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Wellness — przegląd tygodniowy</div>
+                      <div style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.65rem', color: 'var(--navy-900)', fontWeight: 700, marginTop: 2 }}>Dane z ostatnich 7 dni</div>
+                    </div>
+                  </div>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ borderCollapse: 'collapse', minWidth: '100%' }}>
+                      <thead>
+                        <tr style={{ background: '#0D2D1A' }}>
+                          <th style={{ padding: '0.65rem 1.25rem', textAlign: 'left', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.6rem', color: '#86EFAC', letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: `1.5px solid #1A4D2E` }}>Zawodniczka</th>
+                          {[
+                            { label: 'Wellness', title: 'Czy uzupełniła dziś' },
+                            { label: '🌙 Sen śr.', title: 'Średnia snu (h)' },
+                            { label: '🧠 Stres', title: 'Średni stres (1-10)' },
+                            { label: '🩹 Max ból', title: 'Maks. ból podczas treningu' },
+                            { label: '🏃 Aktywność', title: 'Łączne godziny aktywności' },
+                            { label: '🌸 Cykl', title: 'Ostatnia zaznaczona faza' },
+                          ].map(h => (
+                            <th key={h.label} title={h.title} style={{ padding: '0.65rem 0.75rem', textAlign: 'center', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.6rem', color: '#86EFAC', letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: `1.5px solid #1A4D2E`, minWidth: 80 }}>
+                              {h.label}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {athletes.map((athlete: any, rowIdx: number) => {
+                          const ws = getAthleteWellnessSummary(athlete.id, wellnessWeek)
+                          const rowBg = rowIdx % 2 === 0 ? '#fff' : '#F7FFF9'
+
+                          const sleepColor = ws.sleepAvg === null ? undefined : ws.sleepAvg <= 5 ? '#EF4444' : ws.sleepAvg <= 7 ? 'var(--gold)' : 'var(--green)'
+                          const stressColor = ws.stressAvg === null ? undefined : ws.stressAvg >= 8 ? '#EF4444' : ws.stressAvg >= 5 ? 'var(--gold)' : 'var(--green)'
+                          const painColor = ws.maxPain === null ? undefined : ws.maxPain >= 6 ? '#EF4444' : ws.maxPain >= 5 ? 'var(--gold)' : 'var(--green)'
+
+                          const pill = (val: string | number | null, color?: string) => val !== null ? (
+                            <span style={{ display: 'inline-block', background: (color ?? 'var(--navy-900)') + '1A', color: color ?? 'var(--navy-900)', borderRadius: 6, padding: '2px 8px', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.75rem', fontWeight: 800 }}>{val}</span>
+                          ) : <span style={{ color: 'var(--border)', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.7rem' }}>—</span>
+
+                          return (
+                            <tr key={athlete.id} style={{ background: rowBg }}
+                              onMouseEnter={e => (e.currentTarget.style.background = '#ECFDF5')}
+                              onMouseLeave={e => (e.currentTarget.style.background = rowBg)}>
+                              <td style={{ padding: '0.7rem 1.25rem', fontWeight: 700, color: 'var(--navy-900)', borderBottom: `1px solid #E0F2EA`, whiteSpace: 'nowrap' }}>
+                                <button onClick={() => openQuickReport(athlete.id)} style={{ background: 'none', border: 'none', color: 'var(--navy-900)', fontFamily: 'var(--font-inter),sans-serif', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', padding: 0 }}>{athlete.full_name}</button>
+                              </td>
+                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid #E0F2EA` }}>
+                                <span title={ws.hasToday ? 'Uzupełniła dziś' : ws.entryCount > 0 ? 'Wpis w tym tygodniu' : 'Brak wpisów'} style={{ fontSize: '1rem' }}>
+                                  {ws.hasToday ? '✅' : ws.entryCount > 0 ? '⚠️' : '❌'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid #E0F2EA` }}>
+                                {pill(ws.sleepAvg !== null ? `${ws.sleepAvg.toFixed(1)}h` : null, sleepColor)}
+                              </td>
+                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid #E0F2EA` }}>
+                                {pill(ws.stressAvg !== null ? ws.stressAvg.toFixed(1) : null, stressColor)}
+                              </td>
+                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid #E0F2EA` }}>
+                                {pill(ws.maxPain !== null ? ws.maxPain : null, painColor)}
+                              </td>
+                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid #E0F2EA` }}>
+                                {pill(ws.activityHours !== null ? `${ws.activityHours}h` : null, 'var(--navy-900)')}
+                              </td>
+                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid #E0F2EA` }}>
+                                {ws.latestCycle === 'menstruacja'
+                                  ? <span title="Menstruacja">🔴</span>
+                                  : ws.latestCycle
+                                    ? <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.68rem', color: 'var(--muted-light)' }}>{ws.latestCycle.slice(0, 7)}</span>
+                                    : <span style={{ color: 'var(--border)', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.7rem' }}>—</span>}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+              )}
             </div>
           )}
 
@@ -1740,178 +1387,6 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                   </div>
                 </Card>
               )}
-
-              {/* ── TABELA 1b: Obciążenia z planu ── */}
-              {assignments.length > 0 && activePlanDays.length > 0 && (() => {
-                const fmt = (s: string) => s.replace(/-/g, ' ')
-                return (
-                  <Card style={{ marginBottom: '1.25rem' }}>
-                    <div style={{ padding: '0.875rem 1.25rem', borderBottom: `1.5px solid var(--border)`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-                      <div>
-                        <div style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.6rem', color: 'var(--muted-light)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Obciążenia z planu</div>
-                        <div style={{ fontWeight: 800, color: 'var(--navy-900)', marginTop: 2 }}>{currentPlan?.name} — ćwiczenia × zawodniczki</div>
-                      </div>
-                      {!planExData && (
-                        <button onClick={loadPlanExercises} disabled={planExLoading}
-                          style={{ border: 'none', background: 'var(--navy-900)', color: 'var(--gold)', borderRadius: 8, padding: '0.5rem 0.9rem', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer', opacity: planExLoading ? 0.6 : 1 }}>
-                          {planExLoading ? 'Ładuję...' : '⚡ Załaduj tabelę'}
-                        </button>
-                      )}
-                    </div>
-                    {planExData && (() => {
-                      // Flatten exercises with day/block context, deduplicate by name for display
-                      type ExRow = { exId: number; name: string; block: string; day: string; dayId: number; sets: number; reps: string; tempo: string; weight: number | null }
-                      const rows: ExRow[] = []
-                      for (const day of activePlanDays) {
-                        const dayBlocks = planExData.blocks.filter((b: any) => b.day_id === day.id).sort((a: any, z: any) => a.block_order - z.block_order)
-                        for (const block of dayBlocks) {
-                          const exs = (block.workout_block_exercises || []).sort((a: any, z: any) => a.exercise_order - z.exercise_order)
-                          for (const ex of exs) {
-                            rows.push({
-                              exId: ex.id,
-                              name: ex.exercise?.name ? fmt(ex.exercise.name) : (ex.exercise_code || 'Ćwiczenie'),
-                              block: block.block_name,
-                              day: day.day_name || `T${activePlanDays.indexOf(day) + 1}`,
-                              dayId: day.id,
-                              sets: ex.sets ?? 0,
-                              reps: ex.reps ?? '',
-                              tempo: ex.tempo ?? '',
-                              weight: ex.weight_kg ?? null,
-                            })
-                          }
-                        }
-                      }
-
-                      if (rows.length === 0) return (
-                        <div style={{ padding: '1.5rem', textAlign: 'center', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.72rem', color: 'var(--muted-light)' }}>Brak ćwiczeń w planie.</div>
-                      )
-
-                      // Day tabs
-                      const uniqueDays = activePlanDays.map((d: any, i: number) => ({ id: d.id, label: d.day_name || `T${i + 1}` }))
-                      return <PlanExerciseTable rows={rows} athletes={athletes} overrides={planExData.overrides} actual={planExData.actual || {}} uniqueDays={uniqueDays} painByAthleteDay={planExData.painByAthleteDay} painByAthleteEx={planExData.painByAthleteEx} />
-                    })()}
-                  </Card>
-                )
-              })()}
-
-              {/* ── TABELA 2: Dane wellness (7 dni) ── */}
-              {athletes.length > 0 && (
-                <Card style={{ marginBottom: '1.25rem' }}>
-                  <div style={{ padding: '0.875rem 1.25rem', borderBottom: `1.5px solid var(--border)`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div>
-                      <div style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.6rem', color: 'var(--muted-light)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Wellness — przegląd tygodniowy</div>
-                      <div style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.65rem', color: 'var(--navy-900)', fontWeight: 700, marginTop: 2 }}>Dane z ostatnich 7 dni</div>
-                    </div>
-                  </div>
-                  <div style={{ overflowX: 'auto' }}>
-                    <table style={{ borderCollapse: 'collapse', minWidth: '100%' }}>
-                      <thead>
-                        <tr style={{ background: '#0D2D1A' }}>
-                          <th style={{ padding: '0.65rem 1.25rem', textAlign: 'left', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.6rem', color: '#86EFAC', letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: `1.5px solid #1A4D2E` }}>Zawodniczka</th>
-                          {[
-                            { label: 'Wellness', title: 'Czy uzupełniła dziś' },
-                            { label: '🌙 Sen śr.', title: 'Średnia snu (h)' },
-                            { label: '🧠 Stres', title: 'Średni stres (1-10)' },
-                            { label: '🩹 Max ból', title: 'Maks. ból podczas treningu' },
-                            { label: '🏃 Aktywność', title: 'Łączne godziny aktywności' },
-                            { label: '🌸 Cykl', title: 'Ostatnia zaznaczona faza' },
-                          ].map(h => (
-                            <th key={h.label} title={h.title} style={{ padding: '0.65rem 0.75rem', textAlign: 'center', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.6rem', color: '#86EFAC', letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: `1.5px solid #1A4D2E`, minWidth: 80 }}>
-                              {h.label}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {athletes.map((athlete: any, rowIdx: number) => {
-                          const ws = getAthleteWellnessSummary(athlete.id, wellnessWeek)
-                          const rowBg = rowIdx % 2 === 0 ? '#fff' : '#F7FFF9'
-
-                          const sleepColor = ws.sleepAvg === null ? undefined : ws.sleepAvg <= 5 ? '#EF4444' : ws.sleepAvg <= 7 ? 'var(--gold)' : 'var(--green)'
-                          const stressColor = ws.stressAvg === null ? undefined : ws.stressAvg >= 8 ? '#EF4444' : ws.stressAvg >= 5 ? 'var(--gold)' : 'var(--green)'
-                          const painColor = ws.maxPain === null ? undefined : ws.maxPain >= 6 ? '#EF4444' : ws.maxPain >= 5 ? 'var(--gold)' : 'var(--green)'
-
-                          const pill = (val: string | number | null, color?: string) => val !== null ? (
-                            <span style={{ display: 'inline-block', background: (color ?? 'var(--navy-900)') + '1A', color: color ?? 'var(--navy-900)', borderRadius: 6, padding: '2px 8px', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.75rem', fontWeight: 800 }}>{val}</span>
-                          ) : <span style={{ color: 'var(--border)', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.7rem' }}>—</span>
-
-                          return (
-                            <tr key={athlete.id} style={{ background: rowBg }}
-                              onMouseEnter={e => (e.currentTarget.style.background = '#ECFDF5')}
-                              onMouseLeave={e => (e.currentTarget.style.background = rowBg)}>
-                              <td style={{ padding: '0.7rem 1.25rem', fontWeight: 700, color: 'var(--navy-900)', borderBottom: `1px solid #E0F2EA`, whiteSpace: 'nowrap' }}>
-                                <button onClick={() => openQuickReport(athlete.id)} style={{ background: 'none', border: 'none', color: 'var(--navy-900)', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', padding: 0 }}>{athlete.full_name}</button>
-                              </td>
-                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid #E0F2EA` }}>
-                                <span title={ws.hasToday ? 'Uzupełniła dziś' : ws.entryCount > 0 ? 'Wpis w tym tygodniu' : 'Brak wpisów'} style={{ fontSize: '1rem' }}>
-                                  {ws.hasToday ? '✅' : ws.entryCount > 0 ? '⚠️' : '❌'}
-                                </span>
-                              </td>
-                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid #E0F2EA` }}>
-                                {pill(ws.sleepAvg !== null ? `${ws.sleepAvg.toFixed(1)}h` : null, sleepColor)}
-                              </td>
-                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid #E0F2EA` }}>
-                                {pill(ws.stressAvg !== null ? ws.stressAvg.toFixed(1) : null, stressColor)}
-                              </td>
-                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid #E0F2EA` }}>
-                                {pill(ws.maxPain !== null ? ws.maxPain : null, painColor)}
-                              </td>
-                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid #E0F2EA` }}>
-                                {pill(ws.activityHours !== null ? `${ws.activityHours}h` : null, 'var(--navy-900)')}
-                              </td>
-                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid #E0F2EA` }}>
-                                {ws.latestCycle === 'menstruacja'
-                                  ? <span title="Menstruacja">🔴</span>
-                                  : ws.latestCycle
-                                    ? <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.68rem', color: 'var(--muted-light)' }}>{ws.latestCycle.slice(0, 7)}</span>
-                                    : <span style={{ color: 'var(--border)', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.7rem' }}>—</span>}
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </Card>
-              )}
-
-              {/* Training stats */}
-              <StatsCard
-                title="Statystyki treningowe"
-                period={trainingPeriod}
-                onPeriodChange={setTrainingPeriod}
-                cols={[
-                  { key: 'Zawodniczka', left: true },
-                  { key: 'Treningi', emoji: '🏋️' },
-                  { key: 'Ukończone', emoji: '✅' },
-                  { key: '% planu', emoji: '📊' },
-                  { key: 'Śr. RPE', emoji: '🔥' },
-                  { key: 'Min RPE', emoji: '↓' },
-                  { key: 'Max RPE', emoji: '↑' },
-                ]}
-                rows={athletes.map((athlete: any) => {
-                  const athFb = filterByDays(feedbacks.filter((f: any) => f.athlete_id === athlete.id), trainingPeriod, 'created_at')
-                  const rpeVals = athFb.map((f: any) => f.session_rpe).filter((v: any) => v != null) as number[]
-                  const rpeAvg = avg(rpeVals)
-                  const completed = filterByDays(sessions.filter((s: any) => s.athlete_id === athlete.id && s.completed), trainingPeriod, 'date_completed').length
-                  const progress = getAthleteProgress(athlete.id)
-                  const pct = progress ? Math.round((progress.done / progress.total) * 100) : null
-                  const rpeColor = rpeAvg === null ? undefined : rpeAvg >= 8 ? '#EF4444' : rpeAvg >= 6 ? 'var(--gold)' : 'var(--green)'
-                  return {
-                    id: athlete.id, name: athlete.full_name,
-                    cells: [
-                      { v: athFb.length || null },
-                      { v: completed || null },
-                      { v: pct !== null ? `${pct}%` : null, color: pct === null ? undefined : pct >= 80 ? 'var(--green)' : pct >= 50 ? 'var(--gold)' : '#EF4444' },
-                      { v: rpeAvg !== null ? rpeAvg.toFixed(1) : null, color: rpeColor },
-                      { v: rpeVals.length ? Math.min(...rpeVals) : null },
-                      { v: rpeVals.length ? Math.max(...rpeVals) : null },
-                    ],
-                  }
-                })}
-                onAthleteClick={id => router.push(`/coach/athletes/${id}`)}
-                style={{ marginBottom: '1.25rem' }}
-              />
 
               {/* Historia przypisanych planów */}
               {assignmentsHistory.length > 0 && (
