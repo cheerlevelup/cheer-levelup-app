@@ -7,6 +7,7 @@ import { createClient } from '@/utils/supabase/client'
 import ModuleConfigPanel from '@/components/ModuleConfigPanel'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { Card, Modal, Field, Button, TabsNav, SegmentedControl, StatsTable } from '@/components/coach/ui'
+import GroupHero from '@/components/coach/GroupHero'
 import { dedupeLogs } from '@/lib/coach/dedupeLogs'
 
 const thStyle: React.CSSProperties = { padding: '0.75rem 0.5rem', textAlign: 'center', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.6rem', color: 'var(--muted-light)', background: 'var(--bg)', borderBottom: `1.5px solid var(--border)`, whiteSpace: 'nowrap', minWidth: 44 }
@@ -839,32 +840,6 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
   const [localModuleConfigs, setLocalModuleConfigs] = useState<any[]>(moduleConfigs)
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null)
   const [wellnessPeriod, setWellnessPeriod] = useState(14)
-  const [editingGroup, setEditingGroup] = useState(false)
-  const [localGroup, setLocalGroup] = useState(group)
-  const [groupSaving, setGroupSaving] = useState(false)
-  const [groupSaved, setGroupSaved] = useState(false)
-
-  const [groupError, setGroupError] = useState('')
-
-  async function saveGroup() {
-    setGroupSaving(true)
-    setGroupError('')
-    const { data, error } = await supabase
-      .from('groups')
-      .update({
-        name: localGroup.name?.trim() || group.name,
-        training_level: localGroup.training_level?.trim() || null,
-      })
-      .eq('id', group.id)
-      .select()
-      .single()
-    setGroupSaving(false)
-    if (error) { setGroupError(error.message); return }
-    if (data) setLocalGroup(data)
-    setGroupSaved(true)
-    setTimeout(() => setGroupSaved(false), 2500)
-    setEditingGroup(false)
-  }
   const [quickReportAthlete, setQuickReportAthlete] = useState<any | null>(null)
   const [sessionReport, setSessionReport] = useState<{ session: any; athleteId: number; athleteName: string; dayName: string } | null>(null)
 
@@ -989,7 +964,7 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
 
   return (
     <>
-      <SetPageMeta title={localGroup.name} backHref="/coach/groups" backLabel="Grupy" />
+      <SetPageMeta title={group.name} backHref="/coach/groups" backLabel="Grupy" />
 
       {showAssignModal && (
         <AssignPlanModal
@@ -1032,49 +1007,10 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
       )}
 
       <div className="coach-content">
-        <div className="coach-group-hero">
-          <div className="coach-group-hero-title">
-            {editingGroup ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%', maxWidth: 320 }}>
-                <input
-                  value={localGroup.name || ''}
-                  onChange={e => setLocalGroup((g: any) => ({ ...g, name: e.target.value }))}
-                  placeholder="Nazwa grupy"
-                  style={{ background: 'rgba(255,255,255,0.1)', border: `1px solid var(--navy-600)`, borderRadius: 8, color: '#fff', padding: '0.45rem 0.75rem', fontFamily: 'var(--font-inter),sans-serif', fontSize: '1rem', fontWeight: 800, outline: 'none', width: '100%' }}
-                />
-                <input
-                  value={localGroup.training_level || ''}
-                  onChange={e => setLocalGroup((g: any) => ({ ...g, training_level: e.target.value }))}
-                  placeholder="Poziom treningu (np. zaawansowany)"
-                  style={{ background: 'rgba(255,255,255,0.07)', border: `1px solid var(--navy-600)`, borderRadius: 8, color: '#fff', padding: '0.35rem 0.75rem', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.72rem', outline: 'none', width: '100%' }}
-                />
-                {groupError && <div style={{ fontSize: '0.72rem', color: '#EF4444', fontFamily: 'var(--font-inter),sans-serif' }}>❌ {groupError}</div>}
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <Button variant="gold" size="small" onClick={saveGroup} disabled={groupSaving}>
-                    {groupSaving ? '...' : groupSaved ? '✓ Zapisano' : 'Zapisz'}
-                  </Button>
-                  <Button variant="ghost" size="small" onClick={() => { setEditingGroup(false); setLocalGroup(group); setGroupError('') }}>
-                    Anuluj
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <h2>{localGroup.name}</h2>
-                <button onClick={() => setEditingGroup(true)}
-                  style={{ padding: '3px 10px', background: 'var(--navy-700)', color: 'var(--muted-light)', border: `1px solid var(--navy-600)`, borderRadius: 7, fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.6rem', fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
-                  ✎ Edytuj
-                </button>
-              </>
-            )}
-          </div>
-          <div className="coach-group-hero-sub">
-            {athletes.length} zawodniczek <span className="coach-dot-sep">·</span> Trener motoryczny: <b>{group.trainer_name || 'Urszula Papka'}</b>
-            {localGroup.training_level && <><span className="coach-dot-sep">·</span> {localGroup.training_level}</>}
-            {currentPlan && <><span className="coach-dot-sep">·</span> 📋 {currentPlan.name}</>}
-            {assignedMsg && <><span className="coach-dot-sep">·</span> <span style={{ color: 'var(--green)' }}>✓ {assignedMsg}</span></>}
-          </div>
-        </div>
+        <GroupHero group={group} athletesCount={athletes.length} />
+        {assignedMsg && (
+          <div style={{ marginTop: -8, marginBottom: 12, fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.78rem', color: 'var(--green)', fontWeight: 700 }}>✓ {assignedMsg}</div>
+        )}
 
         <TabsNav items={[
           { key: 'treningi', label: 'Treningi', href: `/coach/groups/${group.id}` },

@@ -8,6 +8,7 @@ import { loadPdf, pl, drawHeaderBar, drawFooter, TABLE_STYLES } from '@/lib/grou
 import { coachTheme } from '@/lib/coach-theme'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { TabsNav, Card, Button, Field } from '@/components/coach/ui'
+import GroupHero from '@/components/coach/GroupHero'
 
 // coachTheme nie definiuje kolorów danger/success — to są ustalone w całym
 // coach-theme.css literały (.coach-att-cell, .coach-missed-count itp.), więc
@@ -121,15 +122,7 @@ export default function GroupAttendanceClient({ group, athletes, trainings }: Pr
     <>
       <SetPageMeta title="Obecność" backHref={`/coach/groups/${group.id}`} backLabel={group.name} />
       <div className="coach-content">
-        <div className="coach-group-hero">
-          <div className="coach-group-hero-title">
-            <h2>{group.name}</h2>
-            <span className="coach-badge-organized">{group.group_type === 'managed' ? 'zorganizowana' : 'samodzielna'}</span>
-          </div>
-          <div className="coach-group-hero-sub">
-            {athletes.length} zawodniczek <span className="coach-dot-sep">·</span> {group.group_type === 'managed' ? 'grupa prowadzona przez trenera' : 'grupa samodzielna'}
-          </div>
-        </div>
+        <GroupHero group={group} athletesCount={athletes.length} />
 
         <TabsNav items={[
           { key: 'treningi', label: 'Treningi', href: `/coach/groups/${group.id}` },

@@ -7,6 +7,7 @@ import { createClient } from '@/utils/supabase/client'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { TabsNav, Card } from '@/components/coach/ui'
 import PlanExerciseTable, { ActualEntry, PainEntry } from '@/components/coach/PlanExerciseTable'
+import GroupHero from '@/components/coach/GroupHero'
 import { dedupeLogs } from '@/lib/coach/dedupeLogs'
 
 type Group = { id: number; name: string; group_type?: string }
@@ -144,15 +145,7 @@ export default function GroupPlanSelfClient({ group, athletes, currentPlan, acti
     <>
       <SetPageMeta title="Plan" backHref={`/coach/groups/${group.id}`} backLabel={group.name} />
       <div className="coach-content">
-        <div className="coach-group-hero">
-          <div className="coach-group-hero-title">
-            <h2>{group.name}</h2>
-            <span className="coach-badge-organized">{group.group_type === 'managed' ? 'zorganizowana' : 'samodzielna'}</span>
-          </div>
-          <div className="coach-group-hero-sub">
-            {athletes.length} zawodniczek <span className="coach-dot-sep">·</span> {group.group_type === 'managed' ? 'grupa prowadzona przez trenera' : 'grupa samodzielna'}
-          </div>
-        </div>
+        <GroupHero group={group} athletesCount={athletes.length} />
 
         <TabsNav items={[
           { key: 'treningi', label: 'Treningi', href: `/coach/groups/${group.id}` },

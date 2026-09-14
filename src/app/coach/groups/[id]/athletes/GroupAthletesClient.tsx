@@ -6,6 +6,7 @@ import { Plus, ChevronRight } from 'lucide-react'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { TabsNav, Card, Modal, Field, Button } from '@/components/coach/ui'
 import AthleteProfileCard, { type AthleteRow } from '@/components/coach/AthleteProfileCard'
+import GroupHero from '@/components/coach/GroupHero'
 
 type Group = { id: number; name: string; group_type?: string }
 type Athlete = AthleteRow
@@ -88,15 +89,7 @@ export default function GroupAthletesClient({ group, athletes }: Props) {
     <>
       <SetPageMeta title={group.name} backHref="/coach/groups" backLabel="Grupy" />
       <div className="coach-content">
-        <div className="coach-group-hero">
-          <div className="coach-group-hero-title">
-            <h2>{group.name}</h2>
-            <span className="coach-badge-organized">{group.group_type === 'managed' ? 'zorganizowana' : 'samodzielna'}</span>
-          </div>
-          <div className="coach-group-hero-sub">
-            {athletes.length} zawodniczek <span className="coach-dot-sep">·</span> {group.group_type === 'managed' ? 'grupa prowadzona przez trenera' : 'grupa samodzielna'}
-          </div>
-        </div>
+        <GroupHero group={group} athletesCount={athletes.length} />
 
         <TabsNav
           items={[

@@ -8,6 +8,7 @@ import { Dumbbell, Upload, X } from 'lucide-react'
 import { localDateStr, formatDatePl, linkLogsToTraining } from '@/lib/groupTraining'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { TabsNav, Card, Modal, Field, Button } from '@/components/coach/ui'
+import GroupHero from '@/components/coach/GroupHero'
 
 type Group = { id: number; name: string; group_type?: string }
 type Athlete = { id: number; full_name: string; birth_year?: number | null }
@@ -430,15 +431,7 @@ export default function ManagedGroupClient({ group, athletes, trainings }: Props
     <>
       <SetPageMeta title={group.name} backHref="/coach/groups" backLabel="Grupy" />
       <div className="coach-content">
-        <div className="coach-group-hero">
-          <div className="coach-group-hero-title">
-            <h2>{group.name}</h2>
-            <span className="coach-badge-organized">zorganizowana</span>
-          </div>
-          <div className="coach-group-hero-sub">
-            {athletes.length} zawodniczek <span className="coach-dot-sep">·</span> grupa prowadzona przez trenera
-          </div>
-        </div>
+        <GroupHero group={group} athletesCount={athletes.length} />
 
         <TabsNav
           items={[
