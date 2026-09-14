@@ -19,6 +19,9 @@ export default async function CoachAthletesPage() {
     .order('full_name', { ascending: true })
 
   const athletes = (rawAthletes || []).filter((a: any) => !a.archived)
+  const archivedAthletes = (rawAthletes || [])
+    .filter((a: any) => a.archived)
+    .sort((a: any, b: any) => a.full_name.localeCompare(b.full_name, 'pl'))
 
   const { data: allGroups } = await supabase
     .from('groups')
@@ -39,6 +42,7 @@ export default async function CoachAthletesPage() {
   return (
     <AthletesListClient
       athletes={athletes}
+      archivedAthletes={archivedAthletes}
       allGroups={allGroups || []}
       injuredIds={injuredIds}
     />

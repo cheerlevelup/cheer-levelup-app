@@ -3,9 +3,9 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
-import { Plus, ChevronRight, ChevronDown, RotateCcw, Calendar, Trash2, Archive } from 'lucide-react'
+import { Plus, ChevronRight, ChevronDown, Calendar, Trash2, Archive } from 'lucide-react'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
-import { Card, Chip, SegmentedControl, Modal, Field, Button } from '@/components/coach/ui'
+import { Card, Chip, Button } from '@/components/coach/ui'
 import NewGroupModal from '@/components/coach/NewGroupModal'
 
 type Group = {
@@ -38,68 +38,16 @@ const CAT_DOT: Record<string, string> = {
   'Kadra Senior': 'coach-cat-senior',
 }
 
-function RestoreToGroupModal({ athlete, groups, saving, onClose, onConfirm }: {
-  athlete: Athlete; groups: Group[]; saving: boolean; onClose: () => void; onConfirm: (groupId: number) => void
-}) {
-  const [targetGroupId, setTargetGroupId] = useState('')
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      eyebrow="Archiwum"
-      title={`Przywróć ${athlete.full_name}`}
-      sub="Wybierz grupę, do której wraca zawodniczka."
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>Anuluj</Button>
-          <Button variant="dark" onClick={() => targetGroupId && onConfirm(parseInt(targetGroupId))} disabled={!targetGroupId || saving}>
-            {saving ? 'Przywracam...' : 'Przywróć'}
-          </Button>
-        </>
-      }
-    >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '45vh', overflowY: 'auto' }}>
-        {groups.map(g => (
-          <div
-            key={g.id}
-            onClick={() => setTargetGroupId(String(g.id))}
-            style={{
-              padding: '10px 14px', borderRadius: 10, cursor: 'pointer',
-              border: `1px solid ${targetGroupId === String(g.id) ? 'var(--gold)' : 'var(--border)'}`,
-              background: targetGroupId === String(g.id) ? 'var(--navy-900)' : '#fff',
-              color: targetGroupId === String(g.id) ? 'var(--gold)' : 'var(--ink)',
-              fontWeight: 600, fontFamily: 'var(--font-inter),sans-serif', fontSize: 13.5,
-            }}
-          >
-            {g.name}
-            {g.group_type === 'managed' && (
-              <span style={{ fontSize: 10, marginLeft: 8, textTransform: 'uppercase', letterSpacing: '.05em', opacity: 0.7 }}>zorganizowana</span>
-            )}
-          </div>
-        ))}
-        {groups.length === 0 && <div style={{ color: 'var(--muted)', fontSize: 13, fontStyle: 'italic' }}>Brak grup — najpierw utwórz grupę.</div>}
-      </div>
-    </Modal>
-  )
-}
-
 export default function CoachGroupsClient({ groups, athletes }: Props) {
   const router = useRouter()
   const [newGroupOpen, setNewGroupOpen] = useState(false)
-  const [tab, setTab] = useState<'groups' | 'archive'>('groups')
   const [filter, setFilter] = useState<'all' | 'managed' | 'self'>('all')
   const [search, setSearch] = useState('')
   const [openRows, setOpenRows] = useState<number[]>([])
   const [manageOpenRows, setManageOpenRows] = useState<number[]>([])
   const [pendingIds, setPendingIds] = useState<number[]>([])
-  const [restoringAthlete, setRestoringAthlete] = useState<Athlete | null>(null)
 
   const activeAthletes = athletes.filter(a => !a.archived)
-  const archivedAthletes = athletes
-    .filter(a => a.archived)
-    .slice()
-    .sort((a, b) => a.full_name.localeCompare(b.full_name, 'pl'))
 
   const filteredGroups = useMemo(() => {
     let list = groups
@@ -141,14 +89,6 @@ export default function CoachGroupsClient({ groups, athletes }: Props) {
     setPending(athleteId, true)
     const supabase = createClient()
     await supabase.from('athletes').update({ archived: true, group_id: null }).eq('id', athleteId)
-    router.refresh()
-    setPending(athleteId, false)
-  }
-
-  async function restoreAthlete(athleteId: number, groupId: number) {
-    setPending(athleteId, true)
-    const supabase = createClient()
-    await supabase.from('athletes').update({ archived: false, group_id: groupId }).eq('id', athleteId)
     router.refresh()
     setPending(athleteId, false)
   }
@@ -295,135 +235,78 @@ export default function CoachGroupsClient({ groups, athletes }: Props) {
       <SetPageMeta title="Grupy" />
       <div className="coach-content">
         <div className="coach-toolbar">
-          <SegmentedControl
-            options={[
-              { value: 'groups', label: 'Grupy' },
-              { value: 'archive', label: `Archiwum${archivedAthletes.length ? ` (${archivedAthletes.length})` : ''}` },
-            ]}
-            value={tab}
-            onChange={(v) => setTab(v as 'groups' | 'archive')}
-          />
-          {tab === 'groups' && (
-            <div className="coach-toolbar-right">
-              <div className="coach-search-box" style={{ width: 220 }}>
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Szukaj grupy…" />
-              </div>
-              <Button variant="dark" onClick={() => setNewGroupOpen(true)}>
-                <Plus size={15} /> Nowa grupa
-              </Button>
+          <div className="coach-filter-row" style={{ flex: 1 }}>
+            <div className="coach-chip-tabs">
+              <Chip active={filter === 'all'} onClick={() => setFilter('all')}>Wszystkie</Chip>
+              <Chip active={filter === 'managed'} onClick={() => setFilter('managed')}>Zorganizowane</Chip>
+              <Chip active={filter === 'self'} onClick={() => setFilter('self')}>Samodzielne</Chip>
             </div>
-          )}
+          </div>
+          <div className="coach-toolbar-right">
+            <div className="coach-search-box" style={{ width: 220 }}>
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Szukaj grupy…" />
+            </div>
+            <Button variant="dark" onClick={() => setNewGroupOpen(true)}>
+              <Plus size={15} /> Nowa grupa
+            </Button>
+          </div>
         </div>
 
-        {tab === 'groups' ? (
-          <>
-            <div className="coach-filter-row">
-              <div className="coach-chip-tabs">
-                <Chip active={filter === 'all'} onClick={() => setFilter('all')}>Wszystkie</Chip>
-                <Chip active={filter === 'managed'} onClick={() => setFilter('managed')}>Zorganizowane</Chip>
-                <Chip active={filter === 'self'} onClick={() => setFilter('self')}>Samodzielne</Chip>
-              </div>
-            </div>
-
-            <section className="coach-grid-2">
-              <Card className="coach-list-panel">
-                {managedGroups.length > 0 && (
-                  <>
-                    <div className="coach-section-label">Grupy zorganizowane — prowadzi trener</div>
-                    {managedGroups.map(group => <GroupRow key={group.id} group={group} />)}
-                  </>
-                )}
-                {selfGroups.length > 0 && (
-                  <>
-                    <div className="coach-section-label">Grupy samodzielne</div>
-                    {selfGroups.map(group => <GroupRow key={group.id} group={group} />)}
-                  </>
-                )}
-                {filteredGroups.length === 0 && <div className="coach-empty-list">Brak grup pasujących do filtra.</div>}
-              </Card>
-
-              <Card title="Rozkład kategorii">
-                <div className="coach-cat-breakdown">
-                  {catBreakdown.map(row => (
-                    <div key={row.label} className="coach-cat-breakdown-row">
-                      <div className="coach-cat-breakdown-top">
-                        <span className="name">
-                          <span className={`coach-cat-dot ${CAT_DOT[row.label] || 'coach-cat-dziecko'}`} />
-                          {row.label}
-                        </span>
-                        <span className="count">{row.count}</span>
-                      </div>
-                      <div className="coach-bar-track">
-                        <div className="coach-bar-fill" style={{ width: `${row.pct}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                  {catBreakdown.length === 0 && <div className="coach-empty-roster">Brak danych.</div>}
-                </div>
-              </Card>
-            </section>
-
-            <div className="coach-stats-mini">
-              <div className="coach-stat-card">
-                <div className="coach-stat-body">
-                  <div className="coach-num">{groups.length}</div>
-                  <div className="coach-stat-label">Grupy</div>
-                </div>
-              </div>
-              <div className="coach-stat-card">
-                <div className="coach-stat-body">
-                  <div className="coach-num">{activeAthletes.filter(a => a.group_id).length}</div>
-                  <div className="coach-stat-label">Zawodniczki w grupach</div>
-                </div>
-              </div>
-            </div>
-          </>
-        ) : (
-          <Card>
-            <div className="coach-archive-count-card">
-              <span className="eyebrow">Zarchiwizowane</span>
-              <span className="num">{archivedAthletes.length}</span>
-            </div>
-            {archivedAthletes.length === 0 ? (
-              <div className="coach-empty-list">Archiwum jest puste.</div>
-            ) : (
-              <div className="coach-member-list">
-                {archivedAthletes.map(athlete => (
-                  <div key={athlete.id} className="coach-member-card">
-                    <div
-                      className="coach-member-info"
-                      style={{ cursor: 'pointer', flex: 1, minWidth: 0 }}
-                      onClick={() => router.push(`/coach/athletes/${athlete.id}`)}
-                    >
-                      <div className="coach-member-name">{athlete.full_name}</div>
-                      <div className="coach-member-group">{athlete.group?.name ? `grupa: ${athlete.group.name}` : 'bez przypisanej grupy'}</div>
-                    </div>
-                    <button
-                      className="coach-btn-restore"
-                      onClick={() => setRestoringAthlete(athlete)}
-                      disabled={pendingIds.includes(athlete.id)}
-                    >
-                      <RotateCcw size={10} />
-                      {pendingIds.includes(athlete.id) ? 'Przywracam...' : 'Przywróć'}
-                    </button>
-                  </div>
-                ))}
-              </div>
+        <section className="coach-grid-2">
+          <Card className="coach-list-panel">
+            {managedGroups.length > 0 && (
+              <>
+                <div className="coach-section-label">Grupy zorganizowane — prowadzi trener</div>
+                {managedGroups.map(group => <GroupRow key={group.id} group={group} />)}
+              </>
             )}
+            {selfGroups.length > 0 && (
+              <>
+                <div className="coach-section-label">Grupy samodzielne</div>
+                {selfGroups.map(group => <GroupRow key={group.id} group={group} />)}
+              </>
+            )}
+            {filteredGroups.length === 0 && <div className="coach-empty-list">Brak grup pasujących do filtra.</div>}
           </Card>
-        )}
+
+          <Card title="Rozkład kategorii">
+            <div className="coach-cat-breakdown">
+              {catBreakdown.map(row => (
+                <div key={row.label} className="coach-cat-breakdown-row">
+                  <div className="coach-cat-breakdown-top">
+                    <span className="name">
+                      <span className={`coach-cat-dot ${CAT_DOT[row.label] || 'coach-cat-dziecko'}`} />
+                      {row.label}
+                    </span>
+                    <span className="count">{row.count}</span>
+                  </div>
+                  <div className="coach-bar-track">
+                    <div className="coach-bar-fill" style={{ width: `${row.pct}%` }} />
+                  </div>
+                </div>
+              ))}
+              {catBreakdown.length === 0 && <div className="coach-empty-roster">Brak danych.</div>}
+            </div>
+          </Card>
+        </section>
+
+        <div className="coach-stats-mini">
+          <div className="coach-stat-card">
+            <div className="coach-stat-body">
+              <div className="coach-num">{groups.length}</div>
+              <div className="coach-stat-label">Grupy</div>
+            </div>
+          </div>
+          <div className="coach-stat-card">
+            <div className="coach-stat-body">
+              <div className="coach-num">{activeAthletes.filter(a => a.group_id).length}</div>
+              <div className="coach-stat-label">Zawodniczki w grupach</div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {newGroupOpen && <NewGroupModal groups={groups} onClose={() => setNewGroupOpen(false)} />}
-      {restoringAthlete && (
-        <RestoreToGroupModal
-          athlete={restoringAthlete}
-          groups={groups}
-          saving={pendingIds.includes(restoringAthlete.id)}
-          onClose={() => setRestoringAthlete(null)}
-          onConfirm={async groupId => { await restoreAthlete(restoringAthlete.id, groupId); setRestoringAthlete(null) }}
-        />
-      )}
     </>
   )
 }

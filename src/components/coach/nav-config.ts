@@ -8,10 +8,10 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { href: '/coach', label: 'Pulpit', icon: LayoutGrid },
-  { href: '/coach/athletes', label: 'Zawodniczki', icon: Users },
   { href: '/coach/groups', label: 'Grupy', icon: Layers },
-  { href: '/coach/trainings', label: 'Treningi', icon: Calendar },
+  { href: '/coach/athletes', label: 'Zawodniczki', icon: Users },
   { href: '/coach/plans', label: 'Plany', icon: FileText },
+  { href: '/coach/trainings', label: 'Treningi', icon: Calendar },
 ]
 
 // Ścieżki, które renderują się bez sidebar/topbar (tryb kiosku na tablecie).
