@@ -442,40 +442,42 @@
   .coach-group-row:first-of-type{border-top:none;}
 
   .coach-row-head{
-    display:flex;align-items:center;gap:12px;
-    padding:12px 18px;cursor:pointer;
+    display:flex;align-items:center;gap:9px;
+    padding:8px 16px;cursor:pointer;
     -webkit-tap-highlight-color:transparent;
   }
   .coach-row-head:hover{background:#fafbfc;}
+  .coach-row-head .coach-btn{padding:5px 10px;font-size:11.5px;}
+  .coach-row-head .coach-btn svg{width:12px;height:12px;}
   .coach-row-chevron{
     color:var(--muted-light);flex-shrink:0;
     transition:transform .18s ease;
     display:flex;
   }
-  .coach-row-chevron svg{width:15px;height:15px;}
+  .coach-row-chevron svg{width:13px;height:13px;}
   .coach-group-row.coach-open .coach-row-chevron{transform:rotate(90deg);}
 
-  .coach-cat-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+  .coach-cat-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
   .coach-cat-dziecko{background:#b7bfd1;}
   .coach-cat-mlodzik{background:var(--gold);}
   .coach-cat-youth{background:#4f8fe0;}
   .coach-cat-junior{background:var(--green);}
   .coach-cat-senior{background:var(--navy-700);}
 
-  .coach-row-titles{display:flex;align-items:center;gap:9px;flex:1;min-width:0;}
-  .coach-row-name{font-size:15px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .coach-row-titles{display:flex;align-items:center;gap:7px;flex:1;min-width:0;}
+  .coach-row-name{font-size:13px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .coach-badge-organized{
-    font-size:10px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;
-    background:var(--gold);color:var(--navy-900);padding:3px 7px;border-radius:5px;
+    font-size:9px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;
+    background:var(--gold);color:var(--navy-900);padding:2px 6px;border-radius:5px;
     flex-shrink:0;font-family:var(--font-inter),sans-serif;
   }
   .coach-tag-category{
-    font-size:11.5px;color:var(--muted);background:var(--bg);
-    padding:3px 9px;border-radius:100px;flex-shrink:0;font-family:var(--font-inter),sans-serif;font-weight:500;
+    font-size:10.5px;color:var(--muted);background:var(--bg);
+    padding:2px 8px;border-radius:100px;flex-shrink:0;font-family:var(--font-inter),sans-serif;font-weight:500;
   }
 
-  .coach-row-meta{display:flex;align-items:center;gap:14px;flex-shrink:0;}
-  .coach-row-count{font-size:12.5px;color:var(--muted);white-space:nowrap;font-family:var(--font-inter),sans-serif;}
+  .coach-row-meta{display:flex;align-items:center;gap:10px;flex-shrink:0;}
+  .coach-row-count{font-size:11.5px;color:var(--muted);white-space:nowrap;font-family:var(--font-inter),sans-serif;}
   .coach-row-bar{width:88px;flex-shrink:0;}
 
   .coach-row-detail{
