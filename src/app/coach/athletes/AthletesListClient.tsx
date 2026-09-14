@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { ChevronRight, ArrowRightLeft, Archive, AlertTriangle, RotateCcw } from 'lucide-react'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
-import { Card, Chip, SegmentedControl, Modal, Button } from '@/components/coach/ui'
+import { Card, Chip, Modal, Button } from '@/components/coach/ui'
 import AthleteProfileCard, { type AthleteRow } from '@/components/coach/AthleteProfileCard'
 import MoveToGroupModal from '@/components/coach/MoveToGroupModal'
 
@@ -116,27 +116,22 @@ export default function AthletesListClient({ athletes, archivedAthletes, allGrou
     <>
       <SetPageMeta title="Zawodniczki" />
       <div className="coach-content" style={{ paddingTop: 4 }}>
-        <div className="coach-toolbar">
-          <SegmentedControl
-            options={[
-              { value: 'active', label: 'Zawodniczki' },
-              { value: 'archive', label: `Archiwum${archivedAthletes.length ? ` (${archivedAthletes.length})` : ''}` },
-            ]}
-            value={view}
-            onChange={(v) => setView(v as 'active' | 'archive')}
-          />
-          {view === 'active' && (
+        {view === 'active' && (
+          <div className="coach-toolbar" style={{ justifyContent: 'flex-end' }}>
             <div className="coach-search-box" style={{ width: 220, flexShrink: 0 }}>
               <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Szukaj zawodniczki…" />
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {view === 'archive' ? (
           <Card>
             <div className="coach-archive-count-card">
               <span className="eyebrow">Zarchiwizowane</span>
               <span className="num">{archivedAthletes.length}</span>
+              <button className="coach-action-link coach-manage" style={{ marginLeft: 'auto' }} onClick={() => setView('active')}>
+                ← Wróć do listy
+              </button>
             </div>
             {archivedAthletes.length === 0 ? (
               <div className="coach-empty-list">Archiwum jest puste.</div>
@@ -178,6 +173,10 @@ export default function AthletesListClient({ athletes, archivedAthletes, allGrou
               <AlertTriangle size={12} style={{ marginRight: 4 }} /> Z kontuzją
             </Chip>
           </div>
+          <Chip active={false} onClick={() => setView('archive')}>
+            <Archive size={12} style={{ marginRight: 4 }} />
+            Archiwum{archivedAthletes.length ? ` (${archivedAthletes.length})` : ''}
+          </Chip>
         </div>
 
         <Card>
