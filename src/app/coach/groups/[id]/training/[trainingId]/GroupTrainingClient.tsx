@@ -10,7 +10,7 @@ import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { Button } from '@/components/coach/ui'
 
 type Group = { id: number; name: string }
-type Training = { id: number; group_id: number; training_date: string; absent_athlete_ids?: number[] | null }
+type Training = { id: number; group_id: number; training_date: string; absent_athlete_ids?: number[] | null; individual_athlete_ids?: number[] | null }
 type Athlete = { id: number; full_name: string }
 type Exercise = {
   id: number
@@ -27,6 +27,9 @@ type Exercise = {
   variants?: Variant[] | null
   // tryb indywidualny — serie/powt./tempo per zawodniczka; pusty nagłówek to nie błąd
   individual?: boolean | null
+  // gdy ustawione: ćwiczenie NIE jest kolumną grupy, tylko elementem odrębnego
+  // planu indywidualnego tej jednej zawodniczki (osobna sekcja pod siatką)
+  athlete_id?: number | null
 }
 // Wariant: nazwa + opcjonalna własna rozpiska (serie/powt./tempo) + tryb masy własnej + tryb indywidualny.
 type Variant = { name: string; sets?: number | null; reps?: string | null; tempo?: string | null; bodyweight?: boolean | null; individual?: boolean | null }
@@ -47,6 +50,9 @@ type Entry = {
   bodyweight?: boolean | null
   // wybrany wariant ćwiczenia dla tej zawodniczki
   variant?: string | null
+  // ta konkretna zawodniczka nie robi TEGO ćwiczenia (inaczej niż nieobecność
+  // na całym treningu — reszty ćwiczeń to nie dotyczy)
+  excluded?: boolean | null
 }
 
 interface Props {
@@ -368,10 +374,13 @@ export default function GroupTrainingClient({ group, training, athletes, initial
   const [noteOpen, setNoteOpen] = useState<string | null>(null) // entryKey z otwartym polem notatki
   const [trainingDate, setTrainingDate] = useState(training.training_date)
   const [absentIds, setAbsentIds] = useState<Set<number>>(() => new Set(training.absent_athlete_ids || []))
+  const [individualIds, setIndividualIds] = useState<Set<number>>(() => new Set(training.individual_athlete_ids || []))
+  const [summaryOpen, setSummaryOpen] = useState(false)
   const [error, setError] = useState('')
   const [copying, setCopying] = useState(false)
   const [focusExerciseId, setFocusExerciseId] = useState<number | null>(null)
   const nameInputRefs = useRef<Map<number, HTMLInputElement>>(new Map())
+  const boardWrapRef = useRef<HTMLDivElement>(null)
   // Najnowsze serie per komórka — chroni przed zgubieniem ciężaru przy szybkim
   // przechodzeniu między polami (zapis async może nie zdążyć przed kolejnym blur)
   const latestSetsRef = useRef<Map<string, SetRow[]>>(new Map())
@@ -399,17 +408,22 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     if (input) { input.focus(); setFocusExerciseId(null) }
   }, [focusExerciseId, exercises])
 
+  // Kolumny wspólne dla grupy (athlete_id puste) — to one tworzą główną siatkę.
   const sortedExercises = useMemo(
-    () => [...exercises].sort((a, b) => a.exercise_order - b.exercise_order || a.id - b.id),
+    () => [...exercises].filter(e => !e.athlete_id).sort((a, b) => a.exercise_order - b.exercise_order || a.id - b.id),
     [exercises]
   )
 
+  // Zawodniczki "wyciągnięte" do treningu indywidualnego znikają z głównej siatki
+  // i dostają własną sekcję niżej — niezależnie od tego, kto jest nieobecny.
+  const boardAthletes = useMemo(() => athletes.filter(a => !individualIds.has(a.id)), [athletes, individualIds])
+
   // Obecne zawodniczki na górze (w oryginalnej kolejności), wykreślone na końcu
   const orderedAthletes = useMemo(() => {
-    const present = athletes.filter(a => !absentIds.has(a.id)).map(a => ({ athlete: a, absent: false }))
-    const absent = athletes.filter(a => absentIds.has(a.id)).map(a => ({ athlete: a, absent: true }))
+    const present = boardAthletes.filter(a => !absentIds.has(a.id)).map(a => ({ athlete: a, absent: false }))
+    const absent = boardAthletes.filter(a => absentIds.has(a.id)).map(a => ({ athlete: a, absent: true }))
     return [...present, ...absent]
-  }, [athletes, absentIds])
+  }, [boardAthletes, absentIds])
 
   // Wykreślenie / przywrócenie zawodniczki (nieobecność na tym treningu)
   async function toggleAbsent(athleteId: number) {
@@ -423,6 +437,52 @@ export default function GroupTrainingClient({ group, training, athletes, initial
       .update({ absent_athlete_ids: Array.from(next) })
       .eq('id', training.id)
     if (err) { setError(err.message); setAbsentIds(prev) }
+  }
+
+  // Przełącz zawodniczkę między treningiem grupowym a odrębnym planem indywidualnym
+  // na TEN trening — nie usuwa jej ćwiczeń indywidualnych, tylko chowa/pokazuje sekcję.
+  async function toggleIndividualAthlete(athleteId: number) {
+    setError('')
+    const prev = individualIds
+    const next = new Set(prev)
+    if (next.has(athleteId)) next.delete(athleteId); else next.add(athleteId)
+    setIndividualIds(next)
+    const { error: err } = await supabase
+      .from('group_trainings')
+      .update({ individual_athlete_ids: Array.from(next) })
+      .eq('id', training.id)
+    if (err) {
+      setIndividualIds(prev)
+      setError(/'individual_athlete_ids'/.test(err.message)
+        ? 'Aby korzystać z planów indywidualnych, uruchom migrację 202609150003.'
+        : err.message)
+    }
+  }
+
+  // Nowe ćwiczenie w odrębnym planie indywidualnym tej zawodniczki (poza siatką grupy)
+  async function handleAddIndividualExercise(athleteId: number) {
+    setError('')
+    const own = exercises.filter(e => e.athlete_id === athleteId)
+    const maxOrder = Math.max(0, ...own.map(e => e.exercise_order))
+    const { data, error: err } = await supabase
+      .from('group_training_exercises')
+      .insert({ training_id: training.id, athlete_id: athleteId, name: '', exercise_order: maxOrder + 1, sets_planned: 3 })
+      .select()
+      .single()
+    if (err || !data) {
+      setError(/'athlete_id'/.test(err?.message || '')
+        ? 'Aby dodawać plany indywidualne, uruchom migrację 202609150003.'
+        : (err?.message || 'Błąd dodawania ćwiczenia'))
+      return
+    }
+    setExercises(prev => [...prev, data as Exercise])
+    setFocusExerciseId((data as Exercise).id)
+  }
+
+  // Wyklucz / przywróć jedną zawodniczkę z jednego ćwiczenia (reszty kolumn to nie dotyczy)
+  async function toggleExcludeFromExercise(athlete: Athlete, ex: Exercise) {
+    const entry = entryMap.get(entryKey(ex.id, athlete.id))
+    await saveEntryMeta(athlete, ex, { excluded: !entry?.excluded })
   }
 
   // Nowa kolumna ćwiczenia — od razu z pustym polem nazwy do wpisania (jak w Excelu)
@@ -780,6 +840,53 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     })
   }
 
+  // ── Nawigacja klawiaturą między polami serii w głównej siatce ──
+  // ArrowLeft/Right: sąsiednia seria (na krawędzi ćwiczenia — sąsiednie ćwiczenie
+  // tej samej zawodniczki); Enter: ta sama seria, zawodniczka niżej.
+  function focusSetCell(exIdx: number, rowIdx: number, setIdx: number): boolean {
+    if (exIdx < 0 || exIdx >= sortedExercises.length) return false
+    if (rowIdx < 0 || rowIdx >= orderedAthletes.length) return false
+    if (setIdx < 0) return false
+    const wrap = boardWrapRef.current
+    const input = wrap?.querySelector<HTMLInputElement>(`input[data-set-nav="1"][data-ex-idx="${exIdx}"][data-row-idx="${rowIdx}"][data-set-idx="${setIdx}"]`)
+    if (!input || input.disabled) return false
+    input.focus()
+    input.select()
+    return true
+  }
+
+  function lastSetIdxAt(exIdx: number, rowIdx: number): number {
+    const wrap = boardWrapRef.current
+    if (!wrap) return -1
+    let max = -1
+    wrap.querySelectorAll<HTMLInputElement>(`input[data-set-nav="1"][data-ex-idx="${exIdx}"][data-row-idx="${rowIdx}"]`).forEach(inp => {
+      const idx = Number(inp.dataset.setIdx)
+      if (idx > max) max = idx
+    })
+    return max
+  }
+
+  function handleSetNavKeyDown(e: React.KeyboardEvent<HTMLInputElement>, athlete: Athlete, ex: Exercise, exIdx: number, rowIdx: number, setIdx: number, field: 'weight' | 'reps') {
+    if (e.key === 'ArrowRight') {
+      e.preventDefault()
+      if (!focusSetCell(exIdx, rowIdx, setIdx + 1)) focusSetCell(exIdx + 1, rowIdx, 0)
+      return
+    }
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault()
+      if (!focusSetCell(exIdx, rowIdx, setIdx - 1)) {
+        const last = lastSetIdxAt(exIdx - 1, rowIdx)
+        if (last >= 0) focusSetCell(exIdx - 1, rowIdx, last)
+      }
+      return
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      saveInlineField(athlete, ex, setIdx, field, (e.target as HTMLInputElement).value)
+      focusSetCell(exIdx, rowIdx + 1, setIdx)
+    }
+  }
+
   function addInlineSet(athlete: Athlete, ex: Exercise) {
     const key = entryKey(ex.id, athlete.id)
     const entry = entryMap.get(key)
@@ -813,6 +920,8 @@ export default function GroupTrainingClient({ group, training, athletes, initial
         ? 'Aby oznaczać ból w tabeli, uruchom migrację 202606200002 (kolumna pain).'
         : 'variant' in patch && /'variant'/.test(msg)
         ? 'Aby przypisywać warianty, uruchom migrację 202606220001 (kolumny variants/individual/variant).'
+        : 'excluded' in patch && /'excluded'/.test(msg)
+        ? 'Aby wykluczać z pojedynczego ćwiczenia, uruchom migrację 202609150003.'
         : (msg || 'Błąd zapisu'))
       return
     }
@@ -921,7 +1030,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
               Trening · {formatDatePl(trainingDate)}
             </h1>
             <p style={{ color: 'var(--muted)', fontSize: '0.8rem', marginTop: 4, maxWidth: 760, fontFamily: 'var(--font-inter), sans-serif' }}>
-              W nagłówku kolumny: serie, powtórzenia i tempo dla całej grupy. Przeciągnij ⠿, by zmienić kolejność. „BW" wpisuje 0 (masa ciała) w ciężar wszystkim, „P" przełącza kolumnę na wpisywanie powtórzeń zamiast kg. W wierszu zawodniczki wpisujesz ciężar, „+ ból"/„+ notatka" dają szybki wpis bez ✎. Kliknij numer serii (S1, S2…), by oznaczyć „nie zrobiła", a ✕ przy nazwisku wykreśla nieobecną.
+              W nagłówku kolumny: serie, powtórzenia i tempo dla całej grupy. Przeciągnij ⠿, by zmienić kolejność. „BW" wpisuje 0 (masa ciała) w ciężar wszystkim, „P" przełącza kolumnę na wpisywanie powtórzeń zamiast kg. W wierszu zawodniczki wpisujesz ciężar, „+ ból"/„+ notatka" dają szybki wpis bez ✎. Kliknij numer serii (S1, S2…), by oznaczyć „nie zrobiła", a ✕ przy nazwisku wykreśla nieobecną. W polu z ciężarem: ← / → przechodzi między seriami (i ćwiczeniami), Enter — do tej samej serii u zawodniczki poniżej. Mały ⊘ przy komórce wyklucza jedną zawodniczkę z tego jednego ćwiczenia. Ikona osoby przy nazwisku przenosi ją do odrębnego planu indywidualnego.
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -967,7 +1076,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
               </Button>
             )}
 
-              <div className="coach-attendance-grid-wrap" style={{ background: '#ffffff', overflow: 'auto', maxHeight: '72vh', boxShadow: 'var(--shadow)' }}>
+              <div ref={boardWrapRef} className="coach-attendance-grid-wrap" style={{ background: '#ffffff', overflow: 'auto', maxHeight: '72vh', boxShadow: 'var(--shadow)' }}>
                 <table className="gt-table">
                   <thead>
                     <tr>
@@ -1183,7 +1292,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                     </tr>
                   </thead>
                   <tbody>
-                    {orderedAthletes.map(({ athlete, absent }) => (
+                    {orderedAthletes.map(({ athlete, absent }, rowIdx) => (
                       <tr key={athlete.id} className="gt-row">
                         <td className="gt-sticky" style={{ padding: '0.5rem 0.7rem' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
@@ -1200,9 +1309,16 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                             {absent && (
                               <span style={{ flexShrink: 0, fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.5rem', fontWeight: 700, color: '#92600A', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 5, padding: '1px 5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>nieob.</span>
                             )}
+                            <button
+                              onClick={() => toggleIndividualAthlete(athlete.id)}
+                              title="Trening indywidualny — inne ćwiczenia niż grupa"
+                              style={{ flexShrink: 0, marginLeft: 'auto', width: 20, height: 20, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, border: 'none', background: 'none', color: 'var(--muted-light)' }}
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width={13} height={13}><circle cx="12" cy="8" r="4" /><path d="M4 21v-1a8 8 0 0 1 16 0v1" /><path d="m17 3 2 2-2 2" /></svg>
+                            </button>
                           </div>
                         </td>
-                        {sortedExercises.map(ex => {
+                        {sortedExercises.map((ex, exIdx) => {
                           const entry = entryMap.get(entryKey(ex.id, athlete.id)) || null
                           const sets = effectiveSets(ex, entry)
                           const variant = entry?.variant ? (ex.variants || []).find(v => v.name === entry.variant) : undefined
@@ -1210,8 +1326,16 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                           // z głównego ćwiczenia); bez wariantu obowiązuje „P" kolumny. Plus „max"
                           // z rozpiski i „bez ciężaru" ustawione tej zawodniczce w szczegółach.
                           const repsMode = isMaxReps(resolvePresc(ex, entry).reps) || !!entry?.bodyweight || (variant ? !!variant.bodyweight : !!ex.bodyweight)
+                          const excluded = !!entry?.excluded
                           return (
-                            <td key={ex.id} style={{ padding: '0.45rem 0.5rem', ...(absent ? { opacity: 0.35, pointerEvents: 'none' as const } : {}) }}>
+                            <td key={ex.id} style={{ padding: '0.45rem 0.5rem', ...(absent || excluded ? { opacity: 0.35, pointerEvents: 'none' as const } : {}) }}>
+                              <button
+                                onClick={() => toggleExcludeFromExercise(athlete, ex)}
+                                title={excluded ? 'Przywróć do tego ćwiczenia' : 'Ta zawodniczka nie robi tego ćwiczenia'}
+                                style={{ pointerEvents: 'auto', float: 'right', width: 16, height: 16, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 5, border: `1px solid ${excluded ? '#c23b3b' : 'var(--border)'}`, background: excluded ? '#c23b3b' : '#ffffff', color: excluded ? '#ffffff' : 'var(--muted-light)', marginLeft: 4 }}
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width={10} height={10}><circle cx="12" cy="12" r="9" /><path d="m5 19 14-14" /></svg>
+                              </button>
                               {(ex.variants?.length ?? 0) > 0 && (
                                 <select
                                   value={entry?.variant || ''}
@@ -1257,8 +1381,12 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                           defaultValue={cellVal}
                                           placeholder={repsMode ? 'powt.' : 'kg'}
                                           onBlur={e => saveInlineField(athlete, ex, i, repsMode ? 'reps' : 'weight', e.target.value)}
-                                          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                                          onKeyDown={e => handleSetNavKeyDown(e, athlete, ex, exIdx, rowIdx, i, repsMode ? 'reps' : 'weight')}
                                           className={`gt-w${cellVal ? ' filled' : ''}`}
+                                          data-set-nav="1"
+                                          data-ex-idx={exIdx}
+                                          data-row-idx={rowIdx}
+                                          data-set-idx={i}
                                         />
                                       )}
                                     </div>
@@ -1335,9 +1463,181 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                 </table>
               </div>
 
+              {athletes.filter(a => individualIds.has(a.id)).length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    Plany indywidualne — inne ćwiczenia niż reszta grupy
+                  </div>
+                  {athletes.filter(a => individualIds.has(a.id)).map(person => {
+                    const own = exercises.filter(e => e.athlete_id === person.id).sort((a, b) => a.exercise_order - b.exercise_order || a.id - b.id)
+                    return (
+                      <div key={person.id} style={{ background: '#ffffff', border: `1.5px solid var(--border)`, borderRadius: 12, padding: '0.9rem 1rem', boxShadow: 'var(--shadow)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                          <span style={{ display: 'inline-flex', width: 26, height: 26, borderRadius: '50%', background: 'var(--navy-900)', color: 'var(--gold)', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.72rem', flexShrink: 0 }}>
+                            {person.full_name.charAt(0).toUpperCase()}
+                          </span>
+                          <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--ink)', flex: 1 }}>{person.full_name}</h3>
+                          <Button variant="ghost" size="small" onClick={() => toggleIndividualAthlete(person.id)}>
+                            ← Wróć do treningu grupowego
+                          </Button>
+                        </div>
+
+                        {own.length === 0 && (
+                          <div style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.78rem', color: 'var(--muted-light)', padding: '0.5rem 0 0.75rem' }}>
+                            Brak ćwiczeń — dodaj pierwsze poniżej.
+                          </div>
+                        )}
+                        {own.map(ex => {
+                          const entry = entryMap.get(entryKey(ex.id, person.id)) || null
+                          const sets = effectiveSets(ex, entry)
+                          const presc = resolvePresc(ex, entry)
+                          const repsMode = isMaxReps(presc.reps) || !!entry?.bodyweight || !!ex.bodyweight
+                          return (
+                            <div key={ex.id} style={{ background: 'var(--bg)', border: `1px solid var(--border)`, borderRadius: 10, padding: '0.6rem 0.7rem', marginBottom: 8 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                                <input
+                                  ref={el => { if (el) nameInputRefs.current.set(ex.id, el); else nameInputRefs.current.delete(ex.id) }}
+                                  value={ex.name}
+                                  onChange={e => handleExerciseField(ex.id, 'name', e.target.value)}
+                                  onBlur={() => persistExercise(ex.id)}
+                                  onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                                  placeholder="nazwa ćwiczenia"
+                                  style={{ flex: 1, minWidth: 0, border: 'none', background: 'none', fontWeight: 700, fontSize: '0.88rem', color: 'var(--navy-900)', padding: '0.2rem 0', outline: 'none', fontFamily: 'var(--font-inter), sans-serif' }}
+                                />
+                                <button onClick={() => handleDeleteExercise(ex)} title="Usuń ćwiczenie" style={{ border: 'none', background: 'none', color: 'var(--muted-light)', fontSize: '0.78rem', padding: 2, flexShrink: 0 }}>✕</button>
+                              </div>
+                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                                {([
+                                  { field: 'sets_planned' as const, label: 'serie', value: ex.sets_planned ?? '', placeholder: '3', type: 'number' },
+                                  { field: 'reps' as const, label: 'powt.', value: ex.reps ?? '', placeholder: '8', type: 'text' },
+                                  { field: 'tempo' as const, label: 'tempo', value: ex.tempo ?? '', placeholder: '3010', type: 'text' },
+                                ]).map(f => (
+                                  <div key={f.field}>
+                                    <div style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.48rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.04em', textAlign: 'center', marginBottom: 1 }}>{f.label}</div>
+                                    <input
+                                      type={f.type}
+                                      {...(f.type === 'number' ? { min: 0, max: 20 } : {})}
+                                      value={f.value}
+                                      onChange={e => handleExerciseField(ex.id, f.field, e.target.value)}
+                                      onBlur={() => persistExercise(ex.id)}
+                                      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                                      placeholder={f.placeholder}
+                                      style={{ width: 44, border: `1px solid var(--border)`, borderRadius: 6, background: '#ffffff', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.72rem', color: 'var(--navy-900)', padding: '0.28rem 0.2rem', outline: 'none', textAlign: 'center' }}
+                                    />
+                                  </div>
+                                ))}
+                                <button
+                                  onClick={() => toggleExerciseBodyweight(ex.id)}
+                                  title={ex.bodyweight ? 'Tryb powtórzeń włączony — kliknij, by wrócić do kg' : 'Wpisuj powtórzenia zamiast kg'}
+                                  style={{ alignSelf: 'flex-end', flexShrink: 0, fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.6rem', fontWeight: 700, border: `1px solid ${ex.bodyweight ? 'var(--gold)' : 'var(--border)'}`, background: ex.bodyweight ? '#FFFBEB' : '#ffffff', color: ex.bodyweight ? '#92600A' : 'var(--muted-light)', borderRadius: 6, padding: '0.28rem 0.4rem' }}
+                                >
+                                  BW
+                                </button>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, flexWrap: 'wrap' }}>
+                                {sets.map((s, i) => {
+                                  const repsPerf = s.reps && !isMaxReps(s.reps) ? s.reps : ''
+                                  const cellVal = repsMode ? repsPerf : (s.weight || '')
+                                  return (
+                                    <div key={`${ex.id}_${person.id}_${i}_${s.skipped ? 'x' : cellVal}`}>
+                                      <button
+                                        onClick={() => toggleSkipInline(person, ex, i)}
+                                        title={s.skipped ? 'Seria nie zrobiona — kliknij, by cofnąć' : 'Oznacz: nie zrobiła tej serii'}
+                                        style={{ display: 'block', width: '100%', border: 'none', background: 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.5rem', color: s.skipped ? '#c23b3b' : 'var(--muted-light)', textAlign: 'center', marginBottom: 1, textDecoration: s.skipped ? 'line-through' : 'none', padding: 0 }}
+                                      >
+                                        S{i + 1}
+                                      </button>
+                                      {s.skipped ? (
+                                        <button
+                                          onClick={() => toggleSkipInline(person, ex, i)}
+                                          title="Nie zrobiła tej serii (kliknij, by cofnąć)"
+                                          style={{ width: 44, border: '1.5px solid #F4B5B5', borderRadius: 7, background: '#FDEDED', color: '#c23b3b', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.78rem', fontWeight: 700, padding: '0.3rem 0', lineHeight: 1 }}
+                                        >
+                                          ✕
+                                        </button>
+                                      ) : (
+                                        <input
+                                          defaultValue={cellVal}
+                                          placeholder={repsMode ? 'powt.' : 'kg'}
+                                          onBlur={e => saveInlineField(person, ex, i, repsMode ? 'reps' : 'weight', e.target.value)}
+                                          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                                          className={`gt-w${cellVal ? ' filled' : ''}`}
+                                        />
+                                      )}
+                                    </div>
+                                  )
+                                })}
+                                <button
+                                  onClick={() => addInlineSet(person, ex)}
+                                  title="Dodaj serię"
+                                  style={{ border: `1.5px solid var(--border)`, background: '#ffffff', color: 'var(--navy-900)', borderRadius: 7, padding: '0.28rem 0.42rem', fontSize: '0.82rem', fontWeight: 800, flexShrink: 0, lineHeight: 1 }}
+                                >
+                                  ＋
+                                </button>
+                                {sets.length > Math.max(presc.sets ?? 0, 1) && (
+                                  <button
+                                    onClick={() => removeInlineSet(person, ex)}
+                                    title="Usuń ostatnią serię"
+                                    style={{ border: `1.5px solid var(--border)`, background: '#ffffff', color: 'var(--muted-light)', borderRadius: 7, padding: '0.28rem 0.42rem', fontSize: '0.82rem', fontWeight: 800, flexShrink: 0, lineHeight: 1 }}
+                                  >
+                                    －
+                                  </button>
+                                )}
+                              </div>
+                              <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                                {(() => {
+                                  const painActive = !!entry?.pain || entry?.pain_vas != null
+                                  return (
+                                    <button
+                                      onClick={() => toggleInlinePain(person, ex)}
+                                      title={painActive ? (entry?.pain_comment ? `Ból: ${entry.pain_comment} (kliknij, by odznaczyć)` : 'Odznacz ból') : 'Zaznacz ból'}
+                                      style={painActive
+                                        ? { fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.6rem', fontWeight: 700, color: '#ffffff', background: (entry?.pain_vas != null && entry.pain_vas >= 5) ? '#c23b3b' : '#c07f1e', border: 'none', borderRadius: 6, padding: '2px 7px', lineHeight: 1.3 }
+                                        : { fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.56rem', fontWeight: 700, color: 'var(--muted-light)', background: '#ffffff', border: `1px solid var(--border)`, borderRadius: 6, padding: '2px 6px', lineHeight: 1.3 }}
+                                    >
+                                      {painActive ? `ból${entry?.pain_vas != null ? ` ${entry.pain_vas}` : ''}` : '+ ból'}
+                                    </button>
+                                  )
+                                })()}
+                                {noteOpen === entryKey(ex.id, person.id) ? (
+                                  <input
+                                    autoFocus
+                                    defaultValue={entry?.comment || ''}
+                                    placeholder="notatka..."
+                                    onBlur={e => { saveInlineComment(person, ex, e.target.value); setNoteOpen(null) }}
+                                    onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); else if (e.key === 'Escape') setNoteOpen(null) }}
+                                    style={{ flex: 1, minWidth: 96, border: `1.5px solid var(--gold)`, borderRadius: 6, background: '#ffffff', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.7rem', color: 'var(--navy-900)', padding: '2px 6px', outline: 'none' }}
+                                  />
+                                ) : entry?.comment ? (
+                                  <button onClick={() => setNoteOpen(entryKey(ex.id, person.id))} title={entry.comment}
+                                    style={{ maxWidth: 140, fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.62rem', color: 'var(--navy-900)', background: '#F4F6F9', border: `1px solid var(--border)`, borderRadius: 6, padding: '2px 7px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3 }}>
+                                    💬 {entry.comment}
+                                  </button>
+                                ) : (
+                                  <button onClick={() => setNoteOpen(entryKey(ex.id, person.id))}
+                                    style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.56rem', fontWeight: 700, color: 'var(--muted-light)', background: '#ffffff', border: `1px solid var(--border)`, borderRadius: 6, padding: '2px 6px', lineHeight: 1.3 }}>
+                                    + notatka
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                        <Button variant="ghost" size="small" onClick={() => handleAddIndividualExercise(person.id)}>
+                          + Dodaj ćwiczenie
+                        </Button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
               <div style={{ display: 'flex', gap: 10 }}>
+                <Button variant="ghost" onClick={() => setSummaryOpen(true)}>
+                  📊 Podsumowanie treningu
+                </Button>
                 <Button variant="ghost" onClick={() => router.push(`/coach/groups/${group.id}/summary`)}>
-                  📊 Podsumowanie
+                  📈 Statystyki grupy
                 </Button>
                 <Button variant="dark" onClick={() => router.push(`/coach/groups/${group.id}`)} style={{ flex: 1, color: 'var(--gold)', fontWeight: 900 }}>
                   Gotowe — wróć do grupy
@@ -1346,6 +1646,39 @@ export default function GroupTrainingClient({ group, training, athletes, initial
             </>
           )}
       </div>
+
+      {summaryOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(13,27,42,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: 'var(--font-inter), sans-serif' }} onClick={() => setSummaryOpen(false)}>
+          <div style={{ width: '100%', maxWidth: 560, maxHeight: '85vh', display: 'flex', flexDirection: 'column', background: '#ffffff', borderRadius: 18, overflow: 'hidden', border: `1.5px solid var(--border)` }} onClick={e => e.stopPropagation()}>
+            <div style={{ background: 'var(--navy-900)', padding: '1rem 1.25rem', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#ffffff' }}>📊 Podsumowanie treningu</div>
+              <button onClick={() => setSummaryOpen(false)} style={{ border: 'none', background: 'none', color: '#aeb7cc', fontSize: '1.1rem', padding: 4 }}>✕</button>
+            </div>
+            <div style={{ overflowY: 'auto', flex: 1, padding: '1rem 1.25rem' }}>
+              {absentIds.size > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '0.5rem 0', borderBottom: `1px solid var(--border)`, fontSize: '0.82rem' }}>
+                  <span>Nieobecne dziś</span>
+                  <b>{absentIds.size}: {athletes.filter(a => absentIds.has(a.id)).map(a => a.full_name).join(', ')}</b>
+                </div>
+              )}
+              {sortedExercises.map(ex => {
+                const active = boardAthletes.filter(a => !absentIds.has(a.id) && !entryMap.get(entryKey(ex.id, a.id))?.excluded)
+                const done = active.filter(a => {
+                  const entry = entryMap.get(entryKey(ex.id, a.id))
+                  return effectiveSets(ex, entry).some(s => (s.weight || '').trim() || (s.reps || '').trim() || s.skipped)
+                }).length
+                const excludedCount = boardAthletes.filter(a => !absentIds.has(a.id) && entryMap.get(entryKey(ex.id, a.id))?.excluded).length
+                return (
+                  <div key={ex.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '0.5rem 0', borderBottom: `1px solid var(--border)`, fontSize: '0.82rem' }}>
+                    <span>{ex.name || 'Bez nazwy'}</span>
+                    <b>{done}/{active.length} uzupełnionych{excludedCount ? ` · ${excludedCount} nie robi tego ćwiczenia` : ''}</b>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {openCell && (
         <CellModal
