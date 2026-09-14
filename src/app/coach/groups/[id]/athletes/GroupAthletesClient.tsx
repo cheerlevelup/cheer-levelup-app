@@ -86,24 +86,33 @@ function AddAthleteModal({ group, onClose, onAdded }: { group: Group; onClose: (
 type ParsedRow = { fullName: string; birthYear: string; skip: boolean }
 
 function parseBulkText(text: string, existingNames: Set<string>): ParsedRow[] {
-  return text
-    .split('\n')
-    .map(line => line.trim())
-    .filter(Boolean)
-    .map(line => {
-      const cells = line.split('\t').map(c => c.trim()).filter(c => c !== '')
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
+  let rows = lines.map(line => line.split('\t').map(c => c.trim()).filter(c => c !== ''))
+
+  // Jeśli pierwsza kolumna powtarza się identycznie na wszystkich wierszach
+  // (np. nazwa grupy wklejona z Excela razem z resztą), to nie jest częścią
+  // imienia/nazwiska — usuwamy ją ze wszystkich wierszy naraz.
+  if (rows.length > 1 && rows.every(r => r.length >= 3)) {
+    const firstCol = rows[0][0]?.toLowerCase()
+    if (firstCol && rows.every(r => r[0]?.toLowerCase() === firstCol)) {
+      rows = rows.map(r => r.slice(1))
+    }
+  }
+
+  return rows
+    .map(cells => {
       let fullName = ''
       let birthYear = ''
       if (cells.length >= 2) {
         // Ostatnia komórka to rok (jeśli wygląda jak rok) — imię i nazwisko to
-        // komórka bezpośrednio przed nim (pozwala pominąć wcześniejszą kolumnę
-        // z nazwą grupy wklejoną z Excela, np. "FORCE  Agata Kowalczyk  2012").
+        // wszystko przed nim połączone spacją (obsługuje osobne kolumny
+        // imię/nazwisko, np. "Aleksandra  Gonet  2014").
         const last = cells[cells.length - 1]
         if (/^\d{4}$/.test(last)) {
           birthYear = last
-          fullName = cells[cells.length - 2] || ''
+          fullName = cells.slice(0, -1).join(' ')
         } else {
-          fullName = last
+          fullName = cells.join(' ')
         }
       } else {
         fullName = cells[0] || ''
