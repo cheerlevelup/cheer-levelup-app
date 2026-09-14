@@ -5,7 +5,7 @@ import { FileText } from 'lucide-react'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { TabsNav, Card } from '@/components/coach/ui'
 
-type Group = { id: number; name: string }
+type Group = { id: number; name: string; group_type?: string }
 
 interface Props {
   group: Group
@@ -16,15 +16,25 @@ export default function GroupPlanClient({ group, athletesCount }: Props) {
   return (
     <>
       <SetPageMeta title="Plan" backHref={`/coach/groups/${group.id}`} backLabel={group.name} />
-      <TabsNav items={[
-        { key: 'treningi', label: 'Treningi', href: `/coach/groups/${group.id}` },
-        { key: 'plan', label: 'Plan', href: `/coach/groups/${group.id}/plan` },
-        { key: 'statystyki', label: 'Statystyki', href: `/coach/groups/${group.id}/stats` },
-        { key: 'obecnosc', label: 'Obecność', href: `/coach/groups/${group.id}/attendance` },
-        { key: 'zawodniczki', label: 'Zawodniczki', href: `/coach/groups/${group.id}/athletes` },
-        { key: 'testy', label: 'Testy', href: `/coach/groups/${group.id}/tests` },
-      ]} />
       <div className="coach-content">
+        <div className="coach-group-hero">
+          <div className="coach-group-hero-title">
+            <h2>{group.name}</h2>
+            <span className="coach-badge-organized">{group.group_type === 'managed' ? 'zorganizowana' : 'samodzielna'}</span>
+          </div>
+          <div className="coach-group-hero-sub">
+            {athletesCount} zawodniczek <span className="coach-dot-sep">·</span> {group.group_type === 'managed' ? 'grupa prowadzona przez trenera' : 'grupa samodzielna'}
+          </div>
+        </div>
+
+        <TabsNav items={[
+          { key: 'treningi', label: 'Treningi', href: `/coach/groups/${group.id}` },
+          { key: 'plan', label: 'Plan', href: `/coach/groups/${group.id}/plan` },
+          { key: 'statystyki', label: 'Statystyki', href: `/coach/groups/${group.id}/stats` },
+          { key: 'obecnosc', label: 'Obecność', href: `/coach/groups/${group.id}/attendance` },
+          { key: 'zawodniczki', label: 'Zawodniczki', href: `/coach/groups/${group.id}/athletes` },
+          { key: 'testy', label: 'Testy', href: `/coach/groups/${group.id}/tests` },
+        ]} />
         <Card>
           <div style={{ padding: '2.5rem 1.5rem', textAlign: 'center', color: 'var(--muted)' }}>
             <FileText size={28} style={{ opacity: 0.5, marginBottom: 10 }} />

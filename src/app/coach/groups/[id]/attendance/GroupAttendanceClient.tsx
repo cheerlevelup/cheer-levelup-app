@@ -20,7 +20,7 @@ const DANGER_RGB: [number, number, number] = [194, 59, 59]
 const SUCCESS_BG: [number, number, number] = [233, 249, 240]
 const SUCCESS_RGB: [number, number, number] = [31, 157, 100]
 
-type Group = { id: number; name: string }
+type Group = { id: number; name: string; group_type?: string }
 type Athlete = { id: number; full_name: string }
 type Training = { id: number; group_id: number; training_date: string; absent_athlete_ids?: number[] | null }
 
@@ -120,15 +120,25 @@ export default function GroupAttendanceClient({ group, athletes, trainings }: Pr
   return (
     <>
       <SetPageMeta title="Obecność" backHref={`/coach/groups/${group.id}`} backLabel={group.name} />
-      <TabsNav items={[
-        { key: 'treningi', label: 'Treningi', href: `/coach/groups/${group.id}` },
-        { key: 'plan', label: 'Plan', href: `/coach/groups/${group.id}/plan` },
-        { key: 'statystyki', label: 'Statystyki', href: `/coach/groups/${group.id}/stats` },
-        { key: 'obecnosc', label: 'Obecność', href: `/coach/groups/${group.id}/attendance` },
-        { key: 'zawodniczki', label: 'Zawodniczki', href: `/coach/groups/${group.id}/athletes` },
-        { key: 'testy', label: 'Testy', href: `/coach/groups/${group.id}/tests` },
-      ]} />
       <div className="coach-content">
+        <div className="coach-group-hero">
+          <div className="coach-group-hero-title">
+            <h2>{group.name}</h2>
+            <span className="coach-badge-organized">{group.group_type === 'managed' ? 'zorganizowana' : 'samodzielna'}</span>
+          </div>
+          <div className="coach-group-hero-sub">
+            {athletes.length} zawodniczek <span className="coach-dot-sep">·</span> {group.group_type === 'managed' ? 'grupa prowadzona przez trenera' : 'grupa samodzielna'}
+          </div>
+        </div>
+
+        <TabsNav items={[
+          { key: 'treningi', label: 'Treningi', href: `/coach/groups/${group.id}` },
+          { key: 'plan', label: 'Plan', href: `/coach/groups/${group.id}/plan` },
+          { key: 'statystyki', label: 'Statystyki', href: `/coach/groups/${group.id}/stats` },
+          { key: 'obecnosc', label: 'Obecność', href: `/coach/groups/${group.id}/attendance` },
+          { key: 'zawodniczki', label: 'Zawodniczki', href: `/coach/groups/${group.id}/athletes` },
+          { key: 'testy', label: 'Testy', href: `/coach/groups/${group.id}/tests` },
+        ]} />
         {athletes.length === 0 ? (
           <Card><div className="coach-empty-list">Brak zawodniczek w grupie.</div></Card>
         ) : trainings.length === 0 ? (
