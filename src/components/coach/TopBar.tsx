@@ -1,6 +1,6 @@
 'use client'
 import Link from 'next/link'
-import { Menu, Search, LogOut, ArrowLeft } from 'lucide-react'
+import { Menu, LogOut, ArrowLeft } from 'lucide-react'
 import { usePageMeta } from './PageMetaContext'
 import { createClient } from '@/utils/supabase/client'
 
@@ -31,10 +31,6 @@ export default function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
         </div>
       </div>
       <div className="coach-topbar-right">
-        <div className="coach-search-box">
-          <Search size={15} />
-          <input type="text" placeholder="Szukaj zawodniczki, grupy…" />
-        </div>
         <button className="coach-btn coach-btn-ghost" onClick={handleLogout}>
           <LogOut size={15} />
           Wyloguj
