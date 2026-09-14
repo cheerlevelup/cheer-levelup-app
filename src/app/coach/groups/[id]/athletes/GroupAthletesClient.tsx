@@ -266,8 +266,7 @@ export default function GroupAthletesClient({ group, athletes, allGroups }: Prop
         />
 
         <div className="coach-group-tab-panel">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 0 8px' }}>
-            <div className="coach-section-label" style={{ padding: 0 }}>Zawodniczki ({athletes.length})</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', margin: '0 0 8px' }}>
             <div style={{ display: 'flex', gap: 8 }}>
               <Button variant="ghost" size="small" onClick={() => setBulkAddOpen(true)}>
                 <ClipboardList size={13} /> Dodaj wiele

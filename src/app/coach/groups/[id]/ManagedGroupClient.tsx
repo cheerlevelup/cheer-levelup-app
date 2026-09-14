@@ -468,8 +468,7 @@ export default function ManagedGroupClient({ group, athletes, trainings }: Props
             ))}
           </div>
 
-          <div className="coach-section-label" style={{ padding: '4px 0 8px' }}>Treningi ({trainings.length})</div>
-          <Card>
+          <Card style={{ marginTop: 14 }}>
             {trainings.length === 0 ? (
               <div className="coach-empty-list">Jeszcze nie było żadnego treningu. Kliknij „Rozpocznij trening”.</div>
             ) : (

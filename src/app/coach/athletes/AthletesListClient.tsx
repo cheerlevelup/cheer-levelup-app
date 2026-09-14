@@ -58,8 +58,7 @@ export default function AthletesListClient({ athletes, allGroups, injuredIds }: 
     <>
       <SetPageMeta title="Zawodniczki" />
       <div className="coach-content">
-        <div className="coach-toolbar">
-          <div className="coach-section-label" style={{ padding: 0 }}>Wszystkie zawodniczki ({athletes.length})</div>
+        <div className="coach-toolbar" style={{ justifyContent: 'flex-end' }}>
           <div className="coach-toolbar-right">
             <div className="coach-search-box" style={{ width: 220 }}>
               <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Szukaj zawodniczki…" />
