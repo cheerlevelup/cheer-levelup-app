@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
-import { Plus, ChevronRight, ArrowRightLeft, Archive } from 'lucide-react'
+import { Plus, ChevronRight, ArrowRightLeft, Archive, ClipboardList } from 'lucide-react'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { TabsNav, Card, Modal, Field, Button } from '@/components/coach/ui'
 import AthleteProfileCard, { type AthleteRow } from '@/components/coach/AthleteProfileCard'
@@ -83,9 +83,149 @@ function AddAthleteModal({ group, onClose, onAdded }: { group: Group; onClose: (
   )
 }
 
+type ParsedRow = { fullName: string; birthYear: string; skip: boolean }
+
+function parseBulkText(text: string, existingNames: Set<string>): ParsedRow[] {
+  return text
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => {
+      const cells = line.split('\t').map(c => c.trim()).filter(c => c !== '')
+      let fullName = ''
+      let birthYear = ''
+      if (cells.length >= 2) {
+        // Ostatnia komórka to rok (jeśli wygląda jak rok) — imię i nazwisko to
+        // komórka bezpośrednio przed nim (pozwala pominąć wcześniejszą kolumnę
+        // z nazwą grupy wklejoną z Excela, np. "FORCE  Agata Kowalczyk  2012").
+        const last = cells[cells.length - 1]
+        if (/^\d{4}$/.test(last)) {
+          birthYear = last
+          fullName = cells[cells.length - 2] || ''
+        } else {
+          fullName = last
+        }
+      } else {
+        fullName = cells[0] || ''
+      }
+      fullName = fullName.trim()
+      const skip = existingNames.has(fullName.toLowerCase())
+      return { fullName, birthYear, skip }
+    })
+    .filter(r => r.fullName)
+}
+
+type RowResult = { fullName: string; status: 'pending' | 'done' | 'skipped' | 'error'; message?: string }
+
+function BulkAddAthletesModal({ group, existingNames, onClose, onAdded }: {
+  group: Group; existingNames: Set<string>; onClose: () => void; onAdded: () => void
+}) {
+  const [text, setText] = useState('')
+  const [running, setRunning] = useState(false)
+  const [results, setResults] = useState<RowResult[] | null>(null)
+
+  const preview = parseBulkText(text, existingNames)
+
+  async function handleAddAll() {
+    const rows = parseBulkText(text, existingNames)
+    if (rows.length === 0) return
+    setRunning(true)
+    const initial: RowResult[] = rows.map(r => ({ fullName: r.fullName, status: r.skip ? 'skipped' : 'pending' }))
+    setResults(initial)
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i]
+      if (row.skip) continue
+      try {
+        const res = await fetch('/api/athletes/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            full_name: row.fullName,
+            birth_year: row.birthYear || null,
+            group_id: group.id,
+            password: generatePassword(),
+          }),
+        })
+        const json = await res.json().catch(() => ({}))
+        setResults(prev => prev!.map((r, j) => j === i ? { ...r, status: res.ok ? 'done' : 'error', message: res.ok ? undefined : (json?.error || `Błąd (${res.status})`) } : r))
+      } catch (e: any) {
+        setResults(prev => prev!.map((r, j) => j === i ? { ...r, status: 'error', message: e?.message || 'Błąd połączenia' } : r))
+      }
+    }
+    setRunning(false)
+    onAdded()
+  }
+
+  const doneCount = results?.filter(r => r.status === 'done').length ?? 0
+  const allFinished = results && results.every(r => r.status !== 'pending')
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      eyebrow={group.name}
+      title="Dodaj wiele zawodniczek"
+      sub="Wklej listę — jedna zawodniczka na wiersz. Zawodniczki już w grupie zostaną pominięte."
+      footer={
+        results ? (
+          <Button variant="dark" onClick={onClose} disabled={!allFinished}>
+            {allFinished ? `Gotowe (${doneCount})` : 'Dodaję...'}
+          </Button>
+        ) : (
+          <>
+            <Button variant="ghost" onClick={onClose}>Anuluj</Button>
+            <Button variant="dark" onClick={handleAddAll} disabled={running || preview.length === 0}>
+              Dodaj {preview.filter(r => !r.skip).length || ''} zawodniczek
+            </Button>
+          </>
+        )
+      }
+    >
+      {!results ? (
+        <>
+          <Field label="Imię i nazwisko + rok urodzenia (jedna osoba na wiersz)">
+            <textarea
+              value={text}
+              onChange={e => setText(e.target.value)}
+              placeholder={'Agata Kowalczyk\t2012\nAleksandra Gonet\t2014\n...'}
+              rows={8}
+              autoFocus
+            />
+          </Field>
+          {preview.length > 0 && (
+            <div style={{ marginTop: 10, maxHeight: '30vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {preview.map((r, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-inter),sans-serif', fontSize: 12.5, padding: '3px 0' }}>
+                  <span style={{ color: r.skip ? 'var(--muted-light)' : 'var(--ink)', textDecoration: r.skip ? 'line-through' : 'none' }}>{r.fullName}</span>
+                  {r.birthYear && <span style={{ color: 'var(--muted-light)' }}>{r.birthYear}</span>}
+                  {r.skip && <span style={{ color: 'var(--muted-light)', fontSize: 11 }}>— już w grupie</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: '45vh', overflowY: 'auto' }}>
+          {results.map((r, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-inter),sans-serif', fontSize: 12.5, padding: '3px 0' }}>
+              <span style={{ flexShrink: 0, width: 16 }}>
+                {r.status === 'done' ? '✅' : r.status === 'skipped' ? '⏭️' : r.status === 'error' ? '❌' : '…'}
+              </span>
+              <span style={{ color: 'var(--ink)' }}>{r.fullName}</span>
+              {r.message && <span style={{ color: '#c23b3b', fontSize: 11 }}>{r.message}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </Modal>
+  )
+}
+
 export default function GroupAthletesClient({ group, athletes, allGroups }: Props) {
   const router = useRouter()
   const [addOpen, setAddOpen] = useState(false)
+  const [bulkAddOpen, setBulkAddOpen] = useState(false)
   const [openId, setOpenId] = useState<number | null>(null)
   const [movingAthlete, setMovingAthlete] = useState<Athlete | null>(null)
   const [archivingId, setArchivingId] = useState<number | null>(null)
@@ -119,9 +259,14 @@ export default function GroupAthletesClient({ group, athletes, allGroups }: Prop
         <div className="coach-group-tab-panel">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 0 8px' }}>
             <div className="coach-section-label" style={{ padding: 0 }}>Zawodniczki ({athletes.length})</div>
-            <Button variant="dark" size="small" onClick={() => setAddOpen(true)}>
-              <Plus size={13} /> Dodaj
-            </Button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Button variant="ghost" size="small" onClick={() => setBulkAddOpen(true)}>
+                <ClipboardList size={13} /> Dodaj wiele
+              </Button>
+              <Button variant="dark" size="small" onClick={() => setAddOpen(true)}>
+                <Plus size={13} /> Dodaj
+              </Button>
+            </div>
           </div>
           <Card>
             {athletes.length === 0 ? (
@@ -174,6 +319,14 @@ export default function GroupAthletesClient({ group, athletes, allGroups }: Prop
 
       {addOpen && (
         <AddAthleteModal group={group} onClose={() => setAddOpen(false)} onAdded={() => router.refresh()} />
+      )}
+      {bulkAddOpen && (
+        <BulkAddAthletesModal
+          group={group}
+          existingNames={new Set(athletes.map(a => a.full_name.toLowerCase()))}
+          onClose={() => { setBulkAddOpen(false); router.refresh() }}
+          onAdded={() => router.refresh()}
+        />
       )}
       {movingAthlete && (
         <MoveToGroupModal
