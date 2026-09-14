@@ -32,9 +32,15 @@ type Injury = {
 type BenchmarkTest = {
   id?: number
   athlete_id: number
-  test_type: string
+  test_catalog_id: number
   value: number | null
   test_date: string | null
+}
+
+type CatalogTest = {
+  id: number
+  name: string
+  unit: string
 }
 
 type Session = {
@@ -59,20 +65,6 @@ const STATUS_LABEL: Record<Injury['status'], string> = {
 const STATUS_TONE: Record<Injury['status'], 'red' | 'amber' | 'green' | 'muted'> = {
   active: 'red', in_treatment: 'amber', healed: 'green', chronic: 'muted',
 }
-
-const TEST_GROUPS: { title: string; icon: React.ReactNode; rows: { type: string; label: string; unit: string }[] }[] = [
-  {
-    title: 'BROAD JUMP [CM]',
-    icon: <Ruler size={14} />,
-    rows: [
-      { type: 'broad_jump_both', label: 'BROAD JUMP', unit: 'cm' },
-      { type: 'broad_jump_right', label: 'SL BROAD JUMP (R)', unit: 'cm' },
-      { type: 'broad_jump_left', label: 'SL BROAD JUMP (L)', unit: 'cm' },
-    ],
-  },
-  { title: 'CHIN-UP [SEC]', icon: <LineChartIcon size={14} />, rows: [{ type: 'chin_up', label: 'Wynik', unit: 'sec.' }] },
-  { title: 'PUSH-UP [REPS]', icon: <LineChartIcon size={14} />, rows: [{ type: 'push_up', label: 'Wynik', unit: 'reps' }] },
-]
 
 export default function AthleteProfileCard({ athlete, onClose }: { athlete: AthleteRow; onClose: () => void }) {
   const supabase = createClient()
@@ -145,37 +137,42 @@ export default function AthleteProfileCard({ athlete, onClose }: { athlete: Athl
   const activeInjuryCount = (injuries || []).filter(i => i.status === 'active').length
 
   // ── Testy ──
-  const [tests, setTests] = useState<Map<string, BenchmarkTest> | null>(null)
+  const [catalog, setCatalog] = useState<CatalogTest[] | null>(null)
+  const [tests, setTests] = useState<Map<number, BenchmarkTest> | null>(null)
 
   async function loadTests() {
     if (tests !== null) return
-    const { data } = await supabase.from('benchmark_tests').select('*').eq('athlete_id', athlete.id).order('test_date', { ascending: false })
-    const m = new Map<string, BenchmarkTest>()
-    for (const row of (data || []) as BenchmarkTest[]) {
-      if (!m.has(row.test_type)) m.set(row.test_type, row) // najnowszy (posortowane malejąco)
+    const [{ data: catalogData }, { data: testsData }] = await Promise.all([
+      supabase.from('test_catalog').select('id, name, unit').eq('is_archived', false).order('sort_order', { ascending: true }),
+      supabase.from('benchmark_tests').select('*').eq('athlete_id', athlete.id).order('test_date', { ascending: false }),
+    ])
+    const m = new Map<number, BenchmarkTest>()
+    for (const row of (testsData || []) as BenchmarkTest[]) {
+      if (!m.has(row.test_catalog_id)) m.set(row.test_catalog_id, row) // najnowszy (posortowane malejąco)
     }
+    setCatalog((catalogData || []) as CatalogTest[])
     setTests(m)
   }
 
-  function updateTestLocal(type: string, patch: Partial<BenchmarkTest>) {
+  function updateTestLocal(testCatalogId: number, patch: Partial<BenchmarkTest>) {
     setTests(prev => {
       const m = new Map(prev)
-      const existing = m.get(type) || { athlete_id: athlete.id, test_type: type, value: null, test_date: null }
-      m.set(type, { ...existing, ...patch })
+      const existing = m.get(testCatalogId) || { athlete_id: athlete.id, test_catalog_id: testCatalogId, value: null, test_date: null }
+      m.set(testCatalogId, { ...existing, ...patch })
       return m
     })
   }
 
-  async function saveTest(type: string) {
-    const row = tests?.get(type)
+  async function saveTest(testCatalogId: number) {
+    const row = tests?.get(testCatalogId)
     if (!row) return
     if (row.id) {
       await supabase.from('benchmark_tests').update({ value: row.value, test_date: row.test_date || null }).eq('id', row.id)
     } else {
       const { data } = await supabase.from('benchmark_tests').insert({
-        athlete_id: athlete.id, test_type: type, value: row.value, test_date: row.test_date || null,
+        athlete_id: athlete.id, test_catalog_id: testCatalogId, value: row.value, test_date: row.test_date || null,
       }).select().single()
-      if (data) setTests(prev => { const m = new Map(prev); m.set(type, data as BenchmarkTest); return m })
+      if (data) setTests(prev => { const m = new Map(prev); m.set(testCatalogId, data as BenchmarkTest); return m })
     }
   }
 
@@ -341,34 +338,36 @@ export default function AthleteProfileCard({ athlete, onClose }: { athlete: Athl
         {tab === 'testy' && (
           <>
             <div className="coach-section-label" style={{ padding: '0 0 8px' }}>Testy sprawnościowe — wyniki i daty pomiarów</div>
-            {TEST_GROUPS.map(group => (
-              <div key={group.title} className="coach-test-group">
-                <div className="coach-test-group-head">{group.icon} {group.title}</div>
-                <div className="coach-test-group-body">
-                  {group.rows.map(row => {
-                    const t = tests?.get(row.type)
-                    return (
-                      <div key={row.type} className="coach-test-row">
-                        <span className="coach-test-row-label">{row.label}</span>
+            {(catalog || []).length === 0 ? (
+              <div className="coach-injury-empty">Brak testów w katalogu. Dodaj je w zakładce „Testy”.</div>
+            ) : (
+              (catalog || []).map(ct => {
+                const t = tests?.get(ct.id)
+                return (
+                  <div key={ct.id} className="coach-test-group">
+                    <div className="coach-test-group-head"><Ruler size={14} /> {ct.name.toUpperCase()}{ct.unit ? ` [${ct.unit.toUpperCase()}]` : ''}</div>
+                    <div className="coach-test-group-body">
+                      <div className="coach-test-row">
+                        <span className="coach-test-row-label">Wynik</span>
                         <input
                           type="number"
-                          placeholder={row.unit}
+                          placeholder={ct.unit}
                           value={t?.value ?? ''}
-                          onChange={e => updateTestLocal(row.type, { value: e.target.value ? parseFloat(e.target.value) : null })}
-                          onBlur={() => saveTest(row.type)}
+                          onChange={e => updateTestLocal(ct.id, { value: e.target.value ? parseFloat(e.target.value) : null })}
+                          onBlur={() => saveTest(ct.id)}
                         />
                         <input
                           type="date"
                           value={t?.test_date ?? ''}
-                          onChange={e => updateTestLocal(row.type, { test_date: e.target.value })}
-                          onBlur={() => saveTest(row.type)}
+                          onChange={e => updateTestLocal(ct.id, { test_date: e.target.value })}
+                          onBlur={() => saveTest(ct.id)}
                         />
                       </div>
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
+                    </div>
+                  </div>
+                )
+              })
+            )}
           </>
         )}
 

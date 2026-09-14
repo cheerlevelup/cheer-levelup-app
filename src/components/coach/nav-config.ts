@@ -1,4 +1,4 @@
-import { LayoutGrid, Users, Layers, Calendar, FileText, LucideIcon } from 'lucide-react'
+import { LayoutGrid, Users, Layers, Calendar, FileText, Ruler, LucideIcon } from 'lucide-react'
 
 export interface NavItem {
   href: string
@@ -12,6 +12,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/coach/athletes', label: 'Zawodniczki', icon: Users },
   { href: '/coach/plans', label: 'Plany', icon: FileText },
   { href: '/coach/trainings', label: 'Treningi', icon: Calendar },
+  { href: '/coach/tests', label: 'Testy', icon: Ruler },
 ]
 
 // Ścieżki, które renderują się bez sidebar/topbar (tryb kiosku na tablecie).
