@@ -96,7 +96,9 @@
     display:flex;align-items:center;gap:10px;
     padding:10px;border-radius:11px;
     background:var(--navy-800);
+    width:100%;border:none;cursor:pointer;text-align:left;
   }
+  .coach-coach-card:hover{background:var(--navy-600);}
   .coach-coach-avatar{
     width:34px;height:34px;border-radius:50%;
     background:var(--navy-600);
@@ -1416,4 +1418,44 @@
     .coach-testy-filters{flex-direction:column;}
     .coach-editor-target-row{flex-direction:column;align-items:stretch;}
   }
+
+  /* ===== Profil trenera (modal z sidebara) ===== */
+  .coach-profile-modal{max-width:420px;}
+  .coach-profile-modal-head{padding:14px 16px 4px;position:relative;}
+  .coach-profile-modal-head .coach-eyebrow{
+    font-size:10px;letter-spacing:.05em;color:var(--muted-light);
+    font-family:var(--font-inter),sans-serif;font-weight:700;text-transform:uppercase;
+  }
+  .coach-profile-modal-id{display:flex;align-items:center;gap:10px;margin-top:10px;}
+  .coach-profile-modal-id h3{font-size:16px;font-weight:600;color:var(--ink);margin:0;}
+  .coach-profile-modal-head .coach-modal-close{color:var(--muted-light);}
+  .coach-profile-modal-head .coach-modal-close:hover{color:var(--ink);}
+
+  .coach-profile-chip-row{display:flex;flex-wrap:wrap;gap:6px;padding:0 0 10px;}
+  .coach-profile-chip{
+    display:inline-flex;align-items:center;gap:6px;line-height:1;
+    font-size:12px;font-weight:600;font-family:var(--font-inter),sans-serif;color:var(--ink);
+    background:var(--bg);border:1px solid var(--border);border-radius:100px;
+    padding:6px 8px 6px 11px;
+  }
+  .coach-profile-chip button{border:none;background:none;cursor:pointer;color:var(--muted-light);display:flex;padding:1px;}
+  .coach-profile-chip button:hover{color:#c23b3b;}
+  .coach-profile-empty-hint{font-size:12px;color:var(--muted-light);font-family:var(--font-inter),sans-serif;}
+
+  .coach-profile-add-row{display:flex;gap:8px;padding-bottom:6px;}
+  .coach-profile-add-row input,
+  .coach-profile-add-row select{
+    flex:1;min-width:0;font-family:var(--font-inter),sans-serif;font-size:12.5px;color:var(--ink);
+    border:1px solid var(--border);border-radius:8px;padding:8px 10px;outline:none;background:#fff;
+  }
+  .coach-profile-add-row input:focus, .coach-profile-add-row select:focus{border-color:var(--gold);}
+
+  .coach-profile-role-list{display:flex;flex-direction:column;gap:6px;padding-bottom:10px;}
+  .coach-profile-role-row{
+    display:flex;align-items:center;gap:6px;
+    border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+    font-size:12.5px;font-family:var(--font-inter),sans-serif;color:var(--ink);
+  }
+  .coach-profile-role-sep{color:var(--muted-light);}
+  .coach-profile-role-fn{color:var(--muted);}
 
