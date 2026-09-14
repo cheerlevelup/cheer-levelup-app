@@ -19,16 +19,14 @@ export default function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
         <button className="coach-btn coach-btn-ghost coach-menu-btn" style={{ padding: 8 }} onClick={onMenuClick}>
           <Menu size={18} />
         </button>
-        <div className="coach-page-head">
-          {meta?.backHref ? (
+        {meta?.backHref && (
+          <div className="coach-page-head">
             <Link href={meta.backHref} className="coach-back-btn">
               <ArrowLeft size={14} />
               <span>{meta.backLabel || 'Wstecz'}</span>
             </Link>
-          ) : (
-            <h1 style={{ margin: 0 }}>{meta?.title || 'Panel trenera'}</h1>
-          )}
-        </div>
+          </div>
+        )}
       </div>
       <div className="coach-topbar-right">
         <button className="coach-btn coach-btn-ghost" onClick={handleLogout}>
