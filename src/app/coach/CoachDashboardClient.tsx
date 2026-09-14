@@ -6,11 +6,13 @@ import { useRouter } from 'next/navigation'
 import { Users, Layers, CalendarCheck, Plus, Calendar, ChevronRight } from 'lucide-react'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { Card, Chip, StatCard } from '@/components/coach/ui'
+import NewGroupModal from '@/components/coach/NewGroupModal'
 
 type CoachGroup = {
   id: number
   name: string
   training_level?: string | null
+  sort_order?: number | null
 }
 
 type CoachAthlete = {
@@ -47,6 +49,7 @@ function formatDate(iso: string) {
 export default function CoachDashboardClient({ groups, athletes, recentSessions }: Props) {
   const router = useRouter()
   const [category, setCategory] = useState('Wszystkie')
+  const [newGroupOpen, setNewGroupOpen] = useState(false)
 
   const counts = useMemo(() => {
     const map = new Map<number, number>()
@@ -156,6 +159,12 @@ export default function CoachDashboardClient({ groups, athletes, recentSessions 
                   </span>
                   Dodaj zawodniczkę
                 </div>
+                <div className="coach-quick-btn" onClick={() => setNewGroupOpen(true)}>
+                  <span className="coach-qi">
+                    <Layers size={15} />
+                  </span>
+                  Dodaj grupę
+                </div>
                 <div className="coach-quick-btn" onClick={() => router.push('/coach/groups')}>
                   <span className="coach-qi">
                     <Layers size={15} />
@@ -179,6 +188,8 @@ export default function CoachDashboardClient({ groups, athletes, recentSessions 
           <StatCard label="7 dni · treningów" value={recentSessions.length} icon={<CalendarCheck size={15} />} tone="green" />
         </section>
       </div>
+
+      {newGroupOpen && <NewGroupModal groups={groups} onClose={() => setNewGroupOpen(false)} />}
     </>
   )
 }
