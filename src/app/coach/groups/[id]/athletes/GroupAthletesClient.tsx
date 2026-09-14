@@ -2,11 +2,13 @@
 // src/app/coach/groups/[id]/athletes/GroupAthletesClient.tsx
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, ChevronRight } from 'lucide-react'
+import { createClient } from '@/utils/supabase/client'
+import { Plus, ChevronRight, ArrowRightLeft, Archive } from 'lucide-react'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { TabsNav, Card, Modal, Field, Button } from '@/components/coach/ui'
 import AthleteProfileCard, { type AthleteRow } from '@/components/coach/AthleteProfileCard'
 import GroupHero from '@/components/coach/GroupHero'
+import MoveToGroupModal from '@/components/coach/MoveToGroupModal'
 
 type Group = { id: number; name: string; group_type?: string }
 type Athlete = AthleteRow
@@ -14,6 +16,7 @@ type Athlete = AthleteRow
 interface Props {
   group: Group
   athletes: Athlete[]
+  allGroups: any[]
 }
 
 function generatePassword() {
@@ -80,10 +83,21 @@ function AddAthleteModal({ group, onClose, onAdded }: { group: Group; onClose: (
   )
 }
 
-export default function GroupAthletesClient({ group, athletes }: Props) {
+export default function GroupAthletesClient({ group, athletes, allGroups }: Props) {
   const router = useRouter()
   const [addOpen, setAddOpen] = useState(false)
   const [openId, setOpenId] = useState<number | null>(null)
+  const [movingAthlete, setMovingAthlete] = useState<Athlete | null>(null)
+  const [archivingId, setArchivingId] = useState<number | null>(null)
+
+  async function archiveAthlete(athlete: Athlete) {
+    if (!confirm(`Przenieść „${athlete.full_name}” do archiwum?`)) return
+    setArchivingId(athlete.id)
+    const supabase = createClient()
+    await supabase.from('athletes').update({ archived: true, group_id: null }).eq('id', athlete.id)
+    router.refresh()
+    setArchivingId(null)
+  }
 
   return (
     <>
@@ -124,6 +138,21 @@ export default function GroupAthletesClient({ group, athletes }: Props) {
                           <span className="coach-comp-name">{a.full_name}</span>
                           {a.birth_year && <span className="coach-comp-year">{a.birth_year}</span>}
                         </div>
+                        <button
+                          className="coach-action-link coach-manage"
+                          onClick={e => { e.stopPropagation(); setMovingAthlete(a) }}
+                          style={{ flexShrink: 0 }}
+                        >
+                          <ArrowRightLeft size={13} /> Przenieś
+                        </button>
+                        <button
+                          className="coach-action-link coach-danger"
+                          onClick={e => { e.stopPropagation(); archiveAthlete(a) }}
+                          disabled={archivingId === a.id}
+                          style={{ flexShrink: 0 }}
+                        >
+                          <Archive size={13} /> {archivingId === a.id ? 'Przenoszę...' : 'Archiwizuj'}
+                        </button>
                         <ChevronRight size={16} style={{ color: 'var(--muted-light)', flexShrink: 0 }} />
                       </div>
                       <div className="coach-comp-detail">
@@ -145,6 +174,14 @@ export default function GroupAthletesClient({ group, athletes }: Props) {
 
       {addOpen && (
         <AddAthleteModal group={group} onClose={() => setAddOpen(false)} onAdded={() => router.refresh()} />
+      )}
+      {movingAthlete && (
+        <MoveToGroupModal
+          athlete={movingAthlete}
+          allGroups={allGroups}
+          onClose={() => setMovingAthlete(null)}
+          onMoved={() => router.refresh()}
+        />
       )}
     </>
   )

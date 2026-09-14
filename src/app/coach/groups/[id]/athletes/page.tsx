@@ -34,5 +34,10 @@ export default async function GroupAthletesPage({ params }: Props) {
 
   const athletes = (allGroupAthletes || []).filter((a: any) => !a.archived)
 
-  return <GroupAthletesClient group={group} athletes={athletes} />
+  const { data: allGroups } = await supabase
+    .from('groups')
+    .select('*')
+    .order('sort_order', { ascending: true })
+
+  return <GroupAthletesClient group={group} athletes={athletes} allGroups={allGroups || []} />
 }
