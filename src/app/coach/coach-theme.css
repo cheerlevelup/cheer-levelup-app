@@ -369,6 +369,10 @@
   }
   @media (min-width:981px){
     .coach-menu-btn{display:none;}
+    /* Na desktopie sidebar jest zawsze widoczny, więc hamburger znika; jeśli
+       do tego nie ma przycisku "wstecz", pasek górny nie pokazuje nic —
+       chowamy go całkowicie zamiast zostawiać pusty biały pasek. */
+    .coach-topbar:not(:has(.coach-page-head)){display:none;}
   }
   @media (max-width:560px){
     .coach-stats{grid-template-columns:1fr 1fr;}
