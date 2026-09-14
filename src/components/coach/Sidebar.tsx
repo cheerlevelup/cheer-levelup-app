@@ -9,12 +9,7 @@ export default function Sidebar({ open, onNavigate }: { open: boolean; onNavigat
   return (
     <aside className={`coach-sidebar ${open ? 'coach-open' : ''}`} id="sidebar">
       <div className="coach-brand">
-        <div
-          className="coach-brand-mark"
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: 'var(--navy-900)' }}
-        >
-          CL
-        </div>
+        <img src="/level up.jpg" alt="Cheer LevelUP" className="coach-brand-mark" />
         <div className="coach-brand-text">
           <div className="coach-brand-club">CHEER LEVELUP</div>
           <div className="coach-brand-name">Panel trenera</div>
