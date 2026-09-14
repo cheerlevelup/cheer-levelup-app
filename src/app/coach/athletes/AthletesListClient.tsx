@@ -35,7 +35,9 @@ export default function AthletesListClient({ athletes, allGroups, injuredIds }: 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return athletes.filter(a => {
-      if (q && !a.full_name.toLowerCase().includes(q)) return false
+      // Dopasowanie na początku imienia lub nazwiska, nie gdziekolwiek w
+      // środku (np. "am" ma znaleźć "Amelia", nie "Kamila" czy "Jamróz").
+      if (q && !a.full_name.toLowerCase().split(' ').some(word => word.startsWith(q))) return false
       if (groupFilter === 'none' && a.group_id) return false
       if (typeof groupFilter === 'number' && a.group_id !== groupFilter) return false
       if (injuredOnly && !injuredSet.has(a.id)) return false
