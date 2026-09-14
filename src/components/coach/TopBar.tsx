@@ -1,17 +1,10 @@
 'use client'
 import Link from 'next/link'
-import { Menu, LogOut, ArrowLeft } from 'lucide-react'
+import { Menu, ArrowLeft } from 'lucide-react'
 import { usePageMeta } from './PageMetaContext'
-import { createClient } from '@/utils/supabase/client'
 
 export default function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
   const { meta } = usePageMeta()
-
-  async function handleLogout() {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    window.location.replace('/login')
-  }
 
   return (
     <header className="coach-topbar">
@@ -27,12 +20,6 @@ export default function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
             </Link>
           </div>
         )}
-      </div>
-      <div className="coach-topbar-right">
-        <button className="coach-btn coach-btn-ghost" onClick={handleLogout}>
-          <LogOut size={15} />
-          Wyloguj
-        </button>
       </div>
     </header>
   )

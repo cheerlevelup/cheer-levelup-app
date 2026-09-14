@@ -1,10 +1,18 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { LogOut } from 'lucide-react'
+import { createClient } from '@/utils/supabase/client'
 import { NAV_ITEMS, isNavItemActive } from './nav-config'
 
 export default function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () => void }) {
   const pathname = usePathname()
+
+  async function handleLogout() {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    window.location.replace('/login')
+  }
 
   return (
     <aside className={`coach-sidebar ${open ? 'coach-open' : ''}`} id="sidebar">
@@ -43,6 +51,10 @@ export default function Sidebar({ open, onNavigate }: { open: boolean; onNavigat
             <div className="coach-coach-role">Trener przygotowania motorycznego</div>
           </div>
         </div>
+        <button className="coach-sidebar-logout" onClick={handleLogout}>
+          <LogOut size={14} />
+          Wyloguj
+        </button>
       </div>
     </aside>
   )

@@ -109,6 +109,16 @@
   .coach-coach-name{font-size:13px;font-weight:600;color:#fff;font-family:var(--font-inter),sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .coach-coach-role{font-size:11.5px;color:var(--muted-light);font-family:var(--font-inter),sans-serif;}
 
+  .coach-sidebar-logout{
+    display:flex;align-items:center;justify-content:center;gap:7px;width:100%;
+    margin-top:8px;padding:8px;border-radius:9px;
+    border:1px solid var(--navy-600);background:transparent;
+    color:var(--muted-light);cursor:pointer;
+    font-family:var(--font-inter),sans-serif;font-size:12.5px;font-weight:600;
+  }
+  .coach-sidebar-logout:hover{color:var(--gold);border-color:var(--navy-600);background:var(--navy-800);}
+  .coach-sidebar-logout svg{width:14px;height:14px;}
+
   /* ===== Main column ===== */
   .coach-main{display:flex;flex-direction:column;min-width:0;height:100%;overflow:hidden;}
 
