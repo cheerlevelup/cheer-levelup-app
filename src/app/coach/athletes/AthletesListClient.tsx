@@ -57,15 +57,7 @@ export default function AthletesListClient({ athletes, allGroups, injuredIds }: 
   return (
     <>
       <SetPageMeta title="Zawodniczki" />
-      <div className="coach-content">
-        <div className="coach-toolbar" style={{ justifyContent: 'flex-end' }}>
-          <div className="coach-toolbar-right">
-            <div className="coach-search-box" style={{ width: 220 }}>
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Szukaj zawodniczki…" />
-            </div>
-          </div>
-        </div>
-
+      <div className="coach-content" style={{ paddingTop: 4 }}>
         <div className="coach-filter-row">
           <div className="coach-chip-tabs" style={{ overflowX: 'auto' }}>
             <Chip active={groupFilter === 'all'} onClick={() => setGroupFilter('all')}>Wszystkie</Chip>
@@ -76,6 +68,9 @@ export default function AthletesListClient({ athletes, allGroups, injuredIds }: 
             <Chip active={injuredOnly} onClick={() => setInjuredOnly(o => !o)}>
               <AlertTriangle size={12} style={{ marginRight: 4 }} /> Z kontuzją
             </Chip>
+          </div>
+          <div className="coach-search-box" style={{ width: 220, flexShrink: 0 }}>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Szukaj zawodniczki…" />
           </div>
         </div>
 
