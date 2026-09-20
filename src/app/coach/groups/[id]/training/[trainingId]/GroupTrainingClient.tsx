@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { formatDatePl } from '@/lib/groupTraining'
-import { CheckSquare, MessageCircle, Info } from 'lucide-react'
+import { CheckSquare, MessageCircle, Info, AlertTriangle, Pencil, Plus } from 'lucide-react'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { Button } from '@/components/coach/ui'
 
@@ -64,6 +64,13 @@ interface Props {
 }
 
 const entryKey = (exerciseId: number, athleteId: number) => `${exerciseId}_${athleteId}`
+
+// Mały kwadratowy przycisk-ikonka w rzędzie serii (dodaj/ból/notatka/szczegóły) —
+// jeden spójny styl, kolorowany tylko gdy dana rzecz jest aktywna.
+const qiBtn: React.CSSProperties = {
+  width: 20, height: 20, padding: 0, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+  borderRadius: 6, border: '1.5px solid var(--border)', background: '#ffffff', color: 'var(--muted-light)', lineHeight: 1,
+}
 
 // Kolor awatara — deterministyczny wg pierwszej litery imienia, żeby wiersze
 // łatwiej się od siebie odróżniały w gęstej tabeli.
@@ -1412,39 +1419,31 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 <button
                                   onClick={() => addInlineSet(athlete, ex)}
                                   title="Dodaj serię tej zawodniczce"
-                                  style={{ border: `1.5px solid var(--border)`, background: '#ffffff', color: 'var(--navy-900)', borderRadius: 7, padding: '0.28rem 0.42rem', fontSize: '0.82rem', fontWeight: 800, flexShrink: 0, lineHeight: 1 }}
+                                  style={qiBtn}
                                 >
-                                  ＋
+                                  <Plus size={12} />
                                 </button>
                                 {sets.length > Math.max(resolvePresc(ex, entry).sets ?? 0, 1) && (
                                   <button
                                     onClick={() => removeInlineSet(athlete, ex)}
                                     title="Usuń ostatnią serię tej zawodniczce"
-                                    style={{ border: `1.5px solid var(--border)`, background: '#ffffff', color: 'var(--muted-light)', borderRadius: 7, padding: '0.28rem 0.42rem', fontSize: '0.82rem', fontWeight: 800, flexShrink: 0, lineHeight: 1 }}
+                                    style={{ ...qiBtn, fontSize: '0.82rem', fontWeight: 800 }}
                                   >
                                     －
                                   </button>
                                 )}
-                                <button
-                                  onClick={() => setOpenCell({ athlete, exercise: ex })}
-                                  title="Szczegóły: powtórzenia, tempo, ból, komentarz"
-                                  style={{ border: `1.5px solid var(--border)`, background: '#ffffff', color: 'var(--muted-light)', borderRadius: 7, padding: '0.28rem 0.36rem', fontSize: '0.72rem', flexShrink: 0, lineHeight: 1 }}
-                                >
-                                  ✎
-                                </button>
-                              </div>
-                              <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap', alignItems: 'center' }}>
                                 {(() => {
                                   const painActive = !!entry?.pain || entry?.pain_vas != null
+                                  const severe = entry?.pain_vas != null && entry.pain_vas >= 5
                                   return (
                                     <button
                                       onClick={() => toggleInlinePain(athlete, ex)}
                                       title={painActive ? (entry?.pain_comment ? `Ból: ${entry.pain_comment} (kliknij, by odznaczyć)` : 'Odznacz ból') : 'Zaznacz ból'}
                                       style={painActive
-                                        ? { fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.6rem', fontWeight: 700, color: '#ffffff', background: (entry?.pain_vas != null && entry.pain_vas >= 5) ? '#c23b3b' : '#c07f1e', border: 'none', borderRadius: 6, padding: '2px 7px', lineHeight: 1.3 }
-                                        : { fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.56rem', fontWeight: 700, color: 'var(--muted-light)', background: '#ffffff', border: `1px solid var(--border)`, borderRadius: 6, padding: '2px 6px', lineHeight: 1.3 }}
+                                        ? { ...qiBtn, border: `1.5px solid ${severe ? '#c23b3b' : '#c07f1e'}`, background: severe ? '#FDEDED' : '#FEF6E0', color: severe ? '#c23b3b' : '#92600A' }
+                                        : qiBtn}
                                     >
-                                      {painActive ? `ból${entry?.pain_vas != null ? ` ${entry.pain_vas}` : ''}` : '+ ból'}
+                                      <AlertTriangle size={11} />
                                     </button>
                                   )
                                 })()}
@@ -1455,19 +1454,24 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                     placeholder="notatka..."
                                     onBlur={e => { saveInlineComment(athlete, ex, e.target.value); setNoteOpen(null) }}
                                     onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); else if (e.key === 'Escape') setNoteOpen(null) }}
-                                    style={{ flex: 1, minWidth: 96, border: `1.5px solid var(--gold)`, borderRadius: 6, background: '#ffffff', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.7rem', color: 'var(--navy-900)', padding: '2px 6px', outline: 'none' }}
+                                    style={{ flex: 1, minWidth: 80, border: `1.5px solid var(--gold)`, borderRadius: 6, background: '#ffffff', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.7rem', color: 'var(--navy-900)', padding: '2px 6px', outline: 'none' }}
                                   />
-                                ) : entry?.comment ? (
-                                  <button onClick={() => setNoteOpen(entryKey(ex.id, athlete.id))} title={entry.comment}
-                                    style={{ maxWidth: 140, fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.62rem', color: 'var(--navy-900)', background: '#F4F6F9', border: `1px solid var(--border)`, borderRadius: 6, padding: '2px 7px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3 }}>
-                                    💬 {entry.comment}
-                                  </button>
                                 ) : (
-                                  <button onClick={() => setNoteOpen(entryKey(ex.id, athlete.id))}
-                                    style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.56rem', fontWeight: 700, color: 'var(--muted-light)', background: '#ffffff', border: `1px solid var(--border)`, borderRadius: 6, padding: '2px 6px', lineHeight: 1.3 }}>
-                                    + notatka
+                                  <button
+                                    onClick={() => setNoteOpen(entryKey(ex.id, athlete.id))}
+                                    title={entry?.comment || 'Dodaj notatkę'}
+                                    style={entry?.comment ? { ...qiBtn, border: '1.5px solid #2c5aa3', background: '#eaf1fb', color: '#2c5aa3' } : qiBtn}
+                                  >
+                                    <MessageCircle size={11} />
                                   </button>
                                 )}
+                                <button
+                                  onClick={() => setOpenCell({ athlete, exercise: ex })}
+                                  title="Szczegóły: powtórzenia, tempo, ból, komentarz"
+                                  style={qiBtn}
+                                >
+                                  <Pencil size={11} />
+                                </button>
                               </div>
                             </td>
                           )
@@ -1587,32 +1591,31 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 <button
                                   onClick={() => addInlineSet(person, ex)}
                                   title="Dodaj serię"
-                                  style={{ border: `1.5px solid var(--border)`, background: '#ffffff', color: 'var(--navy-900)', borderRadius: 7, padding: '0.28rem 0.42rem', fontSize: '0.82rem', fontWeight: 800, flexShrink: 0, lineHeight: 1 }}
+                                  style={qiBtn}
                                 >
-                                  ＋
+                                  <Plus size={12} />
                                 </button>
                                 {sets.length > Math.max(presc.sets ?? 0, 1) && (
                                   <button
                                     onClick={() => removeInlineSet(person, ex)}
                                     title="Usuń ostatnią serię"
-                                    style={{ border: `1.5px solid var(--border)`, background: '#ffffff', color: 'var(--muted-light)', borderRadius: 7, padding: '0.28rem 0.42rem', fontSize: '0.82rem', fontWeight: 800, flexShrink: 0, lineHeight: 1 }}
+                                    style={{ ...qiBtn, fontSize: '0.82rem', fontWeight: 800 }}
                                   >
                                     －
                                   </button>
                                 )}
-                              </div>
-                              <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                                 {(() => {
                                   const painActive = !!entry?.pain || entry?.pain_vas != null
+                                  const severe = entry?.pain_vas != null && entry.pain_vas >= 5
                                   return (
                                     <button
                                       onClick={() => toggleInlinePain(person, ex)}
                                       title={painActive ? (entry?.pain_comment ? `Ból: ${entry.pain_comment} (kliknij, by odznaczyć)` : 'Odznacz ból') : 'Zaznacz ból'}
                                       style={painActive
-                                        ? { fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.6rem', fontWeight: 700, color: '#ffffff', background: (entry?.pain_vas != null && entry.pain_vas >= 5) ? '#c23b3b' : '#c07f1e', border: 'none', borderRadius: 6, padding: '2px 7px', lineHeight: 1.3 }
-                                        : { fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.56rem', fontWeight: 700, color: 'var(--muted-light)', background: '#ffffff', border: `1px solid var(--border)`, borderRadius: 6, padding: '2px 6px', lineHeight: 1.3 }}
+                                        ? { ...qiBtn, border: `1.5px solid ${severe ? '#c23b3b' : '#c07f1e'}`, background: severe ? '#FDEDED' : '#FEF6E0', color: severe ? '#c23b3b' : '#92600A' }
+                                        : qiBtn}
                                     >
-                                      {painActive ? `ból${entry?.pain_vas != null ? ` ${entry.pain_vas}` : ''}` : '+ ból'}
+                                      <AlertTriangle size={11} />
                                     </button>
                                   )
                                 })()}
@@ -1623,17 +1626,15 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                     placeholder="notatka..."
                                     onBlur={e => { saveInlineComment(person, ex, e.target.value); setNoteOpen(null) }}
                                     onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); else if (e.key === 'Escape') setNoteOpen(null) }}
-                                    style={{ flex: 1, minWidth: 96, border: `1.5px solid var(--gold)`, borderRadius: 6, background: '#ffffff', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.7rem', color: 'var(--navy-900)', padding: '2px 6px', outline: 'none' }}
+                                    style={{ flex: 1, minWidth: 80, border: `1.5px solid var(--gold)`, borderRadius: 6, background: '#ffffff', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.7rem', color: 'var(--navy-900)', padding: '2px 6px', outline: 'none' }}
                                   />
-                                ) : entry?.comment ? (
-                                  <button onClick={() => setNoteOpen(entryKey(ex.id, person.id))} title={entry.comment}
-                                    style={{ maxWidth: 140, fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.62rem', color: 'var(--navy-900)', background: '#F4F6F9', border: `1px solid var(--border)`, borderRadius: 6, padding: '2px 7px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3 }}>
-                                    💬 {entry.comment}
-                                  </button>
                                 ) : (
-                                  <button onClick={() => setNoteOpen(entryKey(ex.id, person.id))}
-                                    style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.56rem', fontWeight: 700, color: 'var(--muted-light)', background: '#ffffff', border: `1px solid var(--border)`, borderRadius: 6, padding: '2px 6px', lineHeight: 1.3 }}>
-                                    + notatka
+                                  <button
+                                    onClick={() => setNoteOpen(entryKey(ex.id, person.id))}
+                                    title={entry?.comment || 'Dodaj notatkę'}
+                                    style={entry?.comment ? { ...qiBtn, border: '1.5px solid #2c5aa3', background: '#eaf1fb', color: '#2c5aa3' } : qiBtn}
+                                  >
+                                    <MessageCircle size={11} />
                                   </button>
                                 )}
                               </div>
