@@ -28,6 +28,11 @@ type Exercise = {
   // gdy ustawione: ćwiczenie NIE jest kolumną grupy, tylko elementem odrębnego
   // planu indywidualnego tej jednej zawodniczki (osobna sekcja pod siatką)
   athlete_id?: number | null
+  // ćwiczenie izometryczne — zamiast serie/powt./tempo pokazujemy serie/czas(/intensywność)
+  iso?: boolean | null
+  iso_type?: 'PIMA' | 'HIMA' | null
+  iso_seconds?: number | null
+  iso_intensity?: number | null
 }
 type SetRow = { reps?: string; tempo?: string; weight?: string; skipped?: boolean }
 type Entry = {
@@ -72,6 +77,17 @@ function headerPill(active: boolean): React.CSSProperties {
     flexShrink: 0, outline: 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.6rem', fontWeight: 700,
     border: `1.5px solid ${active ? 'var(--gold)' : 'var(--border)'}`,
     background: active ? '#FFFBEB' : '#ffffff', color: active ? '#92600A' : 'var(--muted-light)',
+    borderRadius: 6, padding: '4px 7px', lineHeight: 1,
+  }
+}
+
+// Pigułka ISO / PIMA / HIMA — ciemne tło + złoty tekst gdy aktywna (inna paleta
+// niż BW/Powtórzenia/Indywidualnie, żeby wizualnie odróżnić grupę izometrii).
+function isoPill(active: boolean): React.CSSProperties {
+  return {
+    flexShrink: 0, outline: 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.6rem', fontWeight: 700,
+    border: `1.5px solid ${active ? 'var(--navy-900)' : 'var(--border)'}`,
+    background: active ? 'var(--navy-900)' : '#ffffff', color: active ? 'var(--gold)' : 'var(--muted-light)',
     borderRadius: 6, padding: '4px 7px', lineHeight: 1,
   }
 }
@@ -131,6 +147,44 @@ function avatarBg(name: string) {
 // Ćwiczenie „na maksa" — w polu POWT. wpisano max/maks/amrap/do upadku.
 // Wtedy w komórkach zawodniczek wpisujemy wykonane powtórzenia, nie ciężar.
 const isMaxReps = (reps?: string | null) => /(amrap|maks|max|upad)/i.test((reps || '').trim())
+
+type HeaderField = {
+  field: 'sets_planned' | 'reps' | 'tempo' | 'iso_seconds' | 'iso_intensity'
+  label: string
+  placeholder: string
+  type: 'number' | 'text'
+  suffix?: string
+}
+
+// Pola nagłówka kolumny: normalnie serie/powt./tempo, dla ISO — serie/czas(/intensywność).
+function exerciseHeaderFields(ex: Exercise): HeaderField[] {
+  if (ex.iso) {
+    const fields: HeaderField[] = [
+      { field: 'sets_planned', label: 'serie', placeholder: '3', type: 'number' },
+      { field: 'iso_seconds', label: 'czas', placeholder: '20', type: 'number', suffix: 's' },
+    ]
+    if (ex.iso_type !== 'HIMA') fields.push({ field: 'iso_intensity', label: 'int.', placeholder: '70', type: 'number', suffix: '%' })
+    return fields
+  }
+  return [
+    { field: 'sets_planned', label: 'serie', placeholder: '3', type: 'number' },
+    { field: 'reps', label: 'powt.', placeholder: '8', type: 'text' },
+    { field: 'tempo', label: 'tempo', placeholder: '3010', type: 'text' },
+  ]
+}
+
+// Skrótowy opis rozpiski ćwiczenia, wszędzie poza edytorem (Plany, PDF,
+// podsumowanie treningu): "3×8, tempo 3010" albo dla ISO "3×20s @70% (PIMA)".
+function formatExercisePresc(ex: Exercise): string {
+  const sets = ex.sets_planned != null ? `${ex.sets_planned}×` : ''
+  if (ex.iso) {
+    const secs = ex.iso_seconds != null ? `${ex.iso_seconds}s` : ''
+    const intensity = ex.iso_type !== 'HIMA' && ex.iso_intensity != null ? ` @${ex.iso_intensity}%` : ''
+    const type = ex.iso_type ? ` (${ex.iso_type})` : ''
+    return `${sets}${secs}${intensity}${type}`.trim()
+  }
+  return `${sets}${ex.reps || ''}${ex.tempo ? `, tempo ${ex.tempo}` : ''}`
+}
 
 // Rozpiska obowiązująca daną zawodniczkę — zawsze nagłówek grupy (warianty usunięte).
 function resolvePresc(ex: Exercise, _entry: Entry | null | undefined): { sets: number | null; reps: string; tempo: string } {
@@ -546,10 +600,12 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     setFocusExerciseId((data as Exercise).id)
   }
 
-  function handleExerciseField(exerciseId: number, field: 'name' | 'reps' | 'tempo' | 'sets_planned', value: string) {
+  function handleExerciseField(exerciseId: number, field: 'name' | 'reps' | 'tempo' | 'sets_planned' | 'iso_seconds' | 'iso_intensity', value: string) {
     setExercises(prev => prev.map(e => {
       if (e.id !== exerciseId) return e
-      if (field === 'sets_planned') return { ...e, sets_planned: value === '' ? null : parseInt(value) || null }
+      if (field === 'sets_planned' || field === 'iso_seconds' || field === 'iso_intensity') {
+        return { ...e, [field]: value === '' ? null : parseInt(value) || null }
+      }
       return { ...e, [field]: value }
     }))
   }
@@ -559,9 +615,52 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     if (!ex) return
     const { error: err } = await supabase
       .from('group_training_exercises')
-      .update({ name: ex.name.trim(), sets_planned: ex.sets_planned ?? null, reps: ex.reps?.trim() || null, tempo: ex.tempo?.trim() || null })
+      .update({
+        name: ex.name.trim(), sets_planned: ex.sets_planned ?? null, reps: ex.reps?.trim() || null, tempo: ex.tempo?.trim() || null,
+        iso_seconds: ex.iso_seconds ?? null, iso_intensity: ex.iso_intensity ?? null,
+      })
       .eq('id', ex.id)
-    if (err) setError(err.message)
+    if (err) setError(/'iso_seconds'|'iso_intensity'/.test(err.message)
+      ? 'Aby używać ćwiczeń izometrycznych, uruchom migrację 202609200002.'
+      : err.message)
+  }
+
+  // Przełącz ćwiczenie izometryczne — przy pierwszym włączeniu ustaw sensowne
+  // wartości domyślne (PIMA, 20s, 70%), jeśli jeszcze ich nie było.
+  async function toggleIso(exerciseId: number) {
+    const ex = exercises.find(e => e.id === exerciseId)
+    if (!ex) return
+    const next = !ex.iso
+    const patch = next
+      ? { iso: true, iso_type: ex.iso_type ?? 'PIMA' as const, iso_seconds: ex.iso_seconds ?? 20, iso_intensity: ex.iso_intensity ?? 70 }
+      : { iso: false }
+    const prevExercises = exercises
+    setExercises(prev => prev.map(e => e.id === exerciseId ? { ...e, ...patch } : e))
+    const { error: err } = await supabase
+      .from('group_training_exercises')
+      .update(patch)
+      .eq('id', exerciseId)
+    if (err) {
+      setExercises(prevExercises)
+      setError(/'iso'/.test(err.message)
+        ? 'Aby używać ćwiczeń izometrycznych, uruchom migrację 202609200002.'
+        : err.message)
+    }
+  }
+
+  async function setIsoType(exerciseId: number, isoType: 'PIMA' | 'HIMA') {
+    const ex = exercises.find(e => e.id === exerciseId)
+    if (!ex || ex.iso_type === isoType) return
+    const prev = ex.iso_type ?? null
+    setExercises(p => p.map(e => e.id === exerciseId ? { ...e, iso_type: isoType } : e))
+    const { error: err } = await supabase
+      .from('group_training_exercises')
+      .update({ iso_type: isoType })
+      .eq('id', exerciseId)
+    if (err) {
+      setExercises(p => p.map(e => e.id === exerciseId ? { ...e, iso_type: prev } : e))
+      setError(err.message)
+    }
   }
 
   // Wpisz 0 (masa ciała) w ciężar zawodniczkom na grupowej rozpisce (bez wybranego
@@ -1059,25 +1158,22 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 <Trash2 size={12} />
                               </button>
                             </div>
-                            {/* Rozpiska dla całej grupy: serie / powtórzenia / tempo */}
+                            {/* Rozpiska dla całej grupy: serie / powt. / tempo, albo serie / czas / intensywność dla ISO */}
                             <div style={{ display: 'flex', marginTop: 8, background: '#ffffff', border: `1px solid var(--border)`, borderRadius: 9, overflow: 'hidden' }}>
-                              {([
-                                { field: 'sets_planned' as const, label: 'serie', value: ex.sets_planned ?? '', placeholder: '3', type: 'number' },
-                                { field: 'reps' as const, label: 'powt.', value: ex.reps ?? '', placeholder: '8', type: 'text' },
-                                { field: 'tempo' as const, label: 'tempo', value: ex.tempo ?? '', placeholder: '3010', type: 'text' },
-                              ]).map((f, i) => (
-                                <div key={f.field} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '8px 4px', borderRight: i < 2 ? `1px solid var(--border)` : 'none' }}>
+                              {exerciseHeaderFields(ex).map((f, i, arr) => (
+                                <div key={f.field} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '8px 4px', borderRight: i < arr.length - 1 ? `1px solid var(--border)` : 'none' }}>
                                   <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.54rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, flexShrink: 0 }}>{f.label}</span>
                                   <input
                                     type={f.type}
-                                    {...(f.type === 'number' ? { min: 0, max: 20 } : {})}
-                                    value={f.value}
+                                    {...(f.type === 'number' ? { min: 0, max: f.field === 'iso_intensity' ? 100 : 20 } : {})}
+                                    value={ex[f.field] ?? ''}
                                     onChange={e => handleExerciseField(ex.id, f.field, e.target.value)}
                                     onBlur={() => persistExercise(ex.id)}
                                     onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
                                     placeholder={f.placeholder}
-                                    style={{ width: 32, minWidth: 0, border: 'none', background: 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.72rem', fontWeight: 800, color: 'var(--navy-900)', padding: 0, outline: 'none', textAlign: 'center' }}
+                                    style={{ width: 30, minWidth: 0, border: 'none', background: 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.72rem', fontWeight: 800, color: 'var(--navy-900)', padding: 0, outline: 'none', textAlign: 'center' }}
                                   />
+                                  {f.suffix && <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.62rem', color: 'var(--muted-light)', flexShrink: 0 }}>{f.suffix}</span>}
                                 </div>
                               ))}
                             </div>
@@ -1105,6 +1201,19 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                               >
                                 Indywidualnie
                               </button>
+                              <button
+                                onClick={() => toggleIso(ex.id)}
+                                title={ex.iso ? 'Ćwiczenie izometryczne — kliknij, by wrócić do serie/powt./tempo' : 'Oznacz jako ćwiczenie izometryczne (PIMA/HIMA)'}
+                                style={isoPill(!!ex.iso)}
+                              >
+                                ISO
+                              </button>
+                              {ex.iso && (
+                                <>
+                                  <button onClick={() => setIsoType(ex.id, 'PIMA')} title="PIMA — z intensywnością" style={isoPill(ex.iso_type === 'PIMA')}>PIMA</button>
+                                  <button onClick={() => setIsoType(ex.id, 'HIMA')} title="HIMA — bez intensywności" style={isoPill(ex.iso_type === 'HIMA')}>HIMA</button>
+                                </>
+                              )}
                             </div>
                             {(isMaxReps(ex.reps) || ex.bodyweight) && (
                               <div style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.5rem', fontWeight: 700, color: '#854F0B', background: '#FEF6E0', border: '1px solid #F7D27A', borderRadius: 6, padding: '2px 5px', marginTop: 4, textAlign: 'center' }}>
@@ -1378,33 +1487,45 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 />
                                 <button onClick={() => handleDeleteExercise(ex)} title="Usuń ćwiczenie" style={{ border: 'none', background: 'none', color: 'var(--muted-light)', fontSize: '0.78rem', padding: 2, flexShrink: 0 }}>✕</button>
                               </div>
-                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-                                {([
-                                  { field: 'sets_planned' as const, label: 'serie', value: ex.sets_planned ?? '', placeholder: '3', type: 'number' },
-                                  { field: 'reps' as const, label: 'powt.', value: ex.reps ?? '', placeholder: '8', type: 'text' },
-                                  { field: 'tempo' as const, label: 'tempo', value: ex.tempo ?? '', placeholder: '3010', type: 'text' },
-                                ]).map(f => (
+                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8, alignItems: 'flex-end' }}>
+                                {exerciseHeaderFields(ex).map(f => (
                                   <div key={f.field}>
                                     <div style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.48rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.04em', textAlign: 'center', marginBottom: 1 }}>{f.label}</div>
-                                    <input
-                                      type={f.type}
-                                      {...(f.type === 'number' ? { min: 0, max: 20 } : {})}
-                                      value={f.value}
-                                      onChange={e => handleExerciseField(ex.id, f.field, e.target.value)}
-                                      onBlur={() => persistExercise(ex.id)}
-                                      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-                                      placeholder={f.placeholder}
-                                      style={{ width: 44, border: `1px solid var(--border)`, borderRadius: 6, background: '#ffffff', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.72rem', color: 'var(--navy-900)', padding: '0.28rem 0.2rem', outline: 'none', textAlign: 'center' }}
-                                    />
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 3, border: `1px solid var(--border)`, borderRadius: 6, background: '#ffffff', padding: '0.28rem 0.2rem' }}>
+                                      <input
+                                        type={f.type}
+                                        {...(f.type === 'number' ? { min: 0, max: f.field === 'iso_intensity' ? 100 : 20 } : {})}
+                                        value={ex[f.field] ?? ''}
+                                        onChange={e => handleExerciseField(ex.id, f.field, e.target.value)}
+                                        onBlur={() => persistExercise(ex.id)}
+                                        onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                                        placeholder={f.placeholder}
+                                        style={{ width: 38, minWidth: 0, border: 'none', background: 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.72rem', color: 'var(--navy-900)', padding: 0, outline: 'none', textAlign: 'center' }}
+                                      />
+                                      {f.suffix && <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.6rem', color: 'var(--muted-light)', flexShrink: 0 }}>{f.suffix}</span>}
+                                    </div>
                                   </div>
                                 ))}
                                 <button
                                   onClick={() => toggleExerciseBodyweight(ex.id)}
                                   title={ex.bodyweight ? 'Tryb powtórzeń włączony — kliknij, by wrócić do kg' : 'Wpisuj powtórzenia zamiast kg'}
-                                  style={{ alignSelf: 'flex-end', flexShrink: 0, fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.6rem', fontWeight: 700, border: `1px solid ${ex.bodyweight ? 'var(--gold)' : 'var(--border)'}`, background: ex.bodyweight ? '#FFFBEB' : '#ffffff', color: ex.bodyweight ? '#92600A' : 'var(--muted-light)', borderRadius: 6, padding: '0.28rem 0.4rem' }}
+                                  style={{ ...headerPill(!!ex.bodyweight), padding: '0.28rem 0.4rem' }}
                                 >
                                   BW
                                 </button>
+                                <button
+                                  onClick={() => toggleIso(ex.id)}
+                                  title={ex.iso ? 'Ćwiczenie izometryczne — kliknij, by wrócić do serie/powt./tempo' : 'Oznacz jako ćwiczenie izometryczne (PIMA/HIMA)'}
+                                  style={{ ...isoPill(!!ex.iso), padding: '0.28rem 0.4rem' }}
+                                >
+                                  ISO
+                                </button>
+                                {ex.iso && (
+                                  <>
+                                    <button onClick={() => setIsoType(ex.id, 'PIMA')} title="PIMA — z intensywnością" style={{ ...isoPill(ex.iso_type === 'PIMA'), padding: '0.28rem 0.4rem' }}>PIMA</button>
+                                    <button onClick={() => setIsoType(ex.id, 'HIMA')} title="HIMA — bez intensywności" style={{ ...isoPill(ex.iso_type === 'HIMA'), padding: '0.28rem 0.4rem' }}>HIMA</button>
+                                  </>
+                                )}
                               </div>
                               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, flexWrap: 'wrap', width: 260 }}>
                                 {sets.map((s, i) => {

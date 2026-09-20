@@ -24,7 +24,27 @@ type Group = { id: number; name: string }
 type Athlete = { id: number; full_name: string }
 type Training = { id: number; group_id: number; training_date: string; absent_athlete_ids?: number[] | null }
 type SetRow = { reps?: string; tempo?: string; weight?: string; skipped?: boolean }
-type Exercise = { id: number; name: string; exercise_order: number; sets_planned?: number | null; reps?: string | null; tempo?: string | null; bodyweight?: boolean | null; variants?: TaskVariant[] | null; individual?: boolean | null }
+type Exercise = {
+  id: number; name: string; exercise_order: number; sets_planned?: number | null; reps?: string | null; tempo?: string | null
+  bodyweight?: boolean | null; variants?: TaskVariant[] | null; individual?: boolean | null
+  iso?: boolean | null; iso_type?: 'PIMA' | 'HIMA' | null; iso_seconds?: number | null; iso_intensity?: number | null
+}
+
+// Skrótowy opis rozpiski — jak w edytorze treningu (GroupTrainingClient): "3×8, tempo 3010"
+// albo dla ISO "3×20s @70% (PIMA)" / "3×20s (HIMA)".
+function formatExercisePresc(ex: Exercise): string {
+  if (ex.iso) {
+    const sets = ex.sets_planned != null ? `${ex.sets_planned}×` : ''
+    const secs = ex.iso_seconds != null ? `${ex.iso_seconds}s` : ''
+    const intensity = ex.iso_type !== 'HIMA' && ex.iso_intensity != null ? ` @${ex.iso_intensity}%` : ''
+    const type = ex.iso_type ? ` (${ex.iso_type})` : ''
+    return `${sets}${secs}${intensity}${type}`.trim()
+  }
+  return [
+    ex.sets_planned && ex.reps ? `${ex.sets_planned} × ${ex.reps}` : ex.sets_planned ? `${ex.sets_planned} ser.` : ex.reps ? `${ex.reps} powt.` : '',
+    ex.tempo || '',
+  ].filter(Boolean).join(' · ')
+}
 type Entry = {
   exercise_id: number
   athlete_id: number
@@ -456,7 +476,7 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
       // obecne na górze, nieobecne na końcu — jak w aplikacji
       const ordered = [...athletes].sort((a, b) => Number(absentIds.has(a.id)) - Number(absentIds.has(b.id)))
       const head = [['Zawodniczka', ...exercises.map(ex => {
-        const presc = [ex.sets_planned ?? '', ex.reps ?? '', ex.tempo ?? ''].filter(x => String(x).trim()).join(' x ')
+        const presc = formatExercisePresc(ex)
         return pl(`${ex.name}${presc ? `\n${presc}` : ''}`)
       })]]
       const body = ordered.map(a => [
@@ -554,14 +574,9 @@ export default function GroupSummaryClient({ group, athletes, trainings, bodyWei
                         {exercises.map(ex => (
                           <th key={ex.id} style={{ minWidth: 160 }}>
                             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', textTransform: 'none', letterSpacing: 0 }}>{ex.name}</div>
-                            {(ex.sets_planned || ex.reps || ex.tempo) && (
+                            {(ex.iso || ex.sets_planned || ex.reps || ex.tempo) && (
                               <div style={{ fontFamily: INTER, fontSize: '0.62rem', fontWeight: 400, color: 'var(--muted)', marginTop: 3, textTransform: 'none' }}>
-                                {[
-                                  ex.sets_planned && ex.reps ? `${ex.sets_planned} × ${ex.reps}`
-                                    : ex.sets_planned ? `${ex.sets_planned} ser.`
-                                    : ex.reps ? `${ex.reps} powt.` : '',
-                                  ex.tempo || '',
-                                ].filter(Boolean).join(' · ')}
+                                {formatExercisePresc(ex)}
                               </div>
                             )}
                             <StimulusBadge ex={toStimulusInput(ex)} />
