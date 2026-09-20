@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { formatDatePl } from '@/lib/groupTraining'
-import { CheckSquare, MessageCircle } from 'lucide-react'
+import { CheckSquare, MessageCircle, Info } from 'lucide-react'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { Button } from '@/components/coach/ui'
 
@@ -376,6 +376,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
   const [absentIds, setAbsentIds] = useState<Set<number>>(() => new Set(training.absent_athlete_ids || []))
   const [individualIds, setIndividualIds] = useState<Set<number>>(() => new Set(training.individual_athlete_ids || []))
   const [summaryOpen, setSummaryOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
   const [error, setError] = useState('')
   const [copying, setCopying] = useState(false)
   const [focusExerciseId, setFocusExerciseId] = useState<number | null>(null)
@@ -1029,9 +1030,17 @@ export default function GroupTrainingClient({ group, training, athletes, initial
             <h1 style={{ color: 'var(--ink)', fontSize: '1.15rem', fontWeight: 700, margin: 0, fontFamily: 'var(--font-inter), sans-serif' }}>
               Trening · {formatDatePl(trainingDate)}
             </h1>
-            <p style={{ color: 'var(--muted)', fontSize: '0.8rem', marginTop: 4, maxWidth: 760, fontFamily: 'var(--font-inter), sans-serif' }}>
-              W nagłówku kolumny: serie, powtórzenia i tempo dla całej grupy. Przeciągnij ⠿, by zmienić kolejność. „BW" wpisuje 0 (masa ciała) w ciężar wszystkim, „P" przełącza kolumnę na wpisywanie powtórzeń zamiast kg. W wierszu zawodniczki wpisujesz ciężar, „+ ból"/„+ notatka" dają szybki wpis bez ✎. Kliknij numer serii (S1, S2…), by oznaczyć „nie zrobiła", a ✕ przy nazwisku wykreśla nieobecną. W polu z ciężarem: ← / → przechodzi między seriami (i ćwiczeniami), Enter — do tej samej serii u zawodniczki poniżej. Mały ⊘ przy komórce wyklucza jedną zawodniczkę z tego jednego ćwiczenia. Ikona osoby przy nazwisku przenosi ją do odrębnego planu indywidualnego.
-            </p>
+            <button
+              onClick={() => setHelpOpen(v => !v)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 4, border: 'none', background: 'none', color: 'var(--muted)', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.78rem', fontWeight: 600, padding: 0 }}
+            >
+              <Info size={13} /> Jak to działa?
+            </button>
+            {helpOpen && (
+              <p style={{ color: 'var(--muted)', fontSize: '0.8rem', marginTop: 6, maxWidth: 760, fontFamily: 'var(--font-inter), sans-serif' }}>
+                W nagłówku kolumny: serie, powtórzenia i tempo dla całej grupy. Przeciągnij ⠿, by zmienić kolejność. „BW" wpisuje 0 (masa ciała) w ciężar wszystkim, „P" przełącza kolumnę na wpisywanie powtórzeń zamiast kg. W wierszu zawodniczki wpisujesz ciężar, „+ ból"/„+ notatka" dają szybki wpis bez ✎. Kliknij numer serii (S1, S2…), by oznaczyć „nie zrobiła", a ✕ przy nazwisku wykreśla nieobecną. W polu z ciężarem: ← / → przechodzi między seriami (i ćwiczeniami), Enter — do tej samej serii u zawodniczki poniżej. Mały ⊘ przy komórce wyklucza jedną zawodniczkę z tego jednego ćwiczenia. Ikona osoby przy nazwisku przenosi ją do odrębnego planu indywidualnego.
+              </p>
+            )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '11px', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>Data</span>
