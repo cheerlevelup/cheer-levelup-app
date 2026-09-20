@@ -170,11 +170,16 @@ function resolvePresc(ex: Exercise, entry: Entry | null | undefined): { sets: nu
 function effectiveSets(ex: Exercise, entry: Entry | null | undefined, minOne = false): SetRow[] {
   const presc = resolvePresc(ex, entry)
   const fromEntry = entry?.sets || []
-  const planned = presc.sets ?? 0
-  const n = Math.max(planned, fromEntry.length, minOne ? 1 : 0)
-  return Array.from({ length: n }, (_, i) =>
-    fromEntry[i] ? { ...fromEntry[i] } : { reps: presc.reps, tempo: presc.tempo, weight: '' }
-  )
+  // Jeśli zawodniczka ma już zapisane serie, ich liczba jest rozstrzygająca —
+  // nawet gdy jest mniejsza niż rozpiska grupy (inaczej „usuń serię" nigdy nie
+  // zeszłoby poniżej planu grupy). Dopiero brak jakichkolwiek zapisanych serii
+  // pokazuje tyle pustych pól, ile zakłada rozpiska — żeby było co wypełnić.
+  if (fromEntry.length > 0) {
+    const n = Math.max(fromEntry.length, minOne ? 1 : 0)
+    return Array.from({ length: n }, (_, i) => ({ ...fromEntry[i] }))
+  }
+  const n = Math.max(presc.sets ?? 0, minOne ? 1 : 0)
+  return Array.from({ length: n }, () => ({ reps: presc.reps, tempo: presc.tempo, weight: '' }))
 }
 
 // ── Modal komórki: serie + ból + komentarz ──────────────────────────────────
@@ -1455,7 +1460,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 >
                                   <Plus size={12} />
                                 </button>
-                                {sets.length > Math.max(resolvePresc(ex, entry).sets ?? 0, 1) && (
+                                {sets.length > 1 && (
                                   <button
                                     onClick={() => removeInlineSet(athlete, ex)}
                                     title="Usuń ostatnią serię tej zawodniczce"
@@ -1660,7 +1665,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 >
                                   <Plus size={12} />
                                 </button>
-                                {sets.length > Math.max(presc.sets ?? 0, 1) && (
+                                {sets.length > 1 && (
                                   <button
                                     onClick={() => removeInlineSet(person, ex)}
                                     title="Usuń ostatnią serię"
