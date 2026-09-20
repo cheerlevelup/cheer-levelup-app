@@ -74,10 +74,10 @@ const qiBtn: React.CSSProperties = {
 // Pigułka z pełnym tekstem w nagłówku kolumny (BW / Powtórzenia / Indywidualnie).
 function headerPill(active: boolean): React.CSSProperties {
   return {
-    flexShrink: 0, outline: 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.6rem', fontWeight: 700,
+    flexShrink: 0, outline: 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.52rem', fontWeight: 700,
     border: `1.5px solid ${active ? 'var(--gold)' : 'var(--border)'}`,
     background: active ? '#FFFBEB' : '#ffffff', color: active ? '#92600A' : 'var(--muted-light)',
-    borderRadius: 6, padding: '4px 7px', lineHeight: 1,
+    borderRadius: 5, padding: '3px 5px', lineHeight: 1,
   }
 }
 
@@ -85,10 +85,10 @@ function headerPill(active: boolean): React.CSSProperties {
 // niż BW/Powtórzenia/Indywidualnie, żeby wizualnie odróżnić grupę izometrii).
 function isoPill(active: boolean): React.CSSProperties {
   return {
-    flexShrink: 0, outline: 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.6rem', fontWeight: 700,
+    flexShrink: 0, outline: 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.52rem', fontWeight: 700,
     border: `1.5px solid ${active ? 'var(--navy-900)' : 'var(--border)'}`,
     background: active ? 'var(--navy-900)' : '#ffffff', color: active ? 'var(--gold)' : 'var(--muted-light)',
-    borderRadius: 6, padding: '4px 7px', lineHeight: 1,
+    borderRadius: 5, padding: '3px 5px', lineHeight: 1,
   }
 }
 
@@ -1159,10 +1159,10 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                               </button>
                             </div>
                             {/* Rozpiska dla całej grupy: serie / powt. / tempo, albo serie / czas / intensywność dla ISO */}
-                            <div style={{ display: 'flex', marginTop: 8, background: '#ffffff', border: `1px solid var(--border)`, borderRadius: 9, overflow: 'hidden' }}>
+                            <div style={{ display: 'flex', marginTop: 6, background: '#ffffff', border: `1px solid var(--border)`, borderRadius: 8, overflow: 'hidden' }}>
                               {exerciseHeaderFields(ex).map((f, i, arr) => (
-                                <div key={f.field} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, padding: '8px 3px', borderRight: i < arr.length - 1 ? `1px solid var(--border)` : 'none' }}>
-                                  <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.54rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, flexShrink: 0 }}>{f.label}</span>
+                                <div key={f.field} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, padding: '5px 2px', borderRight: i < arr.length - 1 ? `1px solid var(--border)` : 'none' }}>
+                                  <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.48rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.03em', fontWeight: 700, flexShrink: 0 }}>{f.label}</span>
                                   <input
                                     type={f.type}
                                     {...(f.type === 'number' ? { min: 0, max: f.field === 'iso_intensity' ? 100 : f.field === 'iso_seconds' ? 600 : 20 } : {})}
@@ -1171,13 +1171,13 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                     onBlur={() => persistExercise(ex.id)}
                                     onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
                                     placeholder={f.placeholder}
-                                    style={{ width: 38, minWidth: 0, flexShrink: 0, border: 'none', background: 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.72rem', fontWeight: 800, color: 'var(--navy-900)', padding: 0, outline: 'none', textAlign: 'center' }}
+                                    style={{ width: f.field === 'sets_planned' ? 16 : 32, minWidth: 0, flexShrink: 0, border: 'none', background: 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.68rem', fontWeight: 800, color: 'var(--navy-900)', padding: 0, outline: 'none', textAlign: 'center' }}
                                   />
-                                  {f.suffix && <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.62rem', color: 'var(--muted-light)', flexShrink: 0 }}>{f.suffix}</span>}
+                                  {f.suffix && <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.56rem', color: 'var(--muted-light)', flexShrink: 0 }}>{f.suffix}</span>}
                                 </div>
                               ))}
                             </div>
-                            <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', gap: 4, rowGap: 4, marginTop: 6, flexWrap: 'wrap' }}>
                               {!ex.bodyweight && (
                                 <button
                                   onClick={() => fillColumnBodyweight(ex)}
@@ -1487,11 +1487,11 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 />
                                 <button onClick={() => handleDeleteExercise(ex)} title="Usuń ćwiczenie" style={{ border: 'none', background: 'none', color: 'var(--muted-light)', fontSize: '0.78rem', padding: 2, flexShrink: 0 }}>✕</button>
                               </div>
-                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8, alignItems: 'flex-end' }}>
+                              <div style={{ display: 'flex', gap: 4, rowGap: 4, flexWrap: 'wrap', marginBottom: 6, alignItems: 'flex-end' }}>
                                 {exerciseHeaderFields(ex).map(f => (
                                   <div key={f.field}>
-                                    <div style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.48rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.04em', textAlign: 'center', marginBottom: 1 }}>{f.label}</div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 3, border: `1px solid var(--border)`, borderRadius: 6, background: '#ffffff', padding: '0.28rem 0.2rem' }}>
+                                    <div style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.46rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.03em', textAlign: 'center', marginBottom: 1 }}>{f.label}</div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 2, border: `1px solid var(--border)`, borderRadius: 6, background: '#ffffff', padding: '4px 3px' }}>
                                       <input
                                         type={f.type}
                                         {...(f.type === 'number' ? { min: 0, max: f.field === 'iso_intensity' ? 100 : f.field === 'iso_seconds' ? 600 : 20 } : {})}
@@ -1500,30 +1500,30 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                         onBlur={() => persistExercise(ex.id)}
                                         onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
                                         placeholder={f.placeholder}
-                                        style={{ width: 38, minWidth: 0, border: 'none', background: 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.72rem', color: 'var(--navy-900)', padding: 0, outline: 'none', textAlign: 'center' }}
+                                        style={{ width: f.field === 'sets_planned' ? 16 : 30, minWidth: 0, border: 'none', background: 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.68rem', color: 'var(--navy-900)', padding: 0, outline: 'none', textAlign: 'center' }}
                                       />
-                                      {f.suffix && <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.6rem', color: 'var(--muted-light)', flexShrink: 0 }}>{f.suffix}</span>}
+                                      {f.suffix && <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.56rem', color: 'var(--muted-light)', flexShrink: 0 }}>{f.suffix}</span>}
                                     </div>
                                   </div>
                                 ))}
                                 <button
                                   onClick={() => toggleExerciseBodyweight(ex.id)}
                                   title={ex.bodyweight ? 'Tryb powtórzeń włączony — kliknij, by wrócić do kg' : 'Wpisuj powtórzenia zamiast kg'}
-                                  style={{ ...headerPill(!!ex.bodyweight), padding: '0.28rem 0.4rem' }}
+                                  style={{ ...headerPill(!!ex.bodyweight), padding: '3px 5px' }}
                                 >
                                   BW
                                 </button>
                                 <button
                                   onClick={() => toggleIso(ex.id)}
                                   title={ex.iso ? 'Ćwiczenie izometryczne — kliknij, by wrócić do serie/powt./tempo' : 'Oznacz jako ćwiczenie izometryczne (PIMA/HIMA)'}
-                                  style={{ ...isoPill(!!ex.iso), padding: '0.28rem 0.4rem' }}
+                                  style={{ ...isoPill(!!ex.iso), padding: '3px 5px' }}
                                 >
                                   ISO
                                 </button>
                                 {ex.iso && (
                                   <>
-                                    <button onClick={() => setIsoType(ex.id, 'PIMA')} title="PIMA — z intensywnością" style={{ ...isoPill(ex.iso_type === 'PIMA'), padding: '0.28rem 0.4rem' }}>PIMA</button>
-                                    <button onClick={() => setIsoType(ex.id, 'HIMA')} title="HIMA — bez intensywności" style={{ ...isoPill(ex.iso_type === 'HIMA'), padding: '0.28rem 0.4rem' }}>HIMA</button>
+                                    <button onClick={() => setIsoType(ex.id, 'PIMA')} title="PIMA — z intensywnością" style={{ ...isoPill(ex.iso_type === 'PIMA'), padding: '3px 5px' }}>PIMA</button>
+                                    <button onClick={() => setIsoType(ex.id, 'HIMA')} title="HIMA — bez intensywności" style={{ ...isoPill(ex.iso_type === 'HIMA'), padding: '3px 5px' }}>HIMA</button>
                                   </>
                                 )}
                               </div>
