@@ -5,6 +5,8 @@ interface PageMeta {
   title: string
   backHref?: string
   backLabel?: string
+  // Strona pozwala zwinąć boczne menu (np. trening live — więcej miejsca na siatkę)
+  sidebarCollapsible?: boolean
 }
 
 interface PageMetaContextValue {
@@ -31,11 +33,11 @@ export function usePageMeta() {
 
 // Renderowany na początku strony klienckiej, żeby ustawić tytuł/przycisk "wstecz" w TopBar
 // bez przekazywania propsów przez server-side page.tsx.
-export function SetPageMeta({ title, backHref, backLabel }: PageMeta) {
+export function SetPageMeta({ title, backHref, backLabel, sidebarCollapsible }: PageMeta) {
   const { setMeta } = usePageMeta()
   useEffect(() => {
-    setMeta({ title, backHref, backLabel })
+    setMeta({ title, backHref, backLabel, sidebarCollapsible })
     return () => setMeta(null)
-  }, [title, backHref, backLabel, setMeta])
+  }, [title, backHref, backLabel, sidebarCollapsible, setMeta])
   return null
 }

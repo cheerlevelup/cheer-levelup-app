@@ -948,7 +948,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
         .gt-ex-drag { opacity: 0; transition: opacity .15s ease; }
         .gt-ex-header:hover .gt-ex-drag { opacity: 1; }
       `}</style>
-      <SetPageMeta title="Trening" backHref={`/coach/groups/${group.id}`} backLabel={group.name} />
+      <SetPageMeta title="Trening" backHref={`/coach/groups/${group.id}`} backLabel={group.name} sidebarCollapsible />
       <div className="coach-content">
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
           <div>
