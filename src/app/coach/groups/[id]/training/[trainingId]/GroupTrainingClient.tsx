@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { formatDatePl } from '@/lib/groupTraining'
-import { CheckSquare, MessageCircle, Info, AlertTriangle, Pencil, Plus, Check, X } from 'lucide-react'
+import { CheckSquare, MessageCircle, Info, AlertTriangle, Pencil, Plus, Check, X, Trash2 } from 'lucide-react'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { Button } from '@/components/coach/ui'
 
@@ -64,6 +64,16 @@ const entryKey = (exerciseId: number, athleteId: number) => `${exerciseId}_${ath
 const qiBtn: React.CSSProperties = {
   width: 20, height: 20, padding: 0, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
   borderRadius: 6, border: '1.5px solid var(--border)', background: '#ffffff', color: 'var(--muted-light)', lineHeight: 1, outline: 'none',
+}
+
+// Pigułka z pełnym tekstem w nagłówku kolumny (BW / Powtórzenia / Indywidualnie).
+function headerPill(active: boolean): React.CSSProperties {
+  return {
+    flexShrink: 0, outline: 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.68rem', fontWeight: 700,
+    border: `1.5px solid ${active ? 'var(--gold)' : 'var(--border)'}`,
+    background: active ? '#FFFBEB' : '#ffffff', color: active ? '#92600A' : 'var(--muted-light)',
+    borderRadius: 7, padding: '5px 9px', lineHeight: 1,
+  }
 }
 
 // Wiersz szybkiej edycji pod komórką (modyfikacja ćwiczenia / ból / notatka) —
@@ -935,6 +945,8 @@ export default function GroupTrainingClient({ group, training, athletes, initial
         .gt-w { width: 38px; border: 1.5px solid #DBE2EB; border-radius: 6px; background: #FAFBFC; font-family: var(--font-inter), sans-serif; font-size: 0.68rem; color: var(--navy-900); padding: 0.24rem 0.15rem; outline: none; text-align: center; transition: border-color 0.12s, background 0.12s; }
         .gt-w.filled { border-color: var(--border); background: #ffffff; }
         .gt-w:focus { border-color: var(--gold); background: #ffffff; }
+        .gt-ex-drag { opacity: 0; transition: opacity .15s ease; }
+        .gt-ex-header:hover .gt-ex-drag { opacity: 1; }
       `}</style>
       <SetPageMeta title="Trening" backHref={`/coach/groups/${group.id}`} backLabel={group.name} />
       <div className="coach-content">
@@ -1006,24 +1018,21 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                         Zawodniczka
                       </th>
                       {sortedExercises.map(ex => {
-                        const headerInput: React.CSSProperties = {
-                          width: '100%', minWidth: 0, border: `1px solid transparent`, borderRadius: 6,
-                          background: '#ffffff', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.72rem', fontWeight: 700, color: 'var(--navy-900)',
-                          padding: '0.28rem 0.15rem', outline: 'none', textAlign: 'center',
-                        }
                         return (
                           <th
                             key={ex.id}
+                            className="gt-ex-header"
                             onDragOver={e => { if (dragExId.current != null) { e.preventDefault(); if (dragOverExId !== ex.id) setDragOverExId(ex.id) } }}
                             onDrop={e => { e.preventDefault(); reorderExercise(ex.id) }}
-                            style={{ width: 280, minWidth: 280, maxWidth: 280, padding: '0.4rem 0.45rem', background: 'var(--bg)', boxShadow: dragOverExId === ex.id ? `inset 3px 0 0 var(--gold)` : undefined }}
+                            style={{ width: 336, minWidth: 336, maxWidth: 336, padding: '0.6rem 0.65rem', background: 'var(--bg)', boxShadow: dragOverExId === ex.id ? `inset 3px 0 0 var(--gold)` : undefined }}
                           >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                               <span
                                 draggable
                                 onDragStart={e => { dragExId.current = ex.id; e.dataTransfer.effectAllowed = 'move' }}
                                 onDragEnd={() => { dragExId.current = null; setDragOverExId(null) }}
                                 title="Przeciągnij, by zmienić kolejność ćwiczeń"
+                                className="gt-ex-drag"
                                 style={{ cursor: 'grab', color: 'var(--muted-light)', fontSize: '0.82rem', lineHeight: 1, flexShrink: 0, padding: '0 1px', userSelect: 'none' }}
                               >
                                 ⠿
@@ -1039,43 +1048,26 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 }}
                                 onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
                                 placeholder="nazwa ćwiczenia"
-                                style={{ flex: 1, minWidth: 0, border: `1.5px solid transparent`, borderRadius: 7, background: 'transparent', fontWeight: 800, fontSize: '0.82rem', color: 'var(--navy-900)', padding: '0.3rem 0.35rem', outline: 'none', fontFamily: 'var(--font-inter), sans-serif' }}
+                                style={{ flex: 1, minWidth: 0, border: `1.5px solid transparent`, borderRadius: 7, background: 'transparent', fontWeight: 800, fontSize: '1rem', color: 'var(--navy-900)', padding: '0.2rem 0.3rem', outline: 'none', fontFamily: 'var(--font-inter), sans-serif' }}
                                 onFocus={e => { e.target.style.background = '#ffffff'; e.target.style.borderColor = 'var(--gold)' }}
                               />
-                              {!ex.bodyweight && (
-                                <button
-                                  onClick={() => fillColumnBodyweight(ex)}
-                                  title="Wpisz 0 (masa ciała) w ciężar wszystkim zawodniczkom"
-                                  style={{ flexShrink: 0, fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.5rem', fontWeight: 700, border: `1px solid var(--border)`, background: '#ffffff', color: 'var(--navy-900)', borderRadius: 5, padding: '2px 4px', lineHeight: 1 }}
-                                >
-                                  BW
-                                </button>
-                              )}
                               <button
-                                onClick={() => toggleExerciseBodyweight(ex.id)}
-                                title={ex.bodyweight ? 'Tryb powtórzeń włączony — kliknij, by wrócić do kg' : 'Cała kolumna: wpisuj powtórzenia zamiast kg'}
-                                style={{ flexShrink: 0, fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.5rem', fontWeight: 700, border: `1px solid ${ex.bodyweight ? 'var(--gold)' : 'var(--border)'}`, background: ex.bodyweight ? '#FFFBEB' : '#ffffff', color: ex.bodyweight ? '#92600A' : 'var(--muted-light)', borderRadius: 5, padding: '2px 4px', lineHeight: 1 }}
+                                onClick={() => handleDeleteExercise(ex)}
+                                title="Usuń ćwiczenie"
+                                style={{ flexShrink: 0, width: 26, height: 26, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: `1.5px solid var(--border)`, background: '#ffffff', color: 'var(--muted-light)', borderRadius: 7, outline: 'none' }}
                               >
-                                P
+                                <Trash2 size={13} />
                               </button>
-                              <button
-                                onClick={() => toggleIndividual(ex.id)}
-                                title={ex.individual ? 'Tryb indywidualny — dane liczone z wierszy zawodniczek (kliknij, by wrócić do grupowego)' : 'Tryb indywidualny: serie/powt./tempo różne per zawodniczka, nagłówek może być pusty'}
-                                style={{ flexShrink: 0, fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.5rem', fontWeight: 700, border: `1px solid ${ex.individual ? 'var(--gold)' : 'var(--border)'}`, background: ex.individual ? '#FFFBEB' : '#ffffff', color: ex.individual ? '#92600A' : 'var(--muted-light)', borderRadius: 5, padding: '2px 4px', lineHeight: 1 }}
-                              >
-                                I
-                              </button>
-                              <button onClick={() => handleDeleteExercise(ex)} title="Usuń ćwiczenie" style={{ border: 'none', background: 'none', color: 'var(--muted-light)', fontSize: '0.78rem', padding: 2, flexShrink: 0 }}>✕</button>
                             </div>
                             {/* Rozpiska dla całej grupy: serie / powtórzenia / tempo */}
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.3fr', gap: 2, marginTop: 5, padding: 3, background: '#ffffff', border: `1px solid var(--border)`, borderRadius: 9 }}>
+                            <div style={{ display: 'flex', marginTop: 8, background: '#ffffff', border: `1px solid var(--border)`, borderRadius: 9, overflow: 'hidden' }}>
                               {([
                                 { field: 'sets_planned' as const, label: 'serie', value: ex.sets_planned ?? '', placeholder: '3', type: 'number' },
                                 { field: 'reps' as const, label: 'powt.', value: ex.reps ?? '', placeholder: '8', type: 'text' },
                                 { field: 'tempo' as const, label: 'tempo', value: ex.tempo ?? '', placeholder: '3010', type: 'text' },
-                              ]).map(f => (
-                                <div key={f.field}>
-                                  <div style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.48rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.04em', textAlign: 'center', marginBottom: 1 }}>{f.label}</div>
+                              ]).map((f, i) => (
+                                <div key={f.field} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '8px 4px', borderRight: i < 2 ? `1px solid var(--border)` : 'none' }}>
+                                  <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.6rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, flexShrink: 0 }}>{f.label}</span>
                                   <input
                                     type={f.type}
                                     {...(f.type === 'number' ? { min: 0, max: 20 } : {})}
@@ -1084,10 +1076,35 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                     onBlur={() => persistExercise(ex.id)}
                                     onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
                                     placeholder={f.placeholder}
-                                    style={headerInput}
+                                    style={{ width: 36, minWidth: 0, border: 'none', background: 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.82rem', fontWeight: 800, color: 'var(--navy-900)', padding: 0, outline: 'none', textAlign: 'center' }}
                                   />
                                 </div>
                               ))}
+                            </div>
+                            <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                              {!ex.bodyweight && (
+                                <button
+                                  onClick={() => fillColumnBodyweight(ex)}
+                                  title="Wpisz 0 (masa ciała) w ciężar wszystkim zawodniczkom"
+                                  style={headerPill(false)}
+                                >
+                                  BW
+                                </button>
+                              )}
+                              <button
+                                onClick={() => toggleExerciseBodyweight(ex.id)}
+                                title={ex.bodyweight ? 'Tryb powtórzeń włączony — kliknij, by wrócić do kg' : 'Cała kolumna: wpisuj powtórzenia zamiast kg'}
+                                style={headerPill(!!ex.bodyweight)}
+                              >
+                                Powtórzenia
+                              </button>
+                              <button
+                                onClick={() => toggleIndividual(ex.id)}
+                                title={ex.individual ? 'Tryb indywidualny — dane liczone z wierszy zawodniczek (kliknij, by wrócić do grupowego)' : 'Tryb indywidualny: serie/powt./tempo różne per zawodniczka, nagłówek może być pusty'}
+                                style={headerPill(!!ex.individual)}
+                              >
+                                Indywidualnie
+                              </button>
                             </div>
                             {(isMaxReps(ex.reps) || ex.bodyweight) && (
                               <div style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.5rem', fontWeight: 700, color: '#854F0B', background: '#FEF6E0', border: '1px solid #F7D27A', borderRadius: 6, padding: '2px 5px', marginTop: 4, textAlign: 'center' }}>
