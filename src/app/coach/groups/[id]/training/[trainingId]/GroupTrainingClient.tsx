@@ -1049,6 +1049,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
       `}</style>
       <SetPageMeta title="Trening" backHref={`/coach/groups/${group.id}`} backLabel={group.name} sidebarCollapsible />
       <div className="coach-content">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
           <div>
             <h1 style={{ color: 'var(--ink)', fontSize: '1.15rem', fontWeight: 700, margin: 0, fontFamily: 'var(--font-inter), sans-serif' }}>
@@ -1056,7 +1057,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
             </h1>
             <button
               onClick={() => setHelpOpen(v => !v)}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 4, border: 'none', background: 'none', color: 'var(--muted)', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.78rem', fontWeight: 600, padding: 0 }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 2, border: 'none', background: 'none', color: 'var(--muted)', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.78rem', fontWeight: 600, padding: 0 }}
             >
               <Info size={13} /> Jak to działa?
             </button>
@@ -1084,6 +1085,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
           <Button variant="ghost" size="small" onClick={() => router.push(`/coach/groups/${group.id}/feedback`)}>
             <MessageCircle size={13} /> Feedback po treningu
           </Button>
+        </div>
         </div>
 
         {error && (
