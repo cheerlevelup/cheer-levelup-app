@@ -69,10 +69,10 @@ const qiBtn: React.CSSProperties = {
 // Pigułka z pełnym tekstem w nagłówku kolumny (BW / Powtórzenia / Indywidualnie).
 function headerPill(active: boolean): React.CSSProperties {
   return {
-    flexShrink: 0, outline: 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.68rem', fontWeight: 700,
+    flexShrink: 0, outline: 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.6rem', fontWeight: 700,
     border: `1.5px solid ${active ? 'var(--gold)' : 'var(--border)'}`,
     background: active ? '#FFFBEB' : '#ffffff', color: active ? '#92600A' : 'var(--muted-light)',
-    borderRadius: 7, padding: '5px 9px', lineHeight: 1,
+    borderRadius: 6, padding: '4px 7px', lineHeight: 1,
   }
 }
 
@@ -1048,15 +1048,15 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 }}
                                 onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
                                 placeholder="nazwa ćwiczenia"
-                                style={{ flex: 1, minWidth: 0, border: `1.5px solid transparent`, borderRadius: 7, background: 'transparent', fontWeight: 800, fontSize: '1rem', color: 'var(--navy-900)', padding: '0.2rem 0.3rem', outline: 'none', fontFamily: 'var(--font-inter), sans-serif' }}
+                                style={{ flex: 1, minWidth: 0, border: `1.5px solid transparent`, borderRadius: 7, background: 'transparent', fontWeight: 800, fontSize: '0.86rem', color: 'var(--navy-900)', padding: '0.2rem 0.3rem', outline: 'none', fontFamily: 'var(--font-inter), sans-serif' }}
                                 onFocus={e => { e.target.style.background = '#ffffff'; e.target.style.borderColor = 'var(--gold)' }}
                               />
                               <button
                                 onClick={() => handleDeleteExercise(ex)}
                                 title="Usuń ćwiczenie"
-                                style={{ flexShrink: 0, width: 26, height: 26, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: `1.5px solid var(--border)`, background: '#ffffff', color: 'var(--muted-light)', borderRadius: 7, outline: 'none' }}
+                                style={{ flexShrink: 0, width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: `1.5px solid var(--border)`, background: '#ffffff', color: 'var(--muted-light)', borderRadius: 7, outline: 'none' }}
                               >
-                                <Trash2 size={13} />
+                                <Trash2 size={12} />
                               </button>
                             </div>
                             {/* Rozpiska dla całej grupy: serie / powtórzenia / tempo */}
@@ -1067,7 +1067,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 { field: 'tempo' as const, label: 'tempo', value: ex.tempo ?? '', placeholder: '3010', type: 'text' },
                               ]).map((f, i) => (
                                 <div key={f.field} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '8px 4px', borderRight: i < 2 ? `1px solid var(--border)` : 'none' }}>
-                                  <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.6rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, flexShrink: 0 }}>{f.label}</span>
+                                  <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.54rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, flexShrink: 0 }}>{f.label}</span>
                                   <input
                                     type={f.type}
                                     {...(f.type === 'number' ? { min: 0, max: 20 } : {})}
@@ -1076,7 +1076,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                     onBlur={() => persistExercise(ex.id)}
                                     onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
                                     placeholder={f.placeholder}
-                                    style={{ width: 36, minWidth: 0, border: 'none', background: 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.82rem', fontWeight: 800, color: 'var(--navy-900)', padding: 0, outline: 'none', textAlign: 'center' }}
+                                    style={{ width: 32, minWidth: 0, border: 'none', background: 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.72rem', fontWeight: 800, color: 'var(--navy-900)', padding: 0, outline: 'none', textAlign: 'center' }}
                                   />
                                 </div>
                               ))}
