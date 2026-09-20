@@ -245,6 +245,8 @@ function CellModal({ athlete, exercise, entry, training, onClose, onSaved }: {
       comment: comment.trim() || null,
       exercise_override: exerciseOverride.trim() || null,
       bodyweight,
+      variant: entry?.variant ?? null,
+      excluded: entry?.excluded ?? false,
       updated_at: new Date().toISOString(),
     }
     let { data, error: err } = await supabase
@@ -252,11 +254,11 @@ function CellModal({ athlete, exercise, entry, training, onClose, onSaved }: {
       .upsert(payload, { onConflict: 'exercise_id,athlete_id' })
       .select()
       .single()
-    // Migracje kolumn „pain” / „bodyweight” jeszcze nie wgrane — zapisz bez brakującej
+    // Migracje kolumn „pain” / „bodyweight” / „variant” / „excluded” jeszcze nie wgrane — zapisz bez brakującej
     let attempt: Record<string, any> = payload
     let guard = 0
-    while (err && guard++ < 3) {
-      const missing = ['pain', 'bodyweight'].find(col => new RegExp(`'${col}'`).test(err!.message) && col in attempt)
+    while (err && guard++ < 4) {
+      const missing = ['pain', 'bodyweight', 'variant', 'excluded'].find(col => new RegExp(`'${col}'`).test(err!.message) && col in attempt)
       if (!missing) break
       const { [missing]: _omit, ...rest } = attempt
       attempt = rest
@@ -428,6 +430,31 @@ export default function GroupTrainingClient({ group, training, athletes, initial
   const router = useRouter()
   const supabase = createClient()
 
+  // `excluded` (migracja 202609150003) jest dopisywana do KAŻDEGO zapisu wpisu
+  // defensywnie (żeby jej nie zgubić przy okazji zapisu czegoś innego) — jeśli
+  // kolumna jeszcze nie istnieje w bazie, pomijamy ją i zapisujemy resztę, żeby
+  // brak jednej migracji nie blokował wpisywania ciężarów/powtórzeń.
+  async function upsertTrainingEntry(payload: Record<string, any>) {
+    let attempt = payload
+    let res = await supabase.from('group_training_entries').upsert(attempt, { onConflict: 'exercise_id,athlete_id' }).select().single()
+    if (res.error && 'excluded' in attempt && /'excluded'/.test(res.error.message)) {
+      const { excluded, ...rest } = attempt
+      attempt = rest
+      res = await supabase.from('group_training_entries').upsert(attempt, { onConflict: 'exercise_id,athlete_id' }).select().single()
+    }
+    return res
+  }
+
+  async function upsertTrainingEntries(rows: Record<string, any>[]) {
+    let attempt = rows
+    let res = await supabase.from('group_training_entries').upsert(attempt, { onConflict: 'exercise_id,athlete_id' }).select()
+    if (res.error && attempt[0] && 'excluded' in attempt[0] && /'excluded'/.test(res.error.message)) {
+      attempt = attempt.map(({ excluded, ...rest }) => rest)
+      res = await supabase.from('group_training_entries').upsert(attempt, { onConflict: 'exercise_id,athlete_id' }).select()
+    }
+    return res
+  }
+
   const [exercises, setExercises] = useState<Exercise[]>(
     () => initialExercises.map(e => ({ ...e, variants: normalizeVariants(e.variants) }))
   )
@@ -598,16 +625,14 @@ export default function GroupTrainingClient({ group, training, athletes, initial
       latestSetsRef.current.set(key, sets)
       return {
         training_id: training.id, exercise_id: ex.id, athlete_id: a.id, sets,
-        pain_vas: current?.pain_vas ?? null, pain_comment: current?.pain_comment ?? null,
+        pain: current?.pain ?? false, pain_vas: current?.pain_vas ?? null, pain_comment: current?.pain_comment ?? null,
         comment: current?.comment ?? null, exercise_override: current?.exercise_override ?? null,
+        bodyweight: current?.bodyweight ?? false, variant: current?.variant ?? null, excluded: current?.excluded ?? false,
         updated_at: new Date().toISOString(),
       }
     })
     if (rows.length === 0) return
-    const { data, error: err } = await supabase
-      .from('group_training_entries')
-      .upsert(rows, { onConflict: 'exercise_id,athlete_id' })
-      .select()
+    const { data, error: err } = await upsertTrainingEntries(rows)
     if (err || !data) { setError(err?.message || 'Błąd zapisu'); return }
     setEntryMap(prev => {
       const next = new Map(prev)
@@ -765,15 +790,13 @@ export default function GroupTrainingClient({ group, training, athletes, initial
       latestSetsRef.current.set(key, sets)
       return {
         training_id: training.id, exercise_id: ex.id, athlete_id: a.id, sets,
-        pain_vas: current?.pain_vas ?? null, pain_comment: current?.pain_comment ?? null,
+        pain: current?.pain ?? false, pain_vas: current?.pain_vas ?? null, pain_comment: current?.pain_comment ?? null,
         comment: current?.comment ?? null, exercise_override: current?.exercise_override ?? null,
+        bodyweight: current?.bodyweight ?? false, variant: current?.variant ?? null, excluded: current?.excluded ?? false,
         updated_at: new Date().toISOString(),
       }
     })
-    const { data, error: err } = await supabase
-      .from('group_training_entries')
-      .upsert(rows, { onConflict: 'exercise_id,athlete_id' })
-      .select()
+    const { data, error: err } = await upsertTrainingEntries(rows)
     if (err || !data) { setError(err?.message || 'Błąd zapisu'); return }
     setEntryMap(prev => {
       const next = new Map(prev)
@@ -825,17 +848,17 @@ export default function GroupTrainingClient({ group, training, athletes, initial
       exercise_id: ex.id,
       athlete_id: athlete.id,
       sets,
+      pain: current?.pain ?? false,
       pain_vas: current?.pain_vas ?? null,
       pain_comment: current?.pain_comment ?? null,
       comment: current?.comment ?? null,
       exercise_override: current?.exercise_override ?? null,
+      bodyweight: current?.bodyweight ?? false,
+      variant: current?.variant ?? null,
+      excluded: current?.excluded ?? false,
       updated_at: new Date().toISOString(),
     }
-    const { data, error: err } = await supabase
-      .from('group_training_entries')
-      .upsert(payload, { onConflict: 'exercise_id,athlete_id' })
-      .select()
-      .single()
+    const { data, error: err } = await upsertTrainingEntry(payload)
     if (err || !data) { setError(err?.message || 'Błąd zapisu'); return }
     setEntryMap(prev => {
       const next = new Map(prev)
@@ -857,17 +880,17 @@ export default function GroupTrainingClient({ group, training, athletes, initial
       exercise_id: ex.id,
       athlete_id: athlete.id,
       sets,
+      pain: current?.pain ?? false,
       pain_vas: current?.pain_vas ?? null,
       pain_comment: current?.pain_comment ?? null,
       comment: current?.comment ?? null,
       exercise_override: current?.exercise_override ?? null,
+      bodyweight: current?.bodyweight ?? false,
+      variant: current?.variant ?? null,
+      excluded: current?.excluded ?? false,
       updated_at: new Date().toISOString(),
     }
-    const { data, error: err } = await supabase
-      .from('group_training_entries')
-      .upsert(payload, { onConflict: 'exercise_id,athlete_id' })
-      .select()
-      .single()
+    const { data, error: err } = await upsertTrainingEntry(payload)
     if (err || !data) { setError(err?.message || 'Błąd zapisu'); return }
     setEntryMap(prev => {
       const next = new Map(prev)
@@ -886,17 +909,17 @@ export default function GroupTrainingClient({ group, training, athletes, initial
       exercise_id: ex.id,
       athlete_id: athlete.id,
       sets,
+      pain: current?.pain ?? false,
       pain_vas: current?.pain_vas ?? null,
       pain_comment: current?.pain_comment ?? null,
       comment: current?.comment ?? null,
       exercise_override: current?.exercise_override ?? null,
+      bodyweight: current?.bodyweight ?? false,
+      variant: current?.variant ?? null,
+      excluded: current?.excluded ?? false,
       updated_at: new Date().toISOString(),
     }
-    const { data, error: err } = await supabase
-      .from('group_training_entries')
-      .upsert(payload, { onConflict: 'exercise_id,athlete_id' })
-      .select()
-      .single()
+    const { data, error: err } = await upsertTrainingEntry(payload)
     if (err || !data) { setError(err?.message || 'Błąd zapisu'); return }
     setEntryMap(prev => {
       const next = new Map(prev)
@@ -973,12 +996,40 @@ export default function GroupTrainingClient({ group, training, athletes, initial
   // pozostałe (serie itd.) zostają nietknięte.
   async function saveEntryMeta(athlete: Athlete, ex: Exercise, patch: Record<string, any>) {
     const key = entryKey(ex.id, athlete.id)
-    const payload = { training_id: training.id, exercise_id: ex.id, athlete_id: athlete.id, ...patch, updated_at: new Date().toISOString() }
-    const { data, error: err } = await supabase
+    const current = entryMap.get(key)
+    // Upsert nadpisuje CAŁY wiersz, nie tylko podane kolumny — trzeba jawnie
+    // przepisać resztę pól (serie itd.), inaczej znikają przy każdym drobnym
+    // zapisie (np. ból/notatka/wykluczenie z ćwiczenia kasowałoby ciężary).
+    const payload = {
+      training_id: training.id, exercise_id: ex.id, athlete_id: athlete.id,
+      sets: latestSetsRef.current.get(key) ?? current?.sets ?? [],
+      pain: current?.pain ?? false,
+      pain_vas: current?.pain_vas ?? null,
+      pain_comment: current?.pain_comment ?? null,
+      comment: current?.comment ?? null,
+      exercise_override: current?.exercise_override ?? null,
+      bodyweight: current?.bodyweight ?? false,
+      variant: current?.variant ?? null,
+      excluded: current?.excluded ?? false,
+      ...patch,
+      updated_at: new Date().toISOString(),
+    }
+    // "excluded" jest tu też dopisywane tylko defensywnie, gdy patch dotyczy
+    // czegoś innego (ból/notatka/modyfikacja) — w tym wypadku brak migracji nie
+    // powinien blokować zapisu tamtej rzeczy, więc próbujemy bez tej kolumny.
+    let { data, error: err } = await supabase
       .from('group_training_entries')
       .upsert(payload, { onConflict: 'exercise_id,athlete_id' })
       .select()
       .single()
+    if (err && !('excluded' in patch) && /'excluded'/.test(err.message)) {
+      const { excluded, ...rest } = payload
+      ;({ data, error: err } = await supabase
+        .from('group_training_entries')
+        .upsert(rest, { onConflict: 'exercise_id,athlete_id' })
+        .select()
+        .single())
+    }
     if (err || !data) {
       const msg = err?.message || ''
       setError('pain' in patch && /'pain'/.test(msg)
