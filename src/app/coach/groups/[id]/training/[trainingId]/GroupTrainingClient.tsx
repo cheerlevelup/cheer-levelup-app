@@ -1500,15 +1500,34 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                   <Pencil size={11} />
                                 </button>
                               </div>
-                              {entry?.exercise_override && cellEdit?.key !== entryKey(ex.id, athlete.id) && (
-                                <button
-                                  onClick={() => setCellEdit({ key: entryKey(ex.id, athlete.id), type: 'mod' })}
-                                  title="Kliknij, by zmienić"
-                                  style={{ display: 'block', marginTop: 3, border: 'none', outline: 'none', background: 'none', padding: 0, fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.66rem', fontWeight: 700, color: '#7c3aed', textAlign: 'left', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                                >
-                                  → {entry.exercise_override}
-                                </button>
-                              )}
+                              {(() => {
+                                const key = entryKey(ex.id, athlete.id)
+                                const labelBtn = (color: string): React.CSSProperties => ({
+                                  display: 'block', marginTop: 3, border: 'none', outline: 'none', background: 'none', padding: 0,
+                                  fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.66rem', fontWeight: 700, color,
+                                  textAlign: 'left', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                })
+                                const painActive = !!entry?.pain || entry?.pain_vas != null
+                                return (
+                                  <>
+                                    {entry?.exercise_override && !(cellEdit?.key === key && cellEdit.type === 'mod') && (
+                                      <button onClick={() => setCellEdit({ key, type: 'mod' })} title="Kliknij, by zmienić" style={labelBtn('#7c3aed')}>
+                                        → {entry.exercise_override}
+                                      </button>
+                                    )}
+                                    {painActive && !(cellEdit?.key === key && cellEdit.type === 'pain') && (
+                                      <button onClick={() => setCellEdit({ key, type: 'pain' })} title="Kliknij, by zmienić" style={labelBtn(entry?.pain_vas != null && entry.pain_vas >= 5 ? '#c23b3b' : '#c07f1e')}>
+                                        ⚠ {entry?.pain_vas != null ? `${entry.pain_vas}/10 ` : ''}{entry?.pain_comment || ''}
+                                      </button>
+                                    )}
+                                    {entry?.comment && !(cellEdit?.key === key && cellEdit.type === 'note') && (
+                                      <button onClick={() => setCellEdit({ key, type: 'note' })} title="Kliknij, by zmienić" style={labelBtn('#2c5aa3')}>
+                                        💬 {entry.comment}
+                                      </button>
+                                    )}
+                                  </>
+                                )
+                              })()}
                               {cellEdit?.key === entryKey(ex.id, athlete.id) && (
                                 cellEdit.type === 'mod' ? (
                                   <InlineFieldEditor
@@ -1698,6 +1717,29 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                   <MessageCircle size={11} />
                                 </button>
                               </div>
+                              {(() => {
+                                const key = entryKey(ex.id, person.id)
+                                const labelBtn = (color: string): React.CSSProperties => ({
+                                  display: 'block', marginTop: 3, border: 'none', outline: 'none', background: 'none', padding: 0,
+                                  fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.66rem', fontWeight: 700, color,
+                                  textAlign: 'left', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                })
+                                const painActive = !!entry?.pain || entry?.pain_vas != null
+                                return (
+                                  <>
+                                    {painActive && !(cellEdit?.key === key && cellEdit.type === 'pain') && (
+                                      <button onClick={() => setCellEdit({ key, type: 'pain' })} title="Kliknij, by zmienić" style={labelBtn(entry?.pain_vas != null && entry.pain_vas >= 5 ? '#c23b3b' : '#c07f1e')}>
+                                        ⚠ {entry?.pain_vas != null ? `${entry.pain_vas}/10 ` : ''}{entry?.pain_comment || ''}
+                                      </button>
+                                    )}
+                                    {entry?.comment && !(cellEdit?.key === key && cellEdit.type === 'note') && (
+                                      <button onClick={() => setCellEdit({ key, type: 'note' })} title="Kliknij, by zmienić" style={labelBtn('#2c5aa3')}>
+                                        💬 {entry.comment}
+                                      </button>
+                                    )}
+                                  </>
+                                )
+                              })()}
                               {cellEdit?.key === entryKey(ex.id, person.id) && (
                                 cellEdit.type === 'pain' ? (
                                   <InlineFieldEditor
