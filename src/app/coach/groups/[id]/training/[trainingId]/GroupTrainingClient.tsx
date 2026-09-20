@@ -65,6 +65,14 @@ interface Props {
 
 const entryKey = (exerciseId: number, athleteId: number) => `${exerciseId}_${athleteId}`
 
+// Kolor awatara — deterministyczny wg pierwszej litery imienia, żeby wiersze
+// łatwiej się od siebie odróżniały w gęstej tabeli.
+const AVATAR_COLORS = ['#1b2740', '#2c5aa3', '#0f766e', '#92600A', '#7c3aed', '#b45309', '#334155', '#9d174d']
+function avatarBg(name: string) {
+  const code = name.trim().charCodeAt(0) || 0
+  return AVATAR_COLORS[code % AVATAR_COLORS.length]
+}
+
 // Ćwiczenie „na maksa" — w polu POWT. wpisano max/maks/amrap/do upadku.
 // Wtedy w komórkach zawodniczek wpisujemy wykonane powtórzenia, nie ciężar.
 const isMaxReps = (reps?: string | null) => /(amrap|maks|max|upad)/i.test((reps || '').trim())
@@ -1019,7 +1027,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
         .gt-row td { transition: background 0.12s ease; }
         .gt-row:nth-child(even) td, .gt-row:nth-child(even) .gt-sticky { background: #FBFCFE; }
         .gt-row:hover td, .gt-row:hover .gt-sticky { background: #EFF4FB; }
-        .gt-w { width: 44px; border: 1.5px solid #DBE2EB; border-radius: 7px; background: #FAFBFC; font-family: var(--font-inter), sans-serif; font-size: 0.74rem; color: var(--navy-900); padding: 0.3rem 0.2rem; outline: none; text-align: center; transition: border-color 0.12s, background 0.12s; }
+        .gt-w { width: 38px; border: 1.5px solid #DBE2EB; border-radius: 6px; background: #FAFBFC; font-family: var(--font-inter), sans-serif; font-size: 0.68rem; color: var(--navy-900); padding: 0.24rem 0.15rem; outline: none; text-align: center; transition: border-color 0.12s, background 0.12s; }
         .gt-w.filled { border-color: var(--border); background: #ffffff; }
         .gt-w:focus { border-color: var(--gold); background: #ffffff; }
       `}</style>
@@ -1089,7 +1097,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                 <table className="gt-table">
                   <thead>
                     <tr>
-                      <th className="gt-sticky" style={{ minWidth: 150, padding: '0.7rem 0.85rem', textAlign: 'left', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.62rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.08em', background: 'var(--bg)', zIndex: 5 }}>
+                      <th className="gt-sticky" style={{ width: 165, minWidth: 165, maxWidth: 165, padding: '0.55rem 0.5rem', textAlign: 'left', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.6rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.08em', background: 'var(--bg)', zIndex: 5 }}>
                         Zawodniczka
                       </th>
                       {sortedExercises.map(ex => {
@@ -1303,27 +1311,27 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                   <tbody>
                     {orderedAthletes.map(({ athlete, absent }, rowIdx) => (
                       <tr key={athlete.id} className="gt-row">
-                        <td className="gt-sticky" style={{ padding: '0.5rem 0.7rem' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                            <button
-                              onClick={() => toggleAbsent(athlete.id)}
-                              title={absent ? 'Przywróć na trening' : 'Wykreśl z treningu (nieobecna)'}
-                              style={{ flexShrink: 0, width: 22, height: 22, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, border: `1.5px solid ${absent ? 'var(--gold)' : 'var(--border)'}`, background: absent ? '#FFFBEB' : '#ffffff', color: absent ? '#92600A' : 'var(--muted-light)', fontSize: '0.72rem', lineHeight: 1 }}
-                            >
-                              {absent ? '↩' : '✕'}
-                            </button>
-                            <span style={{ fontWeight: 700, fontSize: '0.84rem', whiteSpace: 'nowrap', textDecoration: absent ? 'line-through' : 'none', color: absent ? 'var(--muted-light)' : 'var(--navy-900)' }}>
+                        <td className="gt-sticky" style={{ padding: '0.4rem 0.5rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <span style={{ flexShrink: 0, width: 20, height: 20, borderRadius: '50%', background: avatarBg(athlete.full_name), color: '#ffffff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.62rem', fontWeight: 700, opacity: absent ? 0.4 : 1 }}>
+                              {athlete.full_name.charAt(0).toUpperCase()}
+                            </span>
+                            <span style={{ fontWeight: 700, fontSize: '0.76rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 108, textDecoration: absent ? 'line-through' : 'none', color: absent ? 'var(--muted-light)' : 'var(--navy-900)' }}>
                               {athlete.full_name}
                             </span>
-                            {absent && (
-                              <span style={{ flexShrink: 0, fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.5rem', fontWeight: 700, color: '#92600A', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 5, padding: '1px 5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>nieob.</span>
-                            )}
                             <button
                               onClick={() => toggleIndividualAthlete(athlete.id)}
                               title="Trening indywidualny — inne ćwiczenia niż grupa"
-                              style={{ flexShrink: 0, marginLeft: 'auto', width: 20, height: 20, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, border: 'none', background: 'none', color: 'var(--muted-light)' }}
+                              style={{ flexShrink: 0, width: 16, height: 16, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: 'none', background: 'none', color: 'var(--muted-light)' }}
                             >
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width={13} height={13}><circle cx="12" cy="8" r="4" /><path d="M4 21v-1a8 8 0 0 1 16 0v1" /><path d="m17 3 2 2-2 2" /></svg>
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width={11} height={11}><circle cx="12" cy="8" r="4" /><path d="M4 21v-1a8 8 0 0 1 16 0v1" /><path d="m17 3 2 2-2 2" /></svg>
+                            </button>
+                            <button
+                              onClick={() => toggleAbsent(athlete.id)}
+                              title={absent ? 'Przywróć na trening' : 'Wykreśl z treningu (nieobecna)'}
+                              style={{ flexShrink: 0, width: 16, height: 16, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: 'none', background: 'none', color: absent ? '#92600A' : 'var(--muted-light)', fontSize: '0.62rem', lineHeight: 1 }}
+                            >
+                              {absent ? '↩' : '✕'}
                             </button>
                           </div>
                         </td>
@@ -1337,7 +1345,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                           const repsMode = isMaxReps(resolvePresc(ex, entry).reps) || !!entry?.bodyweight || (variant ? !!variant.bodyweight : !!ex.bodyweight)
                           const excluded = !!entry?.excluded
                           return (
-                            <td key={ex.id} style={{ padding: '0.45rem 0.5rem', ...(absent || excluded ? { opacity: 0.35, pointerEvents: 'none' as const } : {}) }}>
+                            <td key={ex.id} style={{ padding: '0.35rem 0.4rem', ...(absent || excluded ? { opacity: 0.35, pointerEvents: 'none' as const } : {}) }}>
                               <button
                                 onClick={() => toggleExcludeFromExercise(athlete, ex)}
                                 title={excluded ? 'Przywróć do tego ćwiczenia' : 'Ta zawodniczka nie robi tego ćwiczenia'}
