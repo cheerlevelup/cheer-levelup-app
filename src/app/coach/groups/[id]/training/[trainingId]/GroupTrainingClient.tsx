@@ -1451,8 +1451,8 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                   {athletes.filter(a => individualIds.has(a.id)).map(person => {
                     const own = exercises.filter(e => e.athlete_id === person.id).sort((a, b) => a.exercise_order - b.exercise_order || a.id - b.id)
                     return (
-                      <div key={person.id} style={{ background: '#ffffff', border: `1.5px solid var(--border)`, borderRadius: 12, padding: '0.9rem 1rem', boxShadow: 'var(--shadow)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                      <div key={person.id} style={{ background: '#ffffff', border: `1.5px solid var(--border)`, borderRadius: 12, padding: '0.55rem 0.7rem', boxShadow: 'var(--shadow)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
                           <span style={{ display: 'inline-flex', width: 26, height: 26, borderRadius: '50%', background: 'var(--navy-900)', color: 'var(--gold)', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.72rem', flexShrink: 0 }}>
                             {person.full_name.charAt(0).toUpperCase()}
                           </span>
@@ -1474,7 +1474,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                           const presc = resolvePresc(ex, entry)
                           const repsMode = isMaxReps(presc.reps) || !!entry?.bodyweight || !!ex.bodyweight
                           return (
-                            <div key={ex.id} style={{ width: 264, flexShrink: 0, background: 'var(--bg)', border: `1px solid var(--border)`, borderRadius: 10, padding: '0.6rem 0.7rem' }}>
+                            <div key={ex.id} style={{ width: 264, flexShrink: 0, background: 'var(--bg)', border: `1px solid var(--border)`, borderRadius: 10, padding: '0.4rem 0.55rem' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                                 <input
                                   ref={el => { if (el) nameInputRefs.current.set(ex.id, el); else nameInputRefs.current.delete(ex.id) }}
