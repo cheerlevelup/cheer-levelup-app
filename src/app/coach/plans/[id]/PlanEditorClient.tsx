@@ -291,21 +291,6 @@ function ExerciseEditForm({
         </Field>
       </div>
 
-      <div className="coach-chip-select-row">
-        {['2', '3', '4', '5'].map(value => (
-          <button key={value} type="button" className={`coach-chip-select ${sets === value ? 'coach-active' : ''}`} onClick={() => setSets(value)}>
-            {value} serie
-          </button>
-        ))}
-      </div>
-      <div className="coach-chip-select-row">
-        {['3-1-2-0', '4-0-1-0', '3-0-1-0'].map(value => (
-          <button key={value} type="button" className={`coach-chip-select ${tempo === value ? 'coach-active' : ''}`} onClick={() => setTempo(value)}>
-            {value}
-          </button>
-        ))}
-      </div>
-
       <label className="coach-exercise-edit-form-checkbox">
         <input type="checkbox" checked={isWarmup} onChange={e => setIsWarmup(e.target.checked)} />
         Dodaj serie rozgrzewkowe
