@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { formatDatePl } from '@/lib/groupTraining'
-import { CheckSquare, MessageCircle, Info, AlertTriangle, Pencil, Plus } from 'lucide-react'
+import { CheckSquare, MessageCircle, Info, AlertTriangle, Pencil, Plus, Check, X } from 'lucide-react'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { Button } from '@/components/coach/ui'
 
@@ -69,7 +69,51 @@ const entryKey = (exerciseId: number, athleteId: number) => `${exerciseId}_${ath
 // jeden spójny styl, kolorowany tylko gdy dana rzecz jest aktywna.
 const qiBtn: React.CSSProperties = {
   width: 20, height: 20, padding: 0, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-  borderRadius: 6, border: '1.5px solid var(--border)', background: '#ffffff', color: 'var(--muted-light)', lineHeight: 1,
+  borderRadius: 6, border: '1.5px solid var(--border)', background: '#ffffff', color: 'var(--muted-light)', lineHeight: 1, outline: 'none',
+}
+
+// Wiersz szybkiej edycji pod komórką (modyfikacja ćwiczenia / ból / notatka) —
+// zawsze pod rzędem serii i ikonek, nigdy w ich miejsce.
+function InlineFieldEditor({ initialValue, initialScale, placeholder, borderColor = 'var(--gold)', bg = '#FFFBEB', showScale, onSave, onCancel }: {
+  initialValue: string
+  initialScale?: number | null
+  placeholder: string
+  borderColor?: string
+  bg?: string
+  showScale?: boolean
+  onSave: (value: string, scale: number | null) => void
+  onCancel: () => void
+}) {
+  const [value, setValue] = useState(initialValue)
+  const [scale, setScale] = useState(initialScale != null ? String(initialScale) : '')
+  const parsedScale = () => (scale.trim() === '' ? null : Math.max(0, Math.min(10, Number(scale))))
+  return (
+    <div style={{ marginTop: 6, width: 260, display: 'flex', alignItems: 'center', gap: 6 }}>
+      {showScale && (
+        <input
+          type="number" min={0} max={10} value={scale}
+          onChange={e => setScale(e.target.value)}
+          placeholder="0–10"
+          onKeyDown={e => { if (e.key === 'Enter') onSave(value, parsedScale()); else if (e.key === 'Escape') onCancel() }}
+          style={{ width: 42, flexShrink: 0, textAlign: 'center', border: '1.5px solid #c23b3b', borderRadius: 7, background: '#FDEDED', color: '#c23b3b', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.72rem', fontWeight: 700, padding: '5px 2px', outline: 'none' }}
+        />
+      )}
+      <input
+        autoFocus
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        placeholder={placeholder}
+        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onSave(value, showScale ? parsedScale() : null) } else if (e.key === 'Escape') onCancel() }}
+        style={{ flex: 1, minWidth: 0, border: `1.5px solid ${borderColor}`, borderRadius: 8, background: bg, fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.76rem', color: 'var(--navy-900)', padding: '5px 9px', outline: 'none' }}
+      />
+      <button onClick={() => onSave(value, showScale ? parsedScale() : null)} title="Zapisz" style={{ flexShrink: 0, width: 24, height: 24, borderRadius: 7, border: 'none', outline: 'none', background: 'var(--green)', color: '#ffffff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Check size={13} />
+      </button>
+      <button onClick={onCancel} title="Anuluj" style={{ flexShrink: 0, width: 24, height: 24, borderRadius: 7, border: 'none', outline: 'none', background: 'none', color: 'var(--muted-light)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+        <X size={13} />
+      </button>
+    </div>
+  )
 }
 
 // Kolor awatara — deterministyczny wg pierwszej litery imienia, żeby wiersze
@@ -386,7 +430,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     () => new Map(initialEntries.map(e => [entryKey(e.exercise_id, e.athlete_id), e]))
   )
   const [openCell, setOpenCell] = useState<{ athlete: Athlete; exercise: Exercise } | null>(null)
-  const [noteOpen, setNoteOpen] = useState<string | null>(null) // entryKey z otwartym polem notatki
+  const [cellEdit, setCellEdit] = useState<{ key: string; type: 'mod' | 'pain' | 'note' } | null>(null)
   const [trainingDate, setTrainingDate] = useState(training.training_date)
   const [absentIds, setAbsentIds] = useState<Set<number>>(() => new Set(training.absent_athlete_ids || []))
   const [individualIds, setIndividualIds] = useState<Set<number>>(() => new Set(training.individual_athlete_ids || []))
@@ -944,12 +988,6 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     setEntryMap(prev => { const next = new Map(prev); next.set(key, data as Entry); return next })
   }
 
-  function toggleInlinePain(athlete: Athlete, ex: Exercise) {
-    const entry = entryMap.get(entryKey(ex.id, athlete.id))
-    const on = !!entry?.pain || entry?.pain_vas != null
-    saveEntryMeta(athlete, ex, on ? { pain: false, pain_vas: null } : { pain: true })
-  }
-
   function saveInlineComment(athlete: Athlete, ex: Exercise, value: string) {
     const key = entryKey(ex.id, athlete.id)
     const val = value.trim() || null
@@ -1371,12 +1409,6 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                   {ex.variants!.map(v => <option key={v.name} value={v.name}>{v.name}{variantHasPresc(v) ? ` (${[v.sets, v.reps, v.tempo].filter(Boolean).join(' · ')})` : ''}</option>)}
                                 </select>
                               )}
-                              {entry?.exercise_override && (
-                                <div title={`Zamiana ćwiczenia: ${entry.exercise_override}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.64rem', fontWeight: 700, color: '#854F0B', background: '#FEF6E0', border: '1px solid #F7D27A', borderRadius: 999, padding: '2px 9px 2px 2px', marginBottom: 5 }}>
-                                  <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, borderRadius: '50%', background: 'var(--gold)', color: 'var(--navy-900)', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.62rem', fontWeight: 700, lineHeight: 1 }}>⇄</span>
-                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.exercise_override}</span>
-                                </div>
-                              )}
                               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, flexWrap: 'wrap', width: 260 }}>
                                 {sets.map((s, i) => {
                                   // W trybie powtórzeń pokazujemy wpisane powt.; odziedziczone „max”
@@ -1435,10 +1467,11 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 {(() => {
                                   const painActive = !!entry?.pain || entry?.pain_vas != null
                                   const severe = entry?.pain_vas != null && entry.pain_vas >= 5
+                                  const key = entryKey(ex.id, athlete.id)
                                   return (
                                     <button
-                                      onClick={() => toggleInlinePain(athlete, ex)}
-                                      title={painActive ? (entry?.pain_comment ? `Ból: ${entry.pain_comment} (kliknij, by odznaczyć)` : 'Odznacz ból') : 'Zaznacz ból'}
+                                      onClick={() => setCellEdit(prev => prev?.key === key && prev.type === 'pain' ? null : { key, type: 'pain' })}
+                                      title={painActive ? `Ból${entry?.pain_vas != null ? ` ${entry.pain_vas}/10` : ''}${entry?.pain_comment ? `: ${entry.pain_comment}` : ''}` : 'Zaznacz ból'}
                                       style={painActive
                                         ? { ...qiBtn, border: `1.5px solid ${severe ? '#c23b3b' : '#c07f1e'}`, background: severe ? '#FDEDED' : '#FEF6E0', color: severe ? '#c23b3b' : '#92600A' }
                                         : qiBtn}
@@ -1447,32 +1480,53 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                     </button>
                                   )
                                 })()}
-                                {noteOpen === entryKey(ex.id, athlete.id) ? (
-                                  <input
-                                    autoFocus
-                                    defaultValue={entry?.comment || ''}
-                                    placeholder="notatka..."
-                                    onBlur={e => { saveInlineComment(athlete, ex, e.target.value); setNoteOpen(null) }}
-                                    onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); else if (e.key === 'Escape') setNoteOpen(null) }}
-                                    style={{ flex: 1, minWidth: 80, border: `1.5px solid var(--gold)`, borderRadius: 6, background: '#ffffff', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.7rem', color: 'var(--navy-900)', padding: '2px 6px', outline: 'none' }}
-                                  />
-                                ) : (
-                                  <button
-                                    onClick={() => setNoteOpen(entryKey(ex.id, athlete.id))}
-                                    title={entry?.comment || 'Dodaj notatkę'}
-                                    style={entry?.comment ? { ...qiBtn, border: '1.5px solid #2c5aa3', background: '#eaf1fb', color: '#2c5aa3' } : qiBtn}
-                                  >
-                                    <MessageCircle size={11} />
-                                  </button>
-                                )}
                                 <button
-                                  onClick={() => setOpenCell({ athlete, exercise: ex })}
-                                  title="Szczegóły: powtórzenia, tempo, ból, komentarz"
-                                  style={qiBtn}
+                                  onClick={() => { const key = entryKey(ex.id, athlete.id); setCellEdit(prev => prev?.key === key && prev.type === 'note' ? null : { key, type: 'note' }) }}
+                                  title={entry?.comment || 'Dodaj notatkę'}
+                                  style={entry?.comment ? { ...qiBtn, border: '1.5px solid #2c5aa3', background: '#eaf1fb', color: '#2c5aa3' } : qiBtn}
+                                >
+                                  <MessageCircle size={11} />
+                                </button>
+                                <button
+                                  onClick={() => { const key = entryKey(ex.id, athlete.id); setCellEdit(prev => prev?.key === key && prev.type === 'mod' ? null : { key, type: 'mod' }) }}
+                                  title="Zmodyfikuj to ćwiczenie dla tej osoby"
+                                  style={entry?.exercise_override ? { ...qiBtn, border: '1.5px solid var(--gold)', background: '#FFFBEB', color: '#92600A' } : qiBtn}
                                 >
                                   <Pencil size={11} />
                                 </button>
                               </div>
+                              {cellEdit?.key === entryKey(ex.id, athlete.id) && (
+                                cellEdit.type === 'mod' ? (
+                                  <InlineFieldEditor
+                                    initialValue={entry?.exercise_override || ''}
+                                    placeholder="Nazwa zmodyfikowanego ćwiczenia (np. Goblet przysiad)..."
+                                    onSave={val => { saveEntryMeta(athlete, ex, { exercise_override: val.trim() || null }); setCellEdit(null) }}
+                                    onCancel={() => setCellEdit(null)}
+                                  />
+                                ) : cellEdit.type === 'pain' ? (
+                                  <InlineFieldEditor
+                                    initialValue={entry?.pain_comment || ''}
+                                    initialScale={entry?.pain_vas ?? null}
+                                    showScale
+                                    placeholder="Opisz ból / dyskomfort..."
+                                    borderColor="#c23b3b"
+                                    bg="#FEF2F2"
+                                    onSave={(val, scale) => {
+                                      const has = !!val.trim() || scale != null
+                                      saveEntryMeta(athlete, ex, { pain: has, pain_vas: has ? scale : null, pain_comment: has ? (val.trim() || null) : null })
+                                      setCellEdit(null)
+                                    }}
+                                    onCancel={() => setCellEdit(null)}
+                                  />
+                                ) : (
+                                  <InlineFieldEditor
+                                    initialValue={entry?.comment || ''}
+                                    placeholder="Notatka..."
+                                    onSave={val => { saveInlineComment(athlete, ex, val); setCellEdit(null) }}
+                                    onCancel={() => setCellEdit(null)}
+                                  />
+                                )
+                              )}
                             </td>
                           )
                         })}
@@ -1607,10 +1661,11 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 {(() => {
                                   const painActive = !!entry?.pain || entry?.pain_vas != null
                                   const severe = entry?.pain_vas != null && entry.pain_vas >= 5
+                                  const key = entryKey(ex.id, person.id)
                                   return (
                                     <button
-                                      onClick={() => toggleInlinePain(person, ex)}
-                                      title={painActive ? (entry?.pain_comment ? `Ból: ${entry.pain_comment} (kliknij, by odznaczyć)` : 'Odznacz ból') : 'Zaznacz ból'}
+                                      onClick={() => setCellEdit(prev => prev?.key === key && prev.type === 'pain' ? null : { key, type: 'pain' })}
+                                      title={painActive ? `Ból${entry?.pain_vas != null ? ` ${entry.pain_vas}/10` : ''}${entry?.pain_comment ? `: ${entry.pain_comment}` : ''}` : 'Zaznacz ból'}
                                       style={painActive
                                         ? { ...qiBtn, border: `1.5px solid ${severe ? '#c23b3b' : '#c07f1e'}`, background: severe ? '#FDEDED' : '#FEF6E0', color: severe ? '#c23b3b' : '#92600A' }
                                         : qiBtn}
@@ -1619,25 +1674,39 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                     </button>
                                   )
                                 })()}
-                                {noteOpen === entryKey(ex.id, person.id) ? (
-                                  <input
-                                    autoFocus
-                                    defaultValue={entry?.comment || ''}
-                                    placeholder="notatka..."
-                                    onBlur={e => { saveInlineComment(person, ex, e.target.value); setNoteOpen(null) }}
-                                    onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); else if (e.key === 'Escape') setNoteOpen(null) }}
-                                    style={{ flex: 1, minWidth: 80, border: `1.5px solid var(--gold)`, borderRadius: 6, background: '#ffffff', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.7rem', color: 'var(--navy-900)', padding: '2px 6px', outline: 'none' }}
+                                <button
+                                  onClick={() => { const key = entryKey(ex.id, person.id); setCellEdit(prev => prev?.key === key && prev.type === 'note' ? null : { key, type: 'note' }) }}
+                                  title={entry?.comment || 'Dodaj notatkę'}
+                                  style={entry?.comment ? { ...qiBtn, border: '1.5px solid #2c5aa3', background: '#eaf1fb', color: '#2c5aa3' } : qiBtn}
+                                >
+                                  <MessageCircle size={11} />
+                                </button>
+                              </div>
+                              {cellEdit?.key === entryKey(ex.id, person.id) && (
+                                cellEdit.type === 'pain' ? (
+                                  <InlineFieldEditor
+                                    initialValue={entry?.pain_comment || ''}
+                                    initialScale={entry?.pain_vas ?? null}
+                                    showScale
+                                    placeholder="Opisz ból / dyskomfort..."
+                                    borderColor="#c23b3b"
+                                    bg="#FEF2F2"
+                                    onSave={(val, scale) => {
+                                      const has = !!val.trim() || scale != null
+                                      saveEntryMeta(person, ex, { pain: has, pain_vas: has ? scale : null, pain_comment: has ? (val.trim() || null) : null })
+                                      setCellEdit(null)
+                                    }}
+                                    onCancel={() => setCellEdit(null)}
                                   />
                                 ) : (
-                                  <button
-                                    onClick={() => setNoteOpen(entryKey(ex.id, person.id))}
-                                    title={entry?.comment || 'Dodaj notatkę'}
-                                    style={entry?.comment ? { ...qiBtn, border: '1.5px solid #2c5aa3', background: '#eaf1fb', color: '#2c5aa3' } : qiBtn}
-                                  >
-                                    <MessageCircle size={11} />
-                                  </button>
-                                )}
-                              </div>
+                                  <InlineFieldEditor
+                                    initialValue={entry?.comment || ''}
+                                    placeholder="Notatka..."
+                                    onSave={val => { saveInlineComment(person, ex, val); setCellEdit(null) }}
+                                    onCancel={() => setCellEdit(null)}
+                                  />
+                                )
+                              )}
                             </div>
                           )
                         })}
