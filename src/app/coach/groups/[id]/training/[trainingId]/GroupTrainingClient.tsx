@@ -1049,8 +1049,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
       `}</style>
       <SetPageMeta title="Trening" backHref={`/coach/groups/${group.id}`} backLabel={group.name} sidebarCollapsible />
       <div className="coach-content">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
           <div>
             <h1 style={{ color: 'var(--ink)', fontSize: '1.15rem', fontWeight: 700, margin: 0, fontFamily: 'var(--font-inter), sans-serif' }}>
               Trening · {formatDatePl(trainingDate)}
@@ -1061,13 +1060,14 @@ export default function GroupTrainingClient({ group, training, athletes, initial
             >
               <Info size={13} /> Jak to działa?
             </button>
-            {helpOpen && (
-              <p style={{ color: 'var(--muted)', fontSize: '0.8rem', marginTop: 6, maxWidth: 760, fontFamily: 'var(--font-inter), sans-serif' }}>
-                W nagłówku kolumny: serie, powtórzenia i tempo dla całej grupy. Przeciągnij ⠿, by zmienić kolejność. „BW" wpisuje 0 (masa ciała) w ciężar wszystkim, „P" przełącza kolumnę na wpisywanie powtórzeń zamiast kg. W wierszu zawodniczki wpisujesz ciężar, „+ ból"/„+ notatka" dają szybki wpis bez ✎. Kliknij numer serii (S1, S2…), by oznaczyć „nie zrobiła", a ✕ przy nazwisku wykreśla nieobecną. W polu z ciężarem: ← / → przechodzi między seriami (i ćwiczeniami), Enter — do tej samej serii u zawodniczki poniżej. Mały ⊘ przy komórce wyklucza jedną zawodniczkę z tego jednego ćwiczenia. Ikona osoby przy nazwisku przenosi ją do odrębnego planu indywidualnego.
-              </p>
-            )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
+            <Button variant="ghost" size="small" onClick={() => router.push(`/coach/groups/${group.id}/readiness`)}>
+              <CheckSquare size={13} /> Gotowość treningowa
+            </Button>
+            <Button variant="ghost" size="small" onClick={() => router.push(`/coach/groups/${group.id}/feedback`)}>
+              <MessageCircle size={13} /> Feedback po treningu
+            </Button>
             <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '11px', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>Data</span>
             <input
               type="date"
@@ -1077,16 +1077,11 @@ export default function GroupTrainingClient({ group, training, athletes, initial
             />
           </div>
         </div>
-
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <Button variant="ghost" size="small" onClick={() => router.push(`/coach/groups/${group.id}/readiness`)}>
-            <CheckSquare size={13} /> Gotowość treningowa
-          </Button>
-          <Button variant="ghost" size="small" onClick={() => router.push(`/coach/groups/${group.id}/feedback`)}>
-            <MessageCircle size={13} /> Feedback po treningu
-          </Button>
-        </div>
-        </div>
+        {helpOpen && (
+          <p style={{ color: 'var(--muted)', fontSize: '0.8rem', margin: 0, maxWidth: 900, fontFamily: 'var(--font-inter), sans-serif' }}>
+            W nagłówku kolumny: serie, powtórzenia i tempo dla całej grupy. Przeciągnij ⠿, by zmienić kolejność. „BW" wpisuje 0 (masa ciała) w ciężar wszystkim, „P" przełącza kolumnę na wpisywanie powtórzeń zamiast kg. W wierszu zawodniczki wpisujesz ciężar, „+ ból"/„+ notatka" dają szybki wpis bez ✎. Kliknij numer serii (S1, S2…), by oznaczyć „nie zrobiła", a ✕ przy nazwisku wykreśla nieobecną. W polu z ciężarem: ← / → przechodzi między seriami (i ćwiczeniami), Enter — do tej samej serii u zawodniczki poniżej. Mały ⊘ przy komórce wyklucza jedną zawodniczkę z tego jednego ćwiczenia. Ikona osoby przy nazwisku przenosi ją do odrębnego planu indywidualnego.
+          </p>
+        )}
 
         {error && (
           <div style={{ padding: '0.75rem', background: '#fdedec', border: '1.5px solid #c23b3b', borderRadius: 10, color: '#c23b3b', fontWeight: 700, fontSize: '0.86rem', fontFamily: 'var(--font-inter), sans-serif' }}>
