@@ -1118,7 +1118,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                             key={ex.id}
                             onDragOver={e => { if (dragExId.current != null) { e.preventDefault(); if (dragOverExId !== ex.id) setDragOverExId(ex.id) } }}
                             onDrop={e => { e.preventDefault(); reorderExercise(ex.id) }}
-                            style={{ width: 178, minWidth: 178, maxWidth: 178, padding: '0.4rem 0.45rem', background: 'var(--bg)', boxShadow: dragOverExId === ex.id ? `inset 3px 0 0 var(--gold)` : undefined }}
+                            style={{ width: 280, minWidth: 280, maxWidth: 280, padding: '0.4rem 0.45rem', background: 'var(--bg)', boxShadow: dragOverExId === ex.id ? `inset 3px 0 0 var(--gold)` : undefined }}
                           >
                             <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                               <span
@@ -1377,7 +1377,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.exercise_override}</span>
                                 </div>
                               )}
-                              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, flexWrap: 'wrap' }}>
+                              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, flexWrap: 'wrap', width: 260 }}>
                                 {sets.map((s, i) => {
                                   // W trybie powtórzeń pokazujemy wpisane powt.; odziedziczone „max”
                                   // z rozpiski traktujemy jak puste (jeszcze nie wpisano wyniku).
@@ -1555,7 +1555,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                   BW
                                 </button>
                               </div>
-                              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, flexWrap: 'wrap' }}>
+                              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, flexWrap: 'wrap', width: 260 }}>
                                 {sets.map((s, i) => {
                                   const repsPerf = s.reps && !isMaxReps(s.reps) ? s.reps : ''
                                   const cellVal = repsMode ? repsPerf : (s.weight || '')
