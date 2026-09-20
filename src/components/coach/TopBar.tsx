@@ -15,7 +15,7 @@ export default function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
         {meta?.backHref && (
           <div className="coach-page-head">
             <Link href={meta.backHref} className="coach-back-btn">
-              <ArrowLeft size={14} />
+              <ArrowLeft size={12} />
               <span>{meta.backLabel || 'Wstecz'}</span>
             </Link>
           </div>
