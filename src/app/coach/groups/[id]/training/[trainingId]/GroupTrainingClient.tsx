@@ -1050,15 +1050,15 @@ export default function GroupTrainingClient({ group, training, athletes, initial
       <SetPageMeta title="Trening" backHref={`/coach/groups/${group.id}`} backLabel={group.name} sidebarCollapsible />
       <div className="coach-content">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
-          <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <h1 style={{ color: 'var(--ink)', fontSize: '1.15rem', fontWeight: 700, margin: 0, fontFamily: 'var(--font-inter), sans-serif' }}>
               Trening · {formatDatePl(trainingDate)}
             </h1>
             <button
               onClick={() => setHelpOpen(v => !v)}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 2, border: 'none', background: 'none', color: 'var(--muted)', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.78rem', fontWeight: 600, padding: 0 }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: 'none', background: 'none', color: 'var(--muted)', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.74rem', fontWeight: 600, padding: 0 }}
             >
-              <Info size={13} /> Jak to działa?
+              <Info size={12} /> Jak to działa?
             </button>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
@@ -1120,7 +1120,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                             className="gt-ex-header"
                             onDragOver={e => { if (dragExId.current != null) { e.preventDefault(); if (dragOverExId !== ex.id) setDragOverExId(ex.id) } }}
                             onDrop={e => { e.preventDefault(); reorderExercise(ex.id) }}
-                            style={{ width: 336, minWidth: 336, maxWidth: 336, padding: '0.6rem 0.65rem', background: 'var(--bg)', boxShadow: dragOverExId === ex.id ? `inset 3px 0 0 var(--gold)` : undefined }}
+                            style={{ width: 336, minWidth: 336, maxWidth: 336, padding: '0.35rem 0.5rem', background: 'var(--bg)', boxShadow: dragOverExId === ex.id ? `inset 3px 0 0 var(--gold)` : undefined }}
                           >
                             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                               <span
