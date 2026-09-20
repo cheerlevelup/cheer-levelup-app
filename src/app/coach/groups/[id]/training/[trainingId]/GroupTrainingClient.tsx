@@ -1119,7 +1119,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                           </th>
                         )
                       })}
-                      <th style={{ width: 44, minWidth: 44, padding: 0, background: 'var(--bg)' }}>
+                      <th style={{ width: 44, minWidth: 44, padding: 0, background: 'var(--bg)', border: 'none' }}>
                         <button
                           onClick={handleAddExercise}
                           title="Dodaj ćwiczenie (nowa kolumna)"
@@ -1129,7 +1129,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                         </button>
                       </th>
                       {/* Wypełniacz — nie pozwala kolumnom ćwiczeń rozciągać się na cały ekran */}
-                      <th style={{ width: '100%', background: 'var(--bg)', borderRight: 'none' }} />
+                      <th style={{ width: '100%', background: 'var(--bg)', border: 'none' }} />
                     </tr>
                   </thead>
                   <tbody>
@@ -1326,8 +1326,8 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                             </td>
                           )
                         })}
-                        <td style={{ background: '#FAFBFC' }} />
-                        <td style={{ borderRight: 'none' }} />
+                        <td style={{ background: '#FAFBFC', border: 'none' }} />
+                        <td style={{ border: 'none' }} />
                       </tr>
                     ))}
                   </tbody>
