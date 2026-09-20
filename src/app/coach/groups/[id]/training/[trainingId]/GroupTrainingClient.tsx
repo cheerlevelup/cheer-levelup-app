@@ -1326,7 +1326,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                             </td>
                           )
                         })}
-                        <td style={{ background: '#FAFBFC', border: 'none' }} />
+                        <td style={{ border: 'none' }} />
                         <td style={{ border: 'none' }} />
                       </tr>
                     ))}
