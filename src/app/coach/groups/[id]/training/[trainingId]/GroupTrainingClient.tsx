@@ -1490,16 +1490,27 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 <button
                                   onClick={() => { const key = entryKey(ex.id, athlete.id); setCellEdit(prev => prev?.key === key && prev.type === 'mod' ? null : { key, type: 'mod' }) }}
                                   title="Zmodyfikuj to ćwiczenie dla tej osoby"
-                                  style={entry?.exercise_override ? { ...qiBtn, border: '1.5px solid var(--gold)', background: '#FFFBEB', color: '#92600A' } : qiBtn}
+                                  style={entry?.exercise_override ? { ...qiBtn, border: '1.5px solid #7c3aed', background: '#f3ecfd', color: '#7c3aed' } : qiBtn}
                                 >
                                   <Pencil size={11} />
                                 </button>
                               </div>
+                              {entry?.exercise_override && cellEdit?.key !== entryKey(ex.id, athlete.id) && (
+                                <button
+                                  onClick={() => setCellEdit({ key: entryKey(ex.id, athlete.id), type: 'mod' })}
+                                  title="Kliknij, by zmienić"
+                                  style={{ display: 'block', marginTop: 3, border: 'none', outline: 'none', background: 'none', padding: 0, fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.66rem', fontWeight: 700, color: '#7c3aed', textAlign: 'left', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                                >
+                                  → {entry.exercise_override}
+                                </button>
+                              )}
                               {cellEdit?.key === entryKey(ex.id, athlete.id) && (
                                 cellEdit.type === 'mod' ? (
                                   <InlineFieldEditor
                                     initialValue={entry?.exercise_override || ''}
                                     placeholder="Nazwa zmodyfikowanego ćwiczenia (np. Goblet przysiad)..."
+                                    borderColor="#7c3aed"
+                                    bg="#f3ecfd"
                                     onSave={val => { saveEntryMeta(athlete, ex, { exercise_override: val.trim() || null }); setCellEdit(null) }}
                                     onCancel={() => setCellEdit(null)}
                                   />
