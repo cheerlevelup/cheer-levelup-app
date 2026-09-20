@@ -45,19 +45,8 @@
      (np. trening live), żeby zyskać miejsce na szeroką siatkę. */
   .coach-shell.coach-sidebar-collapsed{grid-template-columns:0px 1fr;}
   .coach-shell.coach-sidebar-collapsed .coach-sidebar{overflow:hidden;padding-left:0;padding-right:0;min-width:0;}
-  .coach-sidebar-toggle{
-    position:absolute;top:14px;left:240px;z-index:26;
-    width:22px;height:40px;
-    display:flex;align-items:center;justify-content:center;
-    background:var(--navy-900);color:var(--gold-light);
-    border:none;border-radius:0 8px 8px 0;
-    cursor:pointer;
-    transition:left .18s ease;
-  }
-  .coach-sidebar-toggle:hover{background:var(--navy-800);}
-  .coach-shell.coach-sidebar-collapsed .coach-sidebar-toggle{left:0;}
   @media (max-width:980px){
-    .coach-sidebar-toggle{display:none;}
+    .coach-sidebar-collapse-btn{display:none;}
   }
 
   /* ===== Sidebar ===== */

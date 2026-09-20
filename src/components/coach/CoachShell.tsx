@@ -1,7 +1,6 @@
 'use client'
 import { useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 import BottomNav from './BottomNav'
@@ -23,17 +22,12 @@ function ShellLayout({ children }: { children: React.ReactNode }) {
         className={`coach-overlay ${mobileOpen ? 'coach-open' : ''}`}
         onClick={() => setMobileOpen(false)}
       />
-      {canCollapse && (
-        <button
-          className="coach-sidebar-toggle"
-          onClick={() => setCollapsed(v => !v)}
-          title={collapsed ? 'Pokaż menu' : 'Zwiń menu — więcej miejsca na siatkę'}
-        >
-          {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
-        </button>
-      )}
       <div className="coach-main">
-        <TopBar onMenuClick={() => setMobileOpen((o) => !o)} />
+        <TopBar
+          onMenuClick={() => setMobileOpen((o) => !o)}
+          sidebarCollapsed={collapsed}
+          onToggleSidebar={() => setCollapsed(v => !v)}
+        />
         <main className="coach-content-scroll">{children}</main>
       </div>
       <BottomNav />

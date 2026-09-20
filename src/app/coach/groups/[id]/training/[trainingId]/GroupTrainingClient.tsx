@@ -1048,7 +1048,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
         .gt-ex-header:hover .gt-ex-drag { opacity: 1; }
       `}</style>
       <SetPageMeta title="Trening" backHref={`/coach/groups/${group.id}`} backLabel={group.name} sidebarCollapsible />
-      <div className="coach-content">
+      <div className="coach-content" style={{ minHeight: '100%' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <h1 style={{ color: 'var(--ink)', fontSize: '1.15rem', fontWeight: 700, margin: 0, fontFamily: 'var(--font-inter), sans-serif' }}>
@@ -1106,7 +1106,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
               </Button>
             )}
 
-              <div ref={boardWrapRef} className="coach-attendance-grid-wrap" style={{ background: '#ffffff', overflow: 'auto', maxHeight: '72vh', boxShadow: 'var(--shadow)' }}>
+              <div ref={boardWrapRef} className="coach-attendance-grid-wrap" style={{ background: '#ffffff', overflow: 'auto', flex: '1 1 auto', minHeight: 260, boxShadow: 'var(--shadow)' }}>
                 <table className="gt-table">
                   <thead>
                     <tr>
