@@ -12,14 +12,20 @@ interface PageMeta {
 interface PageMetaContextValue {
   meta: PageMeta | null
   setMeta: (meta: PageMeta | null) => void
+  // Stan zwinięcia bocznego menu — trzymany tu (nie w samej stronie), żeby
+  // zarówno CoachShell (układ), jak i strona (własny przycisk przełącznika)
+  // mogły go czytać i zmieniać.
+  sidebarCollapsed: boolean
+  setSidebarCollapsed: (v: boolean) => void
 }
 
 const PageMetaContext = createContext<PageMetaContextValue | null>(null)
 
 export function PageMetaProvider({ children }: { children: React.ReactNode }) {
   const [meta, setMeta] = useState<PageMeta | null>(null)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   return (
-    <PageMetaContext.Provider value={{ meta, setMeta }}>
+    <PageMetaContext.Provider value={{ meta, setMeta, sidebarCollapsed, setSidebarCollapsed }}>
       {children}
     </PageMetaContext.Provider>
   )

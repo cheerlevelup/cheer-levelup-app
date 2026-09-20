@@ -5,8 +5,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { formatDatePl } from '@/lib/groupTraining'
-import { CheckSquare, MessageCircle, Info, AlertTriangle, Pencil, Plus, Check, X, Trash2 } from 'lucide-react'
-import { SetPageMeta } from '@/components/coach/PageMetaContext'
+import { CheckSquare, MessageCircle, Info, AlertTriangle, Pencil, Plus, Check, X, Trash2, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { SetPageMeta, usePageMeta } from '@/components/coach/PageMetaContext'
 import { Button } from '@/components/coach/ui'
 
 type Group = { id: number; name: string }
@@ -453,6 +453,7 @@ function CellModal({ athlete, exercise, entry, training, onClose, onSaved }: {
 
 export default function GroupTrainingClient({ group, training, athletes, initialExercises, initialEntries }: Props) {
   const router = useRouter()
+  const { sidebarCollapsed, setSidebarCollapsed } = usePageMeta()
   const supabase = createClient()
 
   // `excluded` (migracja 202609150003) jest dopisywana do KAŻDEGO zapisu wpisu
@@ -1047,10 +1048,18 @@ export default function GroupTrainingClient({ group, training, athletes, initial
         .gt-ex-drag { opacity: 0; transition: opacity .15s ease; }
         .gt-ex-header:hover .gt-ex-drag { opacity: 1; }
       `}</style>
-      <SetPageMeta title="Trening" backHref={`/coach/groups/${group.id}`} backLabel={group.name} sidebarCollapsible />
+      <SetPageMeta title="Trening" sidebarCollapsible />
       <div className="coach-content" style={{ minHeight: '100%' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              className="coach-sidebar-collapse-btn"
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              title={sidebarCollapsed ? 'Pokaż menu' : 'Zwiń menu — więcej miejsca na siatkę'}
+              style={{ flexShrink: 0, width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: `1.5px solid var(--border)`, background: '#ffffff', color: 'var(--muted)', borderRadius: 7, outline: 'none' }}
+            >
+              {sidebarCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+            </button>
             <h1 style={{ color: 'var(--ink)', fontSize: '1.15rem', fontWeight: 700, margin: 0, fontFamily: 'var(--font-inter), sans-serif' }}>
               Trening · {formatDatePl(trainingDate)}
             </h1>

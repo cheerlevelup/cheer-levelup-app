@@ -8,26 +8,22 @@ import { PageMetaProvider, usePageMeta } from './PageMetaContext'
 import { isKioskPath } from './nav-config'
 
 // Wewnątrz PageMetaProvider — dopiero tu można odczytać meta.sidebarCollapsible
-// ustawione przez stronę (np. trening live), żeby pokazać przełącznik zwijania menu.
+// ustawione przez stronę (np. trening live) oraz stan zwinięcia (przełącznik
+// renderuje sama strona, we własnym, ciasnym nagłówku — nie w TopBar).
 function ShellLayout({ children }: { children: React.ReactNode }) {
-  const { meta } = usePageMeta()
+  const { meta, sidebarCollapsed } = usePageMeta()
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [collapsed, setCollapsed] = useState(false)
-  const canCollapse = !!meta?.sidebarCollapsible
+  const collapsed = sidebarCollapsed && !!meta?.sidebarCollapsible
 
   return (
-    <div className={`coach-shell ${collapsed && canCollapse ? 'coach-sidebar-collapsed' : ''}`}>
+    <div className={`coach-shell ${collapsed ? 'coach-sidebar-collapsed' : ''}`}>
       <Sidebar open={mobileOpen} onNavigate={() => setMobileOpen(false)} />
       <div
         className={`coach-overlay ${mobileOpen ? 'coach-open' : ''}`}
         onClick={() => setMobileOpen(false)}
       />
       <div className="coach-main">
-        <TopBar
-          onMenuClick={() => setMobileOpen((o) => !o)}
-          sidebarCollapsed={collapsed}
-          onToggleSidebar={() => setCollapsed(v => !v)}
-        />
+        <TopBar onMenuClick={() => setMobileOpen((o) => !o)} />
         <main className="coach-content-scroll">{children}</main>
       </div>
       <BottomNav />
