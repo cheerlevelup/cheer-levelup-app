@@ -1336,9 +1336,10 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                           </Button>
                         </div>
 
+                        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', overflowX: 'auto', paddingBottom: 4 }}>
                         {own.length === 0 && (
-                          <div style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.78rem', color: 'var(--muted-light)', padding: '0.5rem 0 0.75rem' }}>
-                            Brak ćwiczeń — dodaj pierwsze poniżej.
+                          <div style={{ alignSelf: 'center', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.78rem', color: 'var(--muted-light)', padding: '0.5rem 0.75rem' }}>
+                            Brak ćwiczeń — dodaj pierwsze obok.
                           </div>
                         )}
                         {own.map(ex => {
@@ -1347,7 +1348,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                           const presc = resolvePresc(ex, entry)
                           const repsMode = isMaxReps(presc.reps) || !!entry?.bodyweight || !!ex.bodyweight
                           return (
-                            <div key={ex.id} style={{ background: 'var(--bg)', border: `1px solid var(--border)`, borderRadius: 10, padding: '0.6rem 0.7rem', marginBottom: 8 }}>
+                            <div key={ex.id} style={{ width: 264, flexShrink: 0, background: 'var(--bg)', border: `1px solid var(--border)`, borderRadius: 10, padding: '0.6rem 0.7rem' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                                 <input
                                   ref={el => { if (el) nameInputRefs.current.set(ex.id, el); else nameInputRefs.current.delete(ex.id) }}
@@ -1512,9 +1513,14 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                             </div>
                           )
                         })}
-                        <Button variant="ghost" size="small" onClick={() => handleAddIndividualExercise(person.id)}>
-                          + Dodaj ćwiczenie
-                        </Button>
+                        <button
+                          onClick={() => handleAddIndividualExercise(person.id)}
+                          title="Dodaj ćwiczenie"
+                          style={{ width: 44, alignSelf: 'stretch', minHeight: 120, flexShrink: 0, border: `1.5px dashed var(--muted-light)`, borderRadius: 10, background: 'none', color: 'var(--muted)', fontSize: '1.3rem', fontFamily: 'var(--font-inter), sans-serif' }}
+                        >
+                          ＋
+                        </button>
+                        </div>
                       </div>
                     )
                   })}
