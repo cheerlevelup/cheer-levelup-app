@@ -1161,17 +1161,17 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                             {/* Rozpiska dla całej grupy: serie / powt. / tempo, albo serie / czas / intensywność dla ISO */}
                             <div style={{ display: 'flex', marginTop: 8, background: '#ffffff', border: `1px solid var(--border)`, borderRadius: 9, overflow: 'hidden' }}>
                               {exerciseHeaderFields(ex).map((f, i, arr) => (
-                                <div key={f.field} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '8px 4px', borderRight: i < arr.length - 1 ? `1px solid var(--border)` : 'none' }}>
+                                <div key={f.field} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, padding: '8px 3px', borderRight: i < arr.length - 1 ? `1px solid var(--border)` : 'none' }}>
                                   <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.54rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, flexShrink: 0 }}>{f.label}</span>
                                   <input
                                     type={f.type}
-                                    {...(f.type === 'number' ? { min: 0, max: f.field === 'iso_intensity' ? 100 : 20 } : {})}
+                                    {...(f.type === 'number' ? { min: 0, max: f.field === 'iso_intensity' ? 100 : f.field === 'iso_seconds' ? 600 : 20 } : {})}
                                     value={ex[f.field] ?? ''}
                                     onChange={e => handleExerciseField(ex.id, f.field, e.target.value)}
                                     onBlur={() => persistExercise(ex.id)}
                                     onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
                                     placeholder={f.placeholder}
-                                    style={{ width: 30, minWidth: 0, border: 'none', background: 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.72rem', fontWeight: 800, color: 'var(--navy-900)', padding: 0, outline: 'none', textAlign: 'center' }}
+                                    style={{ width: 38, minWidth: 0, flexShrink: 0, border: 'none', background: 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.72rem', fontWeight: 800, color: 'var(--navy-900)', padding: 0, outline: 'none', textAlign: 'center' }}
                                   />
                                   {f.suffix && <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.62rem', color: 'var(--muted-light)', flexShrink: 0 }}>{f.suffix}</span>}
                                 </div>
@@ -1494,7 +1494,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 3, border: `1px solid var(--border)`, borderRadius: 6, background: '#ffffff', padding: '0.28rem 0.2rem' }}>
                                       <input
                                         type={f.type}
-                                        {...(f.type === 'number' ? { min: 0, max: f.field === 'iso_intensity' ? 100 : 20 } : {})}
+                                        {...(f.type === 'number' ? { min: 0, max: f.field === 'iso_intensity' ? 100 : f.field === 'iso_seconds' ? 600 : 20 } : {})}
                                         value={ex[f.field] ?? ''}
                                         onChange={e => handleExerciseField(ex.id, f.field, e.target.value)}
                                         onBlur={() => persistExercise(ex.id)}
