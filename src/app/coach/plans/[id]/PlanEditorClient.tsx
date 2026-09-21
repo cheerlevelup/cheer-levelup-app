@@ -44,6 +44,15 @@ type WarmupSet = {
   note?: string
 }
 
+// Jedna seria główna: własne powt./ciężar/tempo/RIR (zamiast jednej wspólnej
+// rozpiski na całe ćwiczenie). Wzorem WarmupSet.
+type WorkSet = {
+  reps?: string
+  weight_kg?: string
+  tempo?: string
+  rir?: string
+}
+
 type BlockExercise = {
   id?: number
   block_id: number
@@ -57,6 +66,7 @@ type BlockExercise = {
   rir?: number | null
   is_warmup: boolean
   warmup_sets?: WarmupSet[] | null
+  work_sets?: WorkSet[] | null
   coach_comment?: string | null
   exercise_url?: string | null
   exercise?: ExerciseLibraryItem | null
@@ -120,12 +130,54 @@ function cleanWarmupSets(value: WarmupSet[]): WarmupSet[] {
 
 function isWarmupColumnError(error: { message?: string; code?: string } | null) {
   const message = error?.message?.toLowerCase() || ''
-  return message.includes('warmup_sets') || message.includes('schema cache')
+  return message.includes('warmup_sets')
 }
 
 function exercisePayloadWithoutWarmup<T extends { warmup_sets?: WarmupSet[] }>(payload: T) {
   const rest = { ...payload }
   delete rest.warmup_sets
+  return rest
+}
+
+// Serie główne: jeśli ćwiczenie ma już zapisane work_sets, użyj ich wprost.
+// W przeciwnym razie zbuduj tyle wierszy, ile wynosi dotychczasowa liczba serii,
+// wypełnionych dotychczasową (wspólną) rozpiską — nic nie znika przy przejściu
+// na edycję per-seria.
+function normalizeWorkSets(exercise: BlockExercise): WorkSet[] {
+  if (Array.isArray(exercise.work_sets) && exercise.work_sets.length > 0) {
+    return exercise.work_sets.map(set => ({
+      reps: set.reps?.toString() || '',
+      weight_kg: set.weight_kg?.toString() || '',
+      tempo: set.tempo?.toString() || '',
+      rir: set.rir?.toString() || '',
+    }))
+  }
+  const count = Math.max(exercise.sets || 1, 1)
+  return Array.from({ length: count }, () => ({
+    reps: exercise.reps || '',
+    weight_kg: exercise.weight_kg?.toString() || '',
+    tempo: exercise.tempo || '',
+    rir: exercise.rir?.toString() || '',
+  }))
+}
+
+function cleanWorkSets(value: WorkSet[]): WorkSet[] {
+  return value.map(set => ({
+    reps: set.reps?.trim() || '',
+    weight_kg: set.weight_kg?.trim() || '',
+    tempo: set.tempo?.trim() || '',
+    rir: set.rir?.trim() || '',
+  }))
+}
+
+function isWorkSetsColumnError(error: { message?: string; code?: string } | null) {
+  const message = error?.message?.toLowerCase() || ''
+  return message.includes('work_sets') || message.includes('schema cache')
+}
+
+function exercisePayloadWithoutWorkSets<T extends { work_sets?: WorkSet[] }>(payload: T) {
+  const rest = { ...payload }
+  delete rest.work_sets
   return rest
 }
 
@@ -145,11 +197,7 @@ function ExerciseEditForm({
 }) {
   const [exerciseId, setExerciseId] = useState<string>(exercise.exercise_id?.toString() || '')
   const [exerciseCode, setExerciseCode] = useState(exercise.exercise_code || '')
-  const [sets, setSets] = useState(exercise.sets?.toString() || '3')
-  const [reps, setReps] = useState(exercise.reps || '')
-  const [tempo, setTempo] = useState(exercise.tempo || '')
-  const [weightKg, setWeightKg] = useState(exercise.weight_kg?.toString() || '')
-  const [rir, setRir] = useState(exercise.rir?.toString() || '')
+  const [workSets, setWorkSets] = useState<WorkSet[]>(() => normalizeWorkSets(exercise))
   const [comment, setComment] = useState(exercise.coach_comment || '')
   const [isWarmup, setIsWarmup] = useState(exercise.is_warmup || false)
   const [warmupSets, setWarmupSets] = useState<WarmupSet[]>(normalizeWarmupSets(exercise.warmup_sets))
@@ -166,29 +214,43 @@ function ExerciseEditForm({
     if (!canSave) return
     setSaving(true)
     setSaveError('')
+    const cleanSets = cleanWorkSets(workSets)
+    const first = cleanSets[0]
     const payload = {
       block_id: exercise.block_id,
       exercise_id: !useCustomName && exerciseId ? parseInt(exerciseId) : null,
       exercise_code: useCustomName ? exerciseCode.trim() : null,
       exercise_order: exercise.exercise_order,
-      sets: parseInt(sets) || 3,
-      reps: reps.trim() || null,
-      tempo: tempo.trim() || null,
-      weight_kg: weightKg ? parseFloat(weightKg) : null,
-      rir: rir ? parseInt(rir) : null,
+      // Kolumny sets/reps/tempo/weight_kg/rir zostają wypełnione danymi
+      // pierwszej serii — tak widoki, które jeszcze nie znają work_sets
+      // (np. tabela planu), pokazują sensowny skrót zamiast pustki.
+      sets: cleanSets.length || 1,
+      reps: first?.reps || null,
+      tempo: first?.tempo || null,
+      weight_kg: first?.weight_kg ? parseFloat(first.weight_kg) : null,
+      rir: first?.rir ? parseInt(first.rir) : null,
+      work_sets: cleanSets,
       coach_comment: comment.trim() || null,
       is_warmup: isWarmup,
       warmup_sets: isWarmup ? cleanWarmupSets(warmupSets) : [],
       exercise_url: exerciseUrl.trim() || null,
     }
 
-    const result = isNew
+    let result = isNew
       ? await supabase.from('workout_block_exercises').insert(payload).select('*, exercise:exercises(*)')
       : await supabase.from('workout_block_exercises').update(payload).eq('id', exercise.id)
     let data = 'data' in result ? result.data : null
     let error = result.error
+    if (isWorkSetsColumnError(error)) {
+      const withoutWorkSets = exercisePayloadWithoutWorkSets(payload)
+      result = isNew
+        ? await supabase.from('workout_block_exercises').insert(withoutWorkSets).select('*, exercise:exercises(*)')
+        : await supabase.from('workout_block_exercises').update(withoutWorkSets).eq('id', exercise.id)
+      data = 'data' in result ? result.data : null
+      error = result.error
+    }
     if (isWarmupColumnError(error)) {
-      const fallbackPayload = exercisePayloadWithoutWarmup(payload)
+      const fallbackPayload = exercisePayloadWithoutWarmup(exercisePayloadWithoutWorkSets(payload))
       const fallbackResult = isNew
         ? await supabase.from('workout_block_exercises').insert(fallbackPayload).select('*, exercise:exercises(*)')
         : await supabase.from('workout_block_exercises').update(fallbackPayload).eq('id', exercise.id)
@@ -197,8 +259,9 @@ function ExerciseEditForm({
     }
     setSaving(false)
     if (error) {
-      const isMissingWarmupColumn = isWarmupColumnError(error)
-      setSaveError(isMissingWarmupColumn
+      setSaveError(isWorkSetsColumnError(error)
+        ? 'Brakuje pola na serie w bazie. Dodaj kolumnę work_sets w Supabase.'
+        : isWarmupColumnError(error)
         ? 'Brakuje pola na serie rozgrzewkowe w bazie. Dodaj kolumne warmup_sets w Supabase.'
         : `Nie udalo sie zapisac: ${error.message}`)
       return
@@ -247,6 +310,22 @@ function ExerciseEditForm({
     setWarmupSets(prev => prev.length === 1 ? [{ reps: '', weight_kg: '', note: '' }] : prev.filter((_, setIndex) => setIndex !== index))
   }
 
+  function updateWorkSet(index: number, field: keyof WorkSet, value: string) {
+    setWorkSets(prev => prev.map((set, setIndex) => setIndex === index ? { ...set, [field]: value } : set))
+  }
+
+  function addWorkSet() {
+    setWorkSets(prev => {
+      const last = prev[prev.length - 1]
+      // nowa seria dziedziczy wartości z poprzedniej — szybciej się wpisuje
+      return [...prev, last ? { ...last } : { reps: '', weight_kg: '', tempo: '', rir: '' }]
+    })
+  }
+
+  function removeWorkSet(index: number) {
+    setWorkSets(prev => prev.length === 1 ? prev : prev.filter((_, setIndex) => setIndex !== index))
+  }
+
   return (
     <div className="coach-exercise-edit-form">
       <div className="coach-scheme-row">
@@ -273,22 +352,39 @@ function ExerciseEditForm({
         </Field>
       )}
 
-      <div className="coach-field-grid-5">
-        <Field label="Serie">
-          <input type="number" value={sets} onChange={e => setSets(e.target.value)} style={{ textAlign: 'center' }} />
-        </Field>
-        <Field label="Powt.">
-          <input value={reps} onChange={e => setReps(e.target.value)} placeholder="8-10" style={{ textAlign: 'center' }} />
-        </Field>
-        <Field label="Ciężar">
-          <input type="number" value={weightKg} onChange={e => setWeightKg(e.target.value)} placeholder="-" style={{ textAlign: 'center' }} />
-        </Field>
-        <Field label="Tempo">
-          <input value={tempo} onChange={e => setTempo(e.target.value)} placeholder="3-1-2-0" style={{ textAlign: 'center' }} />
-        </Field>
-        <Field label="RIR">
-          <input type="number" value={rir} onChange={e => setRir(e.target.value)} placeholder="-" style={{ textAlign: 'center' }} />
-        </Field>
+      <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px', marginBottom: 10, background: '#fff' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink)' }}>Serie</div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--font-inter),sans-serif' }}>Każda seria może mieć inne powtórzenia, ciężar, tempo i RIR.</div>
+          </div>
+          <button type="button" className="coach-btn coach-btn-dark coach-btn-small" onClick={addWorkSet}>Dodaj serię</button>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '30px 1fr 1fr 1fr 1fr 30px', gap: 6, marginBottom: 4, padding: '0 2px' }}>
+          <span />
+          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-light)', textTransform: 'uppercase', textAlign: 'center' }}>Powt.</span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-light)', textTransform: 'uppercase', textAlign: 'center' }}>Ciężar</span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-light)', textTransform: 'uppercase', textAlign: 'center' }}>Tempo</span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-light)', textTransform: 'uppercase', textAlign: 'center' }}>RIR</span>
+          <span />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {workSets.map((set, index) => (
+            <div key={index} style={{ display: 'grid', gridTemplateColumns: '30px 1fr 1fr 1fr 1fr 30px', gap: 6, alignItems: 'center' }}>
+              <div style={{ height: 32, borderRadius: 8, background: 'var(--navy-900)', color: 'var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11 }}>
+                {index + 1}
+              </div>
+              <input value={set.reps || ''} onChange={e => updateWorkSet(index, 'reps', e.target.value)} placeholder="8-10" style={{ textAlign: 'center' }} />
+              <input value={set.weight_kg || ''} onChange={e => updateWorkSet(index, 'weight_kg', e.target.value)} placeholder="kg" style={{ textAlign: 'center' }} />
+              <input value={set.tempo || ''} onChange={e => updateWorkSet(index, 'tempo', e.target.value)} placeholder="3-1-2-0" style={{ textAlign: 'center' }} />
+              <input value={set.rir || ''} onChange={e => updateWorkSet(index, 'rir', e.target.value)} placeholder="-" style={{ textAlign: 'center' }} />
+              <button type="button" onClick={() => removeWorkSet(index)} className="coach-icon-btn coach-danger" style={{ width: 30, height: 30 }} disabled={workSets.length === 1}>
+                <X size={13} />
+              </button>
+            </div>
+          ))}
+        </div>
       </div>
 
       <label className="coach-exercise-edit-form-checkbox">
@@ -1147,7 +1243,15 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
                                       )}
                                     </div>
                                     <div className="coach-exercise-chips">
-                                      <span className="coach-ex-chip">{exercise.sets}×{exercise.reps || '—'}</span>
+                                      {(() => {
+                                        const sets = exercise.work_sets
+                                        const varies = !!sets && sets.length > 1 && sets.some(s => s.reps !== sets[0].reps || s.weight_kg !== sets[0].weight_kg || s.tempo !== sets[0].tempo || s.rir !== sets[0].rir)
+                                        return (
+                                          <span className="coach-ex-chip" title={varies ? 'Serie różnią się między sobą — otwórz edycję, by zobaczyć każdą' : undefined}>
+                                            {exercise.sets}×{exercise.reps || '—'}{varies ? '…' : ''}
+                                          </span>
+                                        )
+                                      })()}
                                       {exercise.tempo && <span className="coach-ex-chip">{exercise.tempo}</span>}
                                       {exercise.weight_kg && <span className="coach-ex-chip">{exercise.weight_kg} kg</span>}
                                       {exercise.rir !== null && exercise.rir !== undefined && <span className="coach-ex-chip">RIR {exercise.rir}</span>}
