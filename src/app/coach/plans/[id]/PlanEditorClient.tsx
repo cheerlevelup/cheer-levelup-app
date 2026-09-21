@@ -54,6 +54,9 @@ type WorkSet = {
   rir?: string
   seconds?: string
   intensity?: string
+  // ISO: przerwa (w sekundach) między powtórzeniami W OBRĘBIE tej serii
+  // (inaczej niż przerwa między samymi seriami, którą trenerka planuje sama).
+  rest?: string
 }
 
 type BlockExercise = {
@@ -157,6 +160,7 @@ function normalizeWorkSets(exercise: BlockExercise): WorkSet[] {
       rir: set.rir?.toString() || '',
       seconds: set.seconds?.toString() || '',
       intensity: set.intensity?.toString() || '',
+      rest: set.rest?.toString() || '',
     }))
   }
   const count = Math.max(exercise.sets || 1, 1)
@@ -167,6 +171,7 @@ function normalizeWorkSets(exercise: BlockExercise): WorkSet[] {
     rir: exercise.rir?.toString() || '',
     seconds: '',
     intensity: '',
+    rest: '',
   }))
 }
 
@@ -178,6 +183,7 @@ function cleanWorkSets(value: WorkSet[]): WorkSet[] {
     rir: set.rir?.trim() || '',
     seconds: set.seconds?.trim() || '',
     intensity: set.intensity?.trim() || '',
+    rest: set.rest?.trim() || '',
   }))
 }
 
@@ -356,7 +362,7 @@ function ExerciseEditForm({
     setWorkSets(prev => {
       const last = prev[prev.length - 1]
       // nowa seria dziedziczy wartości z poprzedniej — szybciej się wpisuje
-      return [...prev, last ? { ...last } : { reps: '', weight_kg: '', tempo: '', rir: '', seconds: '', intensity: '' }]
+      return [...prev, last ? { ...last } : { reps: '', weight_kg: '', tempo: '', rir: '', seconds: '', intensity: '', rest: '' }]
     })
   }
 
@@ -430,7 +436,7 @@ function ExerciseEditForm({
           <div>
             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink)' }}>Serie</div>
             <div style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--font-inter),sans-serif' }}>
-              {iso ? 'Każda seria może mieć inny czas, ciężar i RIR.' : 'Każda seria może mieć inne powtórzenia, ciężar, tempo i RIR.'}
+              {iso ? 'Każda seria może mieć inny czas napięcia, liczbę powtórzeń, przerwę (rest) między nimi, ciężar i RIR.' : 'Każda seria może mieć inne powtórzenia, ciężar, tempo i RIR.'}
             </div>
           </div>
           <button type="button" className="coach-btn coach-btn-dark coach-btn-small" onClick={addWorkSet}>Dodaj serię</button>
@@ -439,8 +445,8 @@ function ExerciseEditForm({
         {(() => {
           const cols = iso
             ? (isoType === 'PIMA'
-              ? [{ field: 'seconds' as const, label: 'Czas (s)', placeholder: '20' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'intensity' as const, label: 'Intensywność (%)', placeholder: '%' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }]
-              : [{ field: 'seconds' as const, label: 'Czas (s)', placeholder: '20' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }])
+              ? [{ field: 'seconds' as const, label: 'Czas (s)', placeholder: '20' }, { field: 'reps' as const, label: 'Powt.', placeholder: '-' }, { field: 'rest' as const, label: 'Rest (s)', placeholder: '-' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'intensity' as const, label: 'Intensywność (%)', placeholder: '%' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }]
+              : [{ field: 'seconds' as const, label: 'Czas (s)', placeholder: '20' }, { field: 'reps' as const, label: 'Powt.', placeholder: '-' }, { field: 'rest' as const, label: 'Rest (s)', placeholder: '-' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }])
             : [{ field: 'reps' as const, label: 'Powt.', placeholder: '8-10' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'tempo' as const, label: 'Tempo', placeholder: '3-1-2-0' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }]
           const gridCols = `30px ${cols.map(() => '1fr').join(' ')} 30px`
           return (
