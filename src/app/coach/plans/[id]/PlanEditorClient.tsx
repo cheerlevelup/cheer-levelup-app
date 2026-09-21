@@ -947,13 +947,6 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
     setTargetBlocks(prev => prev.filter(block => block.id !== blockId))
   }
 
-  async function updateBlockRounds(blockId: number, rounds: number) {
-    const { error } = await supabase.from('workout_day_blocks').update({ rounds }).eq('id', blockId)
-    if (error) { showError(`Nie udało się zapisać liczby rund: ${error.message}`); return }
-    setLocalBlocks(prev => prev.map(block => block.id === blockId ? { ...block, rounds } : block))
-    setTargetBlocks(prev => prev.map(block => block.id === blockId ? { ...block, rounds } : block))
-  }
-
   async function renameBlock(blockId: number, name: string) {
     const nextName = name.trim() || 'Blok'
     const { error } = await supabase.from('workout_day_blocks').update({ block_name: nextName }).eq('id', blockId)
@@ -1278,14 +1271,6 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
                             style={{ border: 'none', background: 'transparent', outline: 'none', flex: 1, minWidth: 0, fontFamily: 'inherit' }}
                           />
                           <div className="coach-block-card-actions">
-                            <div className="coach-rounds-chip">
-                              <span>🔁</span>
-                              <input
-                                type="number" min={1} max={10} value={block.rounds}
-                                onChange={event => updateBlockRounds(block.id, parseInt(event.target.value) || 1)}
-                              />
-                              <span>rund</span>
-                            </div>
                             <button onClick={() => copyBlockToAllDays(block)} title="Kopiuj blok do wszystkich treningów" className="coach-icon-btn" data-tip="Kopiuj do treningów">
                               <Copy size={14} />
                             </button>
