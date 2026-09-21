@@ -1,7 +1,7 @@
 'use client'
 // src/app/coach/plans/[id]/PlanEditorClient.tsx
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { LayoutGrid, Table2, ClipboardList, Plus, X, Move, Trash2, Copy, Pencil, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
@@ -256,6 +256,27 @@ function ExerciseEditForm({
   const isNew = !exercise.id
   const canSave = useCustomName ? exerciseCode.trim().length > 0 : exerciseId.length > 0
 
+  const workSetInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  function focusWorkSetCell(rowIndex: number, colIndex: number) {
+    workSetInputRefs.current[`${rowIndex}-${colIndex}`]?.focus()
+  }
+  function handleWorkSetKeyDown(e: React.KeyboardEvent<HTMLInputElement>, rowIndex: number, colIndex: number) {
+    const input = e.currentTarget
+    if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      focusWorkSetCell(rowIndex - 1, colIndex)
+    } else if (e.key === 'ArrowDown' || e.key === 'Enter') {
+      e.preventDefault()
+      focusWorkSetCell(rowIndex + 1, colIndex)
+    } else if (e.key === 'ArrowLeft' && input.selectionStart === 0 && input.selectionEnd === 0) {
+      e.preventDefault()
+      focusWorkSetCell(rowIndex, colIndex - 1)
+    } else if (e.key === 'ArrowRight' && input.selectionStart === input.value.length && input.selectionEnd === input.value.length) {
+      e.preventDefault()
+      focusWorkSetCell(rowIndex, colIndex + 1)
+    }
+  }
+
   async function handleSave() {
     if (!canSave) return
     setSaving(true)
@@ -479,8 +500,16 @@ function ExerciseEditForm({
                     <div style={{ height: 32, borderRadius: 8, background: 'var(--navy-900)', color: 'var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11 }}>
                       {index + 1}
                     </div>
-                    {cols.map(c => (
-                      <input key={c.field} value={set[c.field] || ''} onChange={e => updateWorkSet(index, c.field, e.target.value)} placeholder={c.placeholder} style={{ textAlign: 'center' }} />
+                    {cols.map((c, colIndex) => (
+                      <input
+                        key={c.field}
+                        ref={el => { workSetInputRefs.current[`${index}-${colIndex}`] = el }}
+                        value={set[c.field] || ''}
+                        onChange={e => updateWorkSet(index, c.field, e.target.value)}
+                        onKeyDown={e => handleWorkSetKeyDown(e, index, colIndex)}
+                        placeholder={c.placeholder}
+                        style={{ textAlign: 'center' }}
+                      />
                     ))}
                     <button type="button" onClick={() => removeWorkSet(index)} className="coach-icon-btn coach-danger" style={{ width: 30, height: 30 }} disabled={workSets.length === 1}>
                       <X size={13} />
