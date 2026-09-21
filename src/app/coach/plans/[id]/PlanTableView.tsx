@@ -30,13 +30,11 @@ function fmtRange(values: (string | undefined)[], suffix = ''): string {
   return `${unique.join('/')}${suffix}`
 }
 
-function isoSummary(ex: BlockExercise): string {
+function isoPowtSummary(ex: BlockExercise): string {
   const sets = ex.work_sets || []
-  const secs = fmtRange(sets.map(s => s.seconds), 's')
   const reps = fmtRange(sets.map(s => s.reps))
-  const rest = fmtRange(sets.map(s => s.rest), 's')
-  const intensity = ex.iso_type === 'PIMA' ? fmtRange(sets.map(s => s.intensity), '%') : null
-  return `${secs}${reps !== '—' ? ` ×${reps}` : ''}${rest !== '—' ? ` rest ${rest}` : ''}${intensity && intensity !== '—' ? ` @${intensity}` : ''}`
+  const secs = fmtRange(sets.map(s => s.seconds), 's')
+  return reps !== '—' ? `${reps}× ${secs}` : secs
 }
 type Block = {
   id: number; day_id: number; block_name: string; block_order: number; rounds: number
@@ -771,27 +769,23 @@ export default function PlanTableView({ plan, weeks, days, blocks, onBlocksChang
                                         <EditCell value={ex.sets?.toString() || ''} onCommit={v => updateExercise(block.id, ex.id, 'sets', parseInt(v) || 1)} />
                                       </td>
                                       <td style={td({ background: '#eff6ff' })}>
-                                        <EditCell
-                                          value={ex.reps || ''}
-                                          onCommit={v => updateExercise(block.id, ex.id, 'reps', v || null)}
-                                          placeholder="powt."
-                                          renderDisplay={val => {
-                                            const range = ex.work_sets && ex.work_sets.length > 1 ? fmtRange(ex.work_sets.map(s => s.reps)) : null
-                                            return range && range !== '—' ? <span title="Serie różnią się — pokazany zakres">{range}</span> : (val || <span style={{ fontStyle: 'italic', fontSize: '11px' }}>powt.</span>)
-                                          }}
-                                        />
+                                        {ex.iso ? (
+                                          <div title={`Ćwiczenie ${ex.iso_type} — kliknij ✏️, by edytować serie`} style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '12px', fontWeight: 700, textAlign: 'center', padding: '2px 4px', whiteSpace: 'nowrap' }}>
+                                            {isoPowtSummary(ex)}
+                                          </div>
+                                        ) : (
+                                          <EditCell
+                                            value={ex.reps || ''}
+                                            onCommit={v => updateExercise(block.id, ex.id, 'reps', v || null)}
+                                            placeholder="powt."
+                                          />
+                                        )}
                                       </td>
                                       <td style={td({ background: '#eff6ff' })}>
                                         <EditCell value={ex.weight_kg?.toString() || ''} onCommit={v => updateExercise(block.id, ex.id, 'weight_kg', v ? parseFloat(v) : null)} placeholder="—" />
                                       </td>
-                                      <td style={td({ background: ex.iso ? 'var(--navy-900)' : '#eff6ff' })}>
-                                        {ex.iso ? (
-                                          <div title={`Ćwiczenie ${ex.iso_type} — kliknij ✏️, by edytować serie`} style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '11px', fontWeight: 700, color: 'var(--gold)', textAlign: 'center', padding: '2px 4px', whiteSpace: 'nowrap' }}>
-                                            {isoSummary(ex)}
-                                          </div>
-                                        ) : (
-                                          <EditCell value={ex.tempo || ''} onCommit={v => updateExercise(block.id, ex.id, 'tempo', v || null)} placeholder="—" />
-                                        )}
+                                      <td style={td({ background: '#eff6ff' })}>
+                                        <EditCell value={ex.tempo || ''} onCommit={v => updateExercise(block.id, ex.id, 'tempo', v || null)} placeholder="—" />
                                       </td>
                                       <td style={td({ background: '#eff6ff' })}>
                                         <EditCell value={ex.rir?.toString() || ''} onCommit={v => updateExercise(block.id, ex.id, 'rir', v ? parseInt(v) : null)} placeholder="—" />
