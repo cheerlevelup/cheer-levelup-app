@@ -106,6 +106,21 @@ type MoveItem =
   | { type: 'block'; block: Block }
   | { type: 'day'; day: Day }
 
+// Skrótowy opis wartości, które mogą się różnić między seriami: jedna
+// wspólna wartość, albo — jeśli serie faktycznie się różnią — czytelny
+// zakres "90–120" zamiast mylącego pokazywania tylko pierwszej serii.
+function fmtRange(values: (string | undefined)[], suffix = ''): string {
+  const present = values.map(v => v?.trim()).filter((v): v is string => !!v)
+  if (present.length === 0) return '—'
+  const unique = Array.from(new Set(present))
+  if (unique.length === 1) return `${unique[0]}${suffix}`
+  const nums = unique.map(Number)
+  if (nums.every(n => !Number.isNaN(n))) {
+    return `${Math.min(...nums)}–${Math.max(...nums)}${suffix}`
+  }
+  return `${unique.join('/')}${suffix}`
+}
+
 function formatExerciseName(name: string) {
   return name.replace(/-/g, ' ')
 }
@@ -1318,21 +1333,22 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
                                     </div>
                                     <div className="coach-exercise-chips">
                                       {(() => {
-                                        const sets = exercise.work_sets
-                                        const varies = (fields: (keyof WorkSet)[]) => !!sets && sets.length > 1 && sets.some(s => fields.some(f => s[f] !== sets[0][f]))
+                                        const sets = exercise.work_sets || []
                                         if (exercise.iso) {
-                                          const first = sets?.[0]
-                                          const isoVaries = varies(['seconds', 'weight_kg', 'intensity', 'rir'])
+                                          const secs = fmtRange(sets.map(s => s.seconds), 's')
+                                          const reps = fmtRange(sets.map(s => s.reps))
+                                          const rest = fmtRange(sets.map(s => s.rest), 's')
+                                          const intensity = exercise.iso_type === 'PIMA' ? fmtRange(sets.map(s => s.intensity), '%') : null
                                           return (
-                                            <span className="coach-ex-chip" style={{ background: 'var(--navy-900)', color: 'var(--gold)' }} title={isoVaries ? 'Serie różnią się między sobą — otwórz edycję, by zobaczyć każdą' : undefined}>
-                                              {exercise.sets}×{first?.seconds || '—'}s{exercise.iso_type === 'PIMA' && first?.intensity ? ` @${first.intensity}%` : ''} ({exercise.iso_type}){isoVaries ? '…' : ''}
+                                            <span className="coach-ex-chip" style={{ background: 'var(--navy-900)', color: 'var(--gold)' }}>
+                                              {exercise.sets}×{secs}{reps !== '—' ? ` ×${reps}` : ''}{rest !== '—' ? ` rest ${rest}` : ''}{intensity && intensity !== '—' ? ` @${intensity}` : ''} ({exercise.iso_type})
                                             </span>
                                           )
                                         }
-                                        const stdVaries = varies(['reps', 'weight_kg', 'tempo', 'rir'])
+                                        const reps = fmtRange(sets.map(s => s.reps))
                                         return (
-                                          <span className="coach-ex-chip" title={stdVaries ? 'Serie różnią się między sobą — otwórz edycję, by zobaczyć każdą' : undefined}>
-                                            {exercise.sets}×{exercise.reps || '—'}{stdVaries ? '…' : ''}
+                                          <span className="coach-ex-chip">
+                                            {exercise.sets}×{reps !== '—' ? reps : (exercise.reps || '—')}
                                           </span>
                                         )
                                       })()}

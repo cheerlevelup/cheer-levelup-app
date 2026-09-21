@@ -4,6 +4,7 @@ import { useState } from 'react'
 import type { CSSProperties } from 'react'
 
 type WarmupSet = { reps?: string; weight_kg?: string; note?: string }
+type WorkSet = { reps?: string; weight_kg?: string; tempo?: string; rir?: string; seconds?: string; intensity?: string; rest?: string }
 type ExerciseLibraryItem = { id: number; name: string; category?: string | null }
 type BlockExercise = {
   id?: number; block_id: number; exercise_id?: number | null; exercise_code?: string | null
@@ -11,6 +12,31 @@ type BlockExercise = {
   weight_kg?: number | null; rir?: number | null; is_warmup: boolean
   warmup_sets?: WarmupSet[] | null; coach_comment?: string | null
   exercise_url?: string | null; exercise?: ExerciseLibraryItem | null
+  work_sets?: WorkSet[] | null; iso?: boolean | null; iso_type?: 'PIMA' | 'HIMA' | null
+}
+
+// Wartość, która może się różnić między seriami: jedna wspólna, albo (jeśli
+// serie faktycznie się różnią) czytelny zakres "90–120" zamiast mylącego
+// pokazywania tylko pierwszej serii.
+function fmtRange(values: (string | undefined)[], suffix = ''): string {
+  const present = values.map(v => v?.trim()).filter((v): v is string => !!v)
+  if (present.length === 0) return '—'
+  const unique = Array.from(new Set(present))
+  if (unique.length === 1) return `${unique[0]}${suffix}`
+  const nums = unique.map(Number)
+  if (nums.every(n => !Number.isNaN(n))) {
+    return `${Math.min(...nums)}–${Math.max(...nums)}${suffix}`
+  }
+  return `${unique.join('/')}${suffix}`
+}
+
+function isoSummary(ex: BlockExercise): string {
+  const sets = ex.work_sets || []
+  const secs = fmtRange(sets.map(s => s.seconds), 's')
+  const reps = fmtRange(sets.map(s => s.reps))
+  const rest = fmtRange(sets.map(s => s.rest), 's')
+  const intensity = ex.iso_type === 'PIMA' ? fmtRange(sets.map(s => s.intensity), '%') : null
+  return `${secs}${reps !== '—' ? ` ×${reps}` : ''}${rest !== '—' ? ` rest ${rest}` : ''}${intensity && intensity !== '—' ? ` @${intensity}` : ''}`
 }
 type Block = {
   id: number; day_id: number; block_name: string; block_order: number; rounds: number
@@ -703,7 +729,16 @@ export default function PlanTableView({ plan, weeks, days, blocks, onBlocksChang
                                       )}
                                       <td style={td({ color: 'var(--muted-light)' })}>{i + 1}</td>
                                       <td style={td({ textAlign: 'left', minWidth: 150 })}>
-                                        <EditCell value={name} onCommit={v => updateExercise(block.id, ex.id, 'exercise_code', v)} align="left" placeholder="nazwa" />
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                          <div style={{ flex: 1, minWidth: 0 }}>
+                                            <EditCell value={name} onCommit={v => updateExercise(block.id, ex.id, 'exercise_code', v)} align="left" placeholder="nazwa" />
+                                          </div>
+                                          {ex.iso && (
+                                            <span title={`Ćwiczenie izometryczne (${ex.iso_type})`} style={{ flexShrink: 0, background: 'var(--navy-900)', color: 'var(--gold)', fontFamily: 'var(--font-inter),sans-serif', fontSize: 9, fontWeight: 700, borderRadius: 4, padding: '1px 5px', letterSpacing: '.02em' }}>
+                                              {ex.iso_type}
+                                            </span>
+                                          )}
+                                        </div>
                                       </td>
                                       <td style={td({ width: 20, padding: '2px', textAlign: 'center' })}>
                                         <EditCell
@@ -736,13 +771,27 @@ export default function PlanTableView({ plan, weeks, days, blocks, onBlocksChang
                                         <EditCell value={ex.sets?.toString() || ''} onCommit={v => updateExercise(block.id, ex.id, 'sets', parseInt(v) || 1)} />
                                       </td>
                                       <td style={td({ background: '#eff6ff' })}>
-                                        <EditCell value={ex.reps || ''} onCommit={v => updateExercise(block.id, ex.id, 'reps', v || null)} placeholder="powt." />
+                                        <EditCell
+                                          value={ex.reps || ''}
+                                          onCommit={v => updateExercise(block.id, ex.id, 'reps', v || null)}
+                                          placeholder="powt."
+                                          renderDisplay={val => {
+                                            const range = ex.work_sets && ex.work_sets.length > 1 ? fmtRange(ex.work_sets.map(s => s.reps)) : null
+                                            return range && range !== '—' ? <span title="Serie różnią się — pokazany zakres">{range}</span> : (val || <span style={{ fontStyle: 'italic', fontSize: '11px' }}>powt.</span>)
+                                          }}
+                                        />
                                       </td>
                                       <td style={td({ background: '#eff6ff' })}>
                                         <EditCell value={ex.weight_kg?.toString() || ''} onCommit={v => updateExercise(block.id, ex.id, 'weight_kg', v ? parseFloat(v) : null)} placeholder="—" />
                                       </td>
-                                      <td style={td({ background: '#eff6ff' })}>
-                                        <EditCell value={ex.tempo || ''} onCommit={v => updateExercise(block.id, ex.id, 'tempo', v || null)} placeholder="—" />
+                                      <td style={td({ background: ex.iso ? 'var(--navy-900)' : '#eff6ff' })}>
+                                        {ex.iso ? (
+                                          <div title={`Ćwiczenie ${ex.iso_type} — kliknij ✏️, by edytować serie`} style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '11px', fontWeight: 700, color: 'var(--gold)', textAlign: 'center', padding: '2px 4px', whiteSpace: 'nowrap' }}>
+                                            {isoSummary(ex)}
+                                          </div>
+                                        ) : (
+                                          <EditCell value={ex.tempo || ''} onCommit={v => updateExercise(block.id, ex.id, 'tempo', v || null)} placeholder="—" />
+                                        )}
                                       </td>
                                       <td style={td({ background: '#eff6ff' })}>
                                         <EditCell value={ex.rir?.toString() || ''} onCommit={v => updateExercise(block.id, ex.id, 'rir', v ? parseInt(v) : null)} placeholder="—" />
