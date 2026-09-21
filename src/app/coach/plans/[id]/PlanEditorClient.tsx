@@ -45,12 +45,15 @@ type WarmupSet = {
 }
 
 // Jedna seria główna: własne powt./ciężar/tempo/RIR (zamiast jednej wspólnej
-// rozpiski na całe ćwiczenie). Wzorem WarmupSet.
+// rozpiski na całe ćwiczenie). Wzorem WarmupSet. Dla ćwiczeń ISO: seconds
+// (czas napięcia) i intensity (tylko PIMA) zamiast reps/tempo.
 type WorkSet = {
   reps?: string
   weight_kg?: string
   tempo?: string
   rir?: string
+  seconds?: string
+  intensity?: string
 }
 
 type BlockExercise = {
@@ -67,6 +70,8 @@ type BlockExercise = {
   is_warmup: boolean
   warmup_sets?: WarmupSet[] | null
   work_sets?: WorkSet[] | null
+  iso?: boolean | null
+  iso_type?: 'PIMA' | 'HIMA' | null
   coach_comment?: string | null
   exercise_url?: string | null
   exercise?: ExerciseLibraryItem | null
@@ -150,6 +155,8 @@ function normalizeWorkSets(exercise: BlockExercise): WorkSet[] {
       weight_kg: set.weight_kg?.toString() || '',
       tempo: set.tempo?.toString() || '',
       rir: set.rir?.toString() || '',
+      seconds: set.seconds?.toString() || '',
+      intensity: set.intensity?.toString() || '',
     }))
   }
   const count = Math.max(exercise.sets || 1, 1)
@@ -158,6 +165,8 @@ function normalizeWorkSets(exercise: BlockExercise): WorkSet[] {
     weight_kg: exercise.weight_kg?.toString() || '',
     tempo: exercise.tempo || '',
     rir: exercise.rir?.toString() || '',
+    seconds: '',
+    intensity: '',
   }))
 }
 
@@ -167,17 +176,31 @@ function cleanWorkSets(value: WorkSet[]): WorkSet[] {
     weight_kg: set.weight_kg?.trim() || '',
     tempo: set.tempo?.trim() || '',
     rir: set.rir?.trim() || '',
+    seconds: set.seconds?.trim() || '',
+    intensity: set.intensity?.trim() || '',
   }))
 }
 
 function isWorkSetsColumnError(error: { message?: string; code?: string } | null) {
   const message = error?.message?.toLowerCase() || ''
-  return message.includes('work_sets') || message.includes('schema cache')
+  return message.includes('work_sets')
 }
 
 function exercisePayloadWithoutWorkSets<T extends { work_sets?: WorkSet[] }>(payload: T) {
   const rest = { ...payload }
   delete rest.work_sets
+  return rest
+}
+
+function isIsoColumnError(error: { message?: string; code?: string } | null) {
+  const message = error?.message?.toLowerCase() || ''
+  return message.includes("'iso'") || message.includes('iso_type')
+}
+
+function exercisePayloadWithoutIso<T extends { iso?: boolean; iso_type?: string | null }>(payload: T) {
+  const rest = { ...payload }
+  delete rest.iso
+  delete rest.iso_type
   return rest
 }
 
@@ -197,6 +220,8 @@ function ExerciseEditForm({
 }) {
   const [exerciseId, setExerciseId] = useState<string>(exercise.exercise_id?.toString() || '')
   const [exerciseCode, setExerciseCode] = useState(exercise.exercise_code || '')
+  const [iso, setIso] = useState(exercise.iso || false)
+  const [isoType, setIsoType] = useState<'PIMA' | 'HIMA'>(exercise.iso_type || 'PIMA')
   const [workSets, setWorkSets] = useState<WorkSet[]>(() => normalizeWorkSets(exercise))
   const [comment, setComment] = useState(exercise.coach_comment || '')
   const [isWarmup, setIsWarmup] = useState(exercise.is_warmup || false)
@@ -221,12 +246,15 @@ function ExerciseEditForm({
       exercise_id: !useCustomName && exerciseId ? parseInt(exerciseId) : null,
       exercise_code: useCustomName ? exerciseCode.trim() : null,
       exercise_order: exercise.exercise_order,
+      iso,
+      iso_type: iso ? isoType : null,
       // Kolumny sets/reps/tempo/weight_kg/rir zostają wypełnione danymi
       // pierwszej serii — tak widoki, które jeszcze nie znają work_sets
-      // (np. tabela planu), pokazują sensowny skrót zamiast pustki.
+      // (np. tabela planu), pokazują sensowny skrót zamiast pustki. Dla ISO
+      // reps/tempo nie mają zastosowania (jest czas/intensywność zamiast nich).
       sets: cleanSets.length || 1,
-      reps: first?.reps || null,
-      tempo: first?.tempo || null,
+      reps: iso ? null : (first?.reps || null),
+      tempo: iso ? null : (first?.tempo || null),
       weight_kg: first?.weight_kg ? parseFloat(first.weight_kg) : null,
       rir: first?.rir ? parseInt(first.rir) : null,
       work_sets: cleanSets,
@@ -241,8 +269,16 @@ function ExerciseEditForm({
       : await supabase.from('workout_block_exercises').update(payload).eq('id', exercise.id)
     let data = 'data' in result ? result.data : null
     let error = result.error
+    if (isIsoColumnError(error)) {
+      const withoutIso = exercisePayloadWithoutIso(payload)
+      result = isNew
+        ? await supabase.from('workout_block_exercises').insert(withoutIso).select('*, exercise:exercises(*)')
+        : await supabase.from('workout_block_exercises').update(withoutIso).eq('id', exercise.id)
+      data = 'data' in result ? result.data : null
+      error = result.error
+    }
     if (isWorkSetsColumnError(error)) {
-      const withoutWorkSets = exercisePayloadWithoutWorkSets(payload)
+      const withoutWorkSets = exercisePayloadWithoutWorkSets(exercisePayloadWithoutIso(payload))
       result = isNew
         ? await supabase.from('workout_block_exercises').insert(withoutWorkSets).select('*, exercise:exercises(*)')
         : await supabase.from('workout_block_exercises').update(withoutWorkSets).eq('id', exercise.id)
@@ -250,7 +286,7 @@ function ExerciseEditForm({
       error = result.error
     }
     if (isWarmupColumnError(error)) {
-      const fallbackPayload = exercisePayloadWithoutWarmup(exercisePayloadWithoutWorkSets(payload))
+      const fallbackPayload = exercisePayloadWithoutWarmup(exercisePayloadWithoutWorkSets(exercisePayloadWithoutIso(payload)))
       const fallbackResult = isNew
         ? await supabase.from('workout_block_exercises').insert(fallbackPayload).select('*, exercise:exercises(*)')
         : await supabase.from('workout_block_exercises').update(fallbackPayload).eq('id', exercise.id)
@@ -259,7 +295,9 @@ function ExerciseEditForm({
     }
     setSaving(false)
     if (error) {
-      setSaveError(isWorkSetsColumnError(error)
+      setSaveError(isIsoColumnError(error)
+        ? 'Brakuje pól na ćwiczenia ISO w bazie. Dodaj kolumny iso/iso_type w Supabase.'
+        : isWorkSetsColumnError(error)
         ? 'Brakuje pola na serie w bazie. Dodaj kolumnę work_sets w Supabase.'
         : isWarmupColumnError(error)
         ? 'Brakuje pola na serie rozgrzewkowe w bazie. Dodaj kolumne warmup_sets w Supabase.'
@@ -318,7 +356,7 @@ function ExerciseEditForm({
     setWorkSets(prev => {
       const last = prev[prev.length - 1]
       // nowa seria dziedziczy wartości z poprzedniej — szybciej się wpisuje
-      return [...prev, last ? { ...last } : { reps: '', weight_kg: '', tempo: '', rir: '' }]
+      return [...prev, last ? { ...last } : { reps: '', weight_kg: '', tempo: '', rir: '', seconds: '', intensity: '' }]
     })
   }
 
@@ -352,39 +390,86 @@ function ExerciseEditForm({
         </Field>
       )}
 
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>Typ ćwiczenia</div>
+        <div className="coach-scheme-row" style={{ marginBottom: iso ? 8 : 0 }}>
+          <button type="button" className={`coach-scheme-btn ${!iso ? 'coach-active' : ''}`} onClick={() => setIso(false)}>
+            Standardowe
+          </button>
+          <button type="button" className={`coach-scheme-btn ${iso ? 'coach-active' : ''}`} onClick={() => setIso(true)}>
+            Izometryczne (ISO)
+          </button>
+        </div>
+        {iso && (
+          <>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>Wariant ISO</div>
+            <div className="coach-scheme-row" style={{ marginBottom: 6 }}>
+              {(['PIMA', 'HIMA'] as const).map(v => (
+                <button
+                  key={v}
+                  type="button"
+                  className="coach-scheme-btn"
+                  style={isoType === v ? { background: 'var(--gold)', color: 'var(--navy-900)', borderColor: 'var(--gold)' } : undefined}
+                  onClick={() => setIsoType(v)}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--muted)', fontFamily: 'var(--font-inter),sans-serif', marginBottom: 8 }}>
+              {isoType === 'PIMA'
+                ? 'PIMA — napięcie z narastającą intensywnością (%). Podaj docelową intensywność.'
+                : 'HIMA — napięcie na stałej, maksymalnej intensywności przez cały czas trwania.'}
+            </div>
+          </>
+        )}
+      </div>
+
       <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px', marginBottom: 10, background: '#fff' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 8 }}>
           <div>
             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink)' }}>Serie</div>
-            <div style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--font-inter),sans-serif' }}>Każda seria może mieć inne powtórzenia, ciężar, tempo i RIR.</div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--font-inter),sans-serif' }}>
+              {iso ? 'Każda seria może mieć inny czas, ciężar i RIR.' : 'Każda seria może mieć inne powtórzenia, ciężar, tempo i RIR.'}
+            </div>
           </div>
           <button type="button" className="coach-btn coach-btn-dark coach-btn-small" onClick={addWorkSet}>Dodaj serię</button>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '30px 1fr 1fr 1fr 1fr 30px', gap: 6, marginBottom: 4, padding: '0 2px' }}>
-          <span />
-          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-light)', textTransform: 'uppercase', textAlign: 'center' }}>Powt.</span>
-          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-light)', textTransform: 'uppercase', textAlign: 'center' }}>Ciężar</span>
-          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-light)', textTransform: 'uppercase', textAlign: 'center' }}>Tempo</span>
-          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-light)', textTransform: 'uppercase', textAlign: 'center' }}>RIR</span>
-          <span />
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {workSets.map((set, index) => (
-            <div key={index} style={{ display: 'grid', gridTemplateColumns: '30px 1fr 1fr 1fr 1fr 30px', gap: 6, alignItems: 'center' }}>
-              <div style={{ height: 32, borderRadius: 8, background: 'var(--navy-900)', color: 'var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11 }}>
-                {index + 1}
+        {(() => {
+          const cols = iso
+            ? (isoType === 'PIMA'
+              ? [{ field: 'seconds' as const, label: 'Czas (s)', placeholder: '20' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'intensity' as const, label: 'Intensywność (%)', placeholder: '%' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }]
+              : [{ field: 'seconds' as const, label: 'Czas (s)', placeholder: '20' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }])
+            : [{ field: 'reps' as const, label: 'Powt.', placeholder: '8-10' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'tempo' as const, label: 'Tempo', placeholder: '3-1-2-0' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }]
+          const gridCols = `30px ${cols.map(() => '1fr').join(' ')} 30px`
+          return (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: 6, marginBottom: 4, padding: '0 2px' }}>
+                <span />
+                {cols.map(c => (
+                  <span key={c.field} style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-light)', textTransform: 'uppercase', textAlign: 'center' }}>{c.label}</span>
+                ))}
+                <span />
               </div>
-              <input value={set.reps || ''} onChange={e => updateWorkSet(index, 'reps', e.target.value)} placeholder="8-10" style={{ textAlign: 'center' }} />
-              <input value={set.weight_kg || ''} onChange={e => updateWorkSet(index, 'weight_kg', e.target.value)} placeholder="kg" style={{ textAlign: 'center' }} />
-              <input value={set.tempo || ''} onChange={e => updateWorkSet(index, 'tempo', e.target.value)} placeholder="3-1-2-0" style={{ textAlign: 'center' }} />
-              <input value={set.rir || ''} onChange={e => updateWorkSet(index, 'rir', e.target.value)} placeholder="-" style={{ textAlign: 'center' }} />
-              <button type="button" onClick={() => removeWorkSet(index)} className="coach-icon-btn coach-danger" style={{ width: 30, height: 30 }} disabled={workSets.length === 1}>
-                <X size={13} />
-              </button>
-            </div>
-          ))}
-        </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {workSets.map((set, index) => (
+                  <div key={index} style={{ display: 'grid', gridTemplateColumns: gridCols, gap: 6, alignItems: 'center' }}>
+                    <div style={{ height: 32, borderRadius: 8, background: 'var(--navy-900)', color: 'var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11 }}>
+                      {index + 1}
+                    </div>
+                    {cols.map(c => (
+                      <input key={c.field} value={set[c.field] || ''} onChange={e => updateWorkSet(index, c.field, e.target.value)} placeholder={c.placeholder} style={{ textAlign: 'center' }} />
+                    ))}
+                    <button type="button" onClick={() => removeWorkSet(index)} className="coach-icon-btn coach-danger" style={{ width: 30, height: 30 }} disabled={workSets.length === 1}>
+                      <X size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )
+        })()}
       </div>
 
       <label className="coach-exercise-edit-form-checkbox">
@@ -1245,14 +1330,24 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
                                     <div className="coach-exercise-chips">
                                       {(() => {
                                         const sets = exercise.work_sets
-                                        const varies = !!sets && sets.length > 1 && sets.some(s => s.reps !== sets[0].reps || s.weight_kg !== sets[0].weight_kg || s.tempo !== sets[0].tempo || s.rir !== sets[0].rir)
+                                        const varies = (fields: (keyof WorkSet)[]) => !!sets && sets.length > 1 && sets.some(s => fields.some(f => s[f] !== sets[0][f]))
+                                        if (exercise.iso) {
+                                          const first = sets?.[0]
+                                          const isoVaries = varies(['seconds', 'weight_kg', 'intensity', 'rir'])
+                                          return (
+                                            <span className="coach-ex-chip" style={{ background: 'var(--navy-900)', color: 'var(--gold)' }} title={isoVaries ? 'Serie różnią się między sobą — otwórz edycję, by zobaczyć każdą' : undefined}>
+                                              {exercise.sets}×{first?.seconds || '—'}s{exercise.iso_type === 'PIMA' && first?.intensity ? ` @${first.intensity}%` : ''} ({exercise.iso_type}){isoVaries ? '…' : ''}
+                                            </span>
+                                          )
+                                        }
+                                        const stdVaries = varies(['reps', 'weight_kg', 'tempo', 'rir'])
                                         return (
-                                          <span className="coach-ex-chip" title={varies ? 'Serie różnią się między sobą — otwórz edycję, by zobaczyć każdą' : undefined}>
-                                            {exercise.sets}×{exercise.reps || '—'}{varies ? '…' : ''}
+                                          <span className="coach-ex-chip" title={stdVaries ? 'Serie różnią się między sobą — otwórz edycję, by zobaczyć każdą' : undefined}>
+                                            {exercise.sets}×{exercise.reps || '—'}{stdVaries ? '…' : ''}
                                           </span>
                                         )
                                       })()}
-                                      {exercise.tempo && <span className="coach-ex-chip">{exercise.tempo}</span>}
+                                      {!exercise.iso && exercise.tempo && <span className="coach-ex-chip">{exercise.tempo}</span>}
                                       {exercise.weight_kg && <span className="coach-ex-chip">{exercise.weight_kg} kg</span>}
                                       {exercise.rir !== null && exercise.rir !== undefined && <span className="coach-ex-chip">RIR {exercise.rir}</span>}
                                       {exercise.is_warmup && <span className="coach-ex-chip coach-warmup">🔥 rozgrzewka ×{warmupCount || 1}</span>}
