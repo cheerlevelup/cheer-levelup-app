@@ -4,10 +4,10 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
-import { LayoutGrid, Table2, ClipboardList, Plus, X, Move, Trash2, Copy, Pencil } from 'lucide-react'
+import { LayoutGrid, Table2, ClipboardList, Plus, X, Move, Trash2, Copy, Pencil, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import PlanTableView from './PlanTableView'
 import PlanWellnessConfig from '@/components/PlanWellnessConfig'
-import { SetPageMeta } from '@/components/coach/PageMetaContext'
+import { SetPageMeta, usePageMeta } from '@/components/coach/PageMetaContext'
 import { Modal, Button, Field } from '@/components/coach/ui'
 
 type Plan = {
@@ -638,6 +638,7 @@ function MoveModal({
 export default function PlanEditorClient({ plan, weeks, days, blocks, exercises, allPlans, allWeeks, allDays, allBlocks }: Props) {
   const router = useRouter()
   const supabase = createClient()
+  const { sidebarCollapsed, setSidebarCollapsed } = usePageMeta()
 
   const [planName, setPlanName] = useState(plan.name)
   const [planNotes, setPlanNotes] = useState((plan as any).description || '')
@@ -1097,7 +1098,7 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
 
   return (
     <>
-      <SetPageMeta title={plan.name} backHref="/coach/plans" backLabel="Plany" />
+      <SetPageMeta title={plan.name} backHref="/coach/plans" backLabel="Plany" sidebarCollapsible />
 
       <div className="coach-content">
         {globalError && (
@@ -1124,7 +1125,16 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
 
         <div className="coach-editor-hero">
           <div className="coach-editor-hero-left" style={{ flex: 1, minWidth: 240 }}>
-            <div className="coach-eyebrow">Edytor planu</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+              <button
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                title={sidebarCollapsed ? 'Pokaż menu' : 'Zwiń menu — więcej miejsca'}
+                style={{ flexShrink: 0, width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.08)', color: 'var(--gold-light)', borderRadius: 6, outline: 'none' }}
+              >
+                {sidebarCollapsed ? <PanelLeftOpen size={13} /> : <PanelLeftClose size={13} />}
+              </button>
+              <div className="coach-eyebrow" style={{ margin: 0 }}>Edytor planu</div>
+            </div>
             <input
               value={planName}
               onChange={event => setPlanName(event.target.value)}
@@ -1232,7 +1242,6 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
                       />
                     </div>
                     <div className="coach-training-head-actions">
-                      <button className="coach-btn coach-btn-dark coach-btn-small" onClick={() => addBlock()}><Plus size={14} /> Blok</button>
                       <button onClick={() => setMovingItem({ type: 'day', day: currentDay })} title="Przenieś trening" className="coach-icon-btn" data-tip="Przenieś trening">
                         <Move size={14} />
                       </button>
@@ -1249,17 +1258,6 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
                       onChange={event => setLocalDays(prev => prev.map(day => day.id === selectedDayId ? { ...day, coach_intro: event.target.value } : day))}
                       onBlur={event => saveCoachIntro(selectedDayId, event.target.value)}
                       placeholder="Motywacja, wskazówki, na co zwrócić uwagę... Zawodniczki zobaczą to zanim zaczną ćwiczyć."
-                      rows={3}
-                    />
-                  </div>
-
-                  <div className="coach-msg-card coach-post">
-                    <div className="coach-msg-card-label"><span>💙</span> Wiadomość po treningu — widoczna na końcu strony</div>
-                    <textarea
-                      value={currentDay.coach_closing || ''}
-                      onChange={event => setLocalDays(prev => prev.map(day => day.id === selectedDayId ? { ...day, coach_closing: event.target.value } : day))}
-                      onBlur={event => saveCoachClosing(selectedDayId, event.target.value)}
-                      placeholder="Gratulacje, recovery, co dalej, kolejny trening... Zawodniczki zobaczą to na samym końcu, po wypełnieniu raportu."
                       rows={3}
                     />
                   </div>
@@ -1383,13 +1381,26 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
                     )
                   })}
 
-                  {currentDayBlocks.length === 0 && (
+                  {currentDayBlocks.length === 0 ? (
                     <div className="coach-empty-training">
                       <h3>Ten trening nie ma jeszcze blokow</h3>
                       <p>Dodaj pierwszy blok i zacznij wpisywac cwiczenia.</p>
                       <button className="coach-btn coach-btn-dark" onClick={() => addBlock()}>Dodaj blok</button>
                     </div>
+                  ) : (
+                    <button className="coach-btn coach-btn-dark" style={{ alignSelf: 'flex-start' }} onClick={() => addBlock()}><Plus size={14} /> Dodaj blok</button>
                   )}
+
+                  <div className="coach-msg-card coach-post">
+                    <div className="coach-msg-card-label"><span>💙</span> Wiadomość po treningu — widoczna na końcu strony</div>
+                    <textarea
+                      value={currentDay.coach_closing || ''}
+                      onChange={event => setLocalDays(prev => prev.map(day => day.id === selectedDayId ? { ...day, coach_closing: event.target.value } : day))}
+                      onBlur={event => saveCoachClosing(selectedDayId, event.target.value)}
+                      placeholder="Gratulacje, recovery, co dalej, kolejny trening... Zawodniczki zobaczą to na samym końcu, po wypełnieniu raportu."
+                      rows={3}
+                    />
+                  </div>
                 </>
               )}
             </main>
