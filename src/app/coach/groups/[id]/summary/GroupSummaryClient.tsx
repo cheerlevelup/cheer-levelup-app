@@ -28,6 +28,7 @@ type Exercise = {
   id: number; name: string; exercise_order: number; sets_planned?: number | null; reps?: string | null; tempo?: string | null
   bodyweight?: boolean | null; variants?: TaskVariant[] | null; individual?: boolean | null
   iso?: boolean | null; iso_type?: 'PIMA' | 'HIMA' | null; iso_seconds?: number | null; iso_intensity?: number | null
+  iso_seconds_sets?: (number | null)[] | null
 }
 
 // Skrótowy opis rozpiski — jak w edytorze treningu (GroupTrainingClient): "3×8, tempo 3010"
@@ -38,6 +39,9 @@ function formatExercisePresc(ex: Exercise): string {
     const secs = ex.iso_seconds != null ? `${ex.iso_seconds}s` : ''
     const intensity = ex.iso_type !== 'HIMA' && ex.iso_intensity != null ? ` @${ex.iso_intensity}%` : ''
     const type = ex.iso_type ? ` (${ex.iso_type})` : ''
+    // Różne czasy w seriach: "45/40/30s" zamiast "3×45s"
+    const perSet = Array.from({ length: Math.max(ex.sets_planned ?? 0, 1) }, (_, i) => ex.iso_seconds_sets?.[i] ?? ex.iso_seconds ?? null)
+    if (perSet.some(t => t !== ex.iso_seconds)) return `${perSet.map(t => t ?? '?').join('/')}s${intensity}${type}`.trim()
     return `${sets}${secs}${intensity}${type}`.trim()
   }
   return [

@@ -33,6 +33,8 @@ type Exercise = {
   iso_type?: 'PIMA' | 'HIMA' | null
   iso_seconds?: number | null
   iso_intensity?: number | null
+  // czas per seria (ISO); null w danej pozycji = seria bierze wspólny iso_seconds
+  iso_seconds_sets?: (number | null)[] | null
 }
 type SetRow = { reps?: string; tempo?: string; weight?: string; skipped?: boolean }
 type Entry = {
@@ -178,12 +180,59 @@ function exerciseHeaderFields(ex: Exercise): HeaderField[] {
 function formatExercisePresc(ex: Exercise): string {
   const sets = ex.sets_planned != null ? `${ex.sets_planned}×` : ''
   if (ex.iso) {
-    const secs = ex.iso_seconds != null ? `${ex.iso_seconds}s` : ''
+    const perSet = isoSetTimes(ex)
     const intensity = ex.iso_type !== 'HIMA' && ex.iso_intensity != null ? ` @${ex.iso_intensity}%` : ''
     const type = ex.iso_type ? ` (${ex.iso_type})` : ''
+    // Różne czasy w seriach: "45/40/30s" zamiast "3×45s"
+    if (perSet.some(t => t !== ex.iso_seconds)) return `${perSet.map(t => t ?? '?').join('/')}s${intensity}${type}`.trim()
+    const secs = ex.iso_seconds != null ? `${ex.iso_seconds}s` : ''
     return `${sets}${secs}${intensity}${type}`.trim()
   }
   return `${sets}${ex.reps || ''}${ex.tempo ? `, tempo ${ex.tempo}` : ''}`
+}
+
+// Czas każdej serii ISO (tyle pozycji, ile serii w rozpisce) — własny czas serii
+// albo wspólny iso_seconds, gdy dla serii nie wpisano osobnego.
+function isoSetTimes(ex: Exercise): (number | null)[] {
+  const n = Math.max(ex.sets_planned ?? 0, 1)
+  return Array.from({ length: n }, (_, i) => ex.iso_seconds_sets?.[i] ?? ex.iso_seconds ?? null)
+}
+
+// Przycięcie listy czasów per seria przed zapisem: bez nadmiarowych serii i
+// pustych końcówek; same puste pozycje → null (wszystkie serie mają wspólny czas).
+function normalizeIsoSets(ex: Exercise): (number | null)[] | null {
+  const arr = (ex.iso_seconds_sets || []).slice(0, Math.max(ex.sets_planned ?? 0, 1))
+  while (arr.length && arr[arr.length - 1] == null) arr.pop()
+  return arr.length ? arr : null
+}
+
+// Wiersz „czas / seria" pod nagłówkiem ISO — puste pole = wspólny czas z nagłówka.
+function IsoSetTimesEditor({ ex, onChange, onCommit }: {
+  ex: Exercise
+  onChange: (setIdx: number, value: string) => void
+  onCommit: () => void
+}) {
+  const n = Math.max(ex.sets_planned ?? 0, 1)
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap', marginTop: 4 }}>
+      <span title="Osobny czas dla każdej serii — puste pole bierze czas wspólny" style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.46rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.03em', fontWeight: 700, marginRight: 1 }}>czas/seria</span>
+      {Array.from({ length: n }, (_, i) => (
+        <label key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, border: `1px solid ${ex.iso_seconds_sets?.[i] != null ? 'var(--navy-900)' : 'var(--border)'}`, borderRadius: 6, background: '#ffffff', padding: '2px 4px' }}>
+          <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.46rem', color: 'var(--muted-light)', fontWeight: 700 }}>S{i + 1}</span>
+          <input
+            type="number" min={0} max={600}
+            value={ex.iso_seconds_sets?.[i] ?? ''}
+            onChange={e => onChange(i, e.target.value)}
+            onBlur={onCommit}
+            onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+            placeholder={ex.iso_seconds != null ? String(ex.iso_seconds) : '20'}
+            style={{ width: 24, minWidth: 0, border: 'none', background: 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.64rem', fontWeight: 800, color: 'var(--navy-900)', padding: 0, outline: 'none', textAlign: 'center' }}
+          />
+          <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.5rem', color: 'var(--muted-light)' }}>s</span>
+        </label>
+      ))}
+    </div>
+  )
 }
 
 // Rozpiska obowiązująca daną zawodniczkę — zawsze nagłówek grupy (warianty usunięte).
@@ -611,19 +660,34 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     }))
   }
 
+  function handleIsoSetSeconds(exerciseId: number, setIdx: number, value: string) {
+    setExercises(prev => prev.map(e => {
+      if (e.id !== exerciseId) return e
+      const arr = [...(e.iso_seconds_sets || [])]
+      while (arr.length <= setIdx) arr.push(null)
+      arr[setIdx] = value === '' ? null : parseInt(value) || null
+      return { ...e, iso_seconds_sets: arr }
+    }))
+  }
+
   async function persistExercise(exerciseId: number) {
     const ex = exercises.find(e => e.id === exerciseId)
     if (!ex) return
+    const update: Record<string, any> = {
+      name: ex.name.trim(), sets_planned: ex.sets_planned ?? null, reps: ex.reps?.trim() || null, tempo: ex.tempo?.trim() || null,
+      iso_seconds: ex.iso_seconds ?? null, iso_intensity: ex.iso_intensity ?? null,
+    }
+    // Czas per seria wysyłamy tylko dla ISO — brak migracji nie blokuje zwykłych ćwiczeń
+    if (ex.iso) update.iso_seconds_sets = normalizeIsoSets(ex)
     const { error: err } = await supabase
       .from('group_training_exercises')
-      .update({
-        name: ex.name.trim(), sets_planned: ex.sets_planned ?? null, reps: ex.reps?.trim() || null, tempo: ex.tempo?.trim() || null,
-        iso_seconds: ex.iso_seconds ?? null, iso_intensity: ex.iso_intensity ?? null,
-      })
+      .update(update)
       .eq('id', ex.id)
-    if (err) setError(/'iso_seconds'|'iso_intensity'/.test(err.message)
-      ? 'Aby używać ćwiczeń izometrycznych, uruchom migrację 202609200002.'
-      : err.message)
+    if (err) setError(/'iso_seconds_sets'/.test(err.message)
+      ? 'Aby ustawiać osobny czas dla każdej serii, uruchom migrację 202610030001.'
+      : /'iso_seconds'|'iso_intensity'/.test(err.message)
+        ? 'Aby używać ćwiczeń izometrycznych, uruchom migrację 202609200002.'
+        : err.message)
   }
 
   // Przełącz ćwiczenie izometryczne — przy pierwszym włączeniu ustaw sensowne
@@ -1183,6 +1247,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 </div>
                               ))}
                             </div>
+                            {ex.iso && <IsoSetTimesEditor ex={ex} onChange={(i, v) => handleIsoSetSeconds(ex.id, i, v)} onCommit={() => persistExercise(ex.id)} />}
                             <div style={{ display: 'flex', gap: 4, rowGap: 4, marginTop: 6, flexWrap: 'wrap' }}>
                               {!ex.bodyweight && (
                                 <button
@@ -1303,7 +1368,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                         title={s.skipped ? 'Seria nie zrobiona — kliknij, by cofnąć' : 'Oznacz: nie zrobiła tej serii'}
                                         style={{ display: 'block', width: '100%', border: 'none', background: 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.5rem', color: s.skipped ? '#c23b3b' : 'var(--muted-light)', textAlign: 'center', marginBottom: 1, letterSpacing: '0.03em', textDecoration: s.skipped ? 'line-through' : 'none', padding: 0 }}
                                       >
-                                        S{i + 1}
+                                        S{i + 1}{ex.iso && isoSetTimes(ex)[i] != null ? ` · ${isoSetTimes(ex)[i]}s` : ''}
                                       </button>
                                       {s.skipped ? (
                                         <button
@@ -1533,6 +1598,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                   </>
                                 )}
                               </div>
+                              {ex.iso && <div style={{ marginTop: -2, marginBottom: 6 }}><IsoSetTimesEditor ex={ex} onChange={(i, v) => handleIsoSetSeconds(ex.id, i, v)} onCommit={() => persistExercise(ex.id)} /></div>}
                               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, flexWrap: 'wrap', width: 260 }}>
                                 {sets.map((s, i) => {
                                   const repsPerf = s.reps && !isMaxReps(s.reps) ? s.reps : ''
@@ -1544,7 +1610,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                         title={s.skipped ? 'Seria nie zrobiona — kliknij, by cofnąć' : 'Oznacz: nie zrobiła tej serii'}
                                         style={{ display: 'block', width: '100%', border: 'none', background: 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.5rem', color: s.skipped ? '#c23b3b' : 'var(--muted-light)', textAlign: 'center', marginBottom: 1, textDecoration: s.skipped ? 'line-through' : 'none', padding: 0 }}
                                       >
-                                        S{i + 1}
+                                        S{i + 1}{ex.iso && isoSetTimes(ex)[i] != null ? ` · ${isoSetTimes(ex)[i]}s` : ''}
                                       </button>
                                       {s.skipped ? (
                                         <button
