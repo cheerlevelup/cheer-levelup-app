@@ -5,9 +5,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { formatDatePl } from '@/lib/groupTraining'
-import { CheckSquare, MessageCircle, Info, AlertTriangle, Pencil, Plus, Check, X, Trash2, PanelLeftClose, PanelLeftOpen, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { CheckSquare, MessageCircle, Info, AlertTriangle, Pencil, Plus, Check, X, Trash2, PanelLeftClose, PanelLeftOpen, ChevronsLeft, ChevronsRight, Download } from 'lucide-react'
 import { SetPageMeta, usePageMeta } from '@/components/coach/PageMetaContext'
 import { Button } from '@/components/coach/ui'
+import { loadPdf, pl, drawHeaderBar, drawFooter, TABLE_STYLES } from '@/lib/groupPdf'
 
 type Group = { id: number; name: string }
 type Training = { id: number; group_id: number; training_date: string; absent_athlete_ids?: number[] | null; individual_athlete_ids?: number[] | null }
@@ -1186,6 +1187,104 @@ export default function GroupTrainingClient({ group, training, athletes, initial
   }
 
   // Skopiuj listę ćwiczeń z ostatniego wcześniejszego treningu tej grupy
+  // ── Eksport PDF: tabela treningu jak na ekranie (bloki, A1/A2, serie zawodniczek) ──
+  const [exportingPdf, setExportingPdf] = useState(false)
+
+  // Zawartość komórki w PDF: zamiana ćwiczenia, serie (S1: 40 kg), ból, notatka
+  function pdfCellText(ex: Exercise, entry: Entry | null | undefined): string {
+    if (entry?.excluded) return 'nie robi'
+    const repsMode = isMaxReps(resolvePresc(ex, entry).reps) || !!entry?.bodyweight || !!ex.bodyweight
+    const times = ex.iso ? isoSetTimes(ex) : []
+    const lines: string[] = []
+    if (entry?.exercise_override) lines.push(`> ${entry.exercise_override}`)
+    effectiveSets(ex, entry).forEach((s, i) => {
+      const t = times[i] != null ? ` (${times[i]}s)` : ''
+      const val = s.skipped ? 'x'
+        : repsMode ? (s.reps && !isMaxReps(s.reps) ? `${s.reps} powt.` : '-')
+        : (s.weight ? `${s.weight} kg` : '-')
+      lines.push(`S${i + 1}${t}: ${val}`)
+    })
+    if (entry?.pain || entry?.pain_vas != null) lines.push(`! bol${entry.pain_vas != null ? ` ${entry.pain_vas}/10` : ''}${entry.pain_comment ? `: ${entry.pain_comment}` : ''}`)
+    if (entry?.comment) lines.push(`"${entry.comment}"`)
+    return pl(lines.join('\n'))
+  }
+
+  async function exportTrainingPdf() {
+    if (exportingPdf || sortedExercises.length === 0) return
+    setExportingPdf(true)
+    try {
+      const { jsPDF, autoTable } = await loadPdf()
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+      const blue: [number, number, number] = [13, 27, 42]
+      const gold: [number, number, number] = [245, 200, 66]
+      const exHead = (ex: Exercise) => {
+        const presc = formatExercisePresc(ex)
+        return pl(`${exerciseLabel.get(ex.id) ?? ''} ${ex.name || 'Bez nazwy'}${presc ? `\n${presc}` : ''}`)
+      }
+      const nameCell = (a: Athlete, absent: boolean) => pl(a.full_name + (absent ? ' (nieob.)' : ''))
+      const startY = drawHeaderBar(doc, group.name, 'Trening', `${formatDatePl(trainingDate)} - ${trainingDate}`)
+
+      // Kolumny dzielimy na strony po maks. 6 ćwiczeń (kolumna z nazwiskiem powtarza się)
+      const PER_PAGE = 6
+      const chunks: Exercise[][] = []
+      for (let i = 0; i < sortedExercises.length; i += PER_PAGE) chunks.push(sortedExercises.slice(i, i + PER_PAGE))
+      chunks.forEach((chunk, ci) => {
+        if (ci > 0) doc.addPage()
+        // wiersz bloków nad ćwiczeniami: „Blok A" na szerokość jego kolumn
+        const blockRow: any[] = [{ content: '', styles: { fillColor: [255, 255, 255] } }]
+        for (const ex of chunk) {
+          const b = blocks.find(bl => bl.exercises.includes(ex))!
+          const last = blockRow[blockRow.length - 1]
+          if (last?.blockIndex === b.index) last.colSpan += 1
+          else blockRow.push({ content: `Blok ${b.letter}`, colSpan: 1, blockIndex: b.index, styles: { fillColor: blue, textColor: gold, halign: 'left' } })
+        }
+        autoTable(doc, {
+          startY: ci === 0 ? startY : 12,
+          head: [blockRow.map(({ blockIndex, ...cell }) => cell), ['Zawodniczka', ...chunk.map(exHead)]],
+          body: orderedAthletes.map(({ athlete, absent }) => [
+            nameCell(athlete, absent),
+            ...chunk.map(ex => absent ? '-' : pdfCellText(ex, entryMap.get(entryKey(ex.id, athlete.id)))),
+          ]),
+          ...TABLE_STYLES,
+          styles: { ...TABLE_STYLES.styles, fontSize: 7, valign: 'top' },
+          headStyles: { ...TABLE_STYLES.headStyles, fontSize: 7.5, valign: 'top' },
+          columnStyles: { 0: { halign: 'left', fontStyle: 'bold', cellWidth: 36 } },
+          didParseCell: (data: any) => {
+            if (data.section !== 'body' || data.column.index === 0) return
+            const text = String(data.cell.raw || '')
+            if (orderedAthletes[data.row.index]?.absent || text === 'nie robi') data.cell.styles.textColor = [160, 165, 175]
+            else if (/^! bol/m.test(text)) data.cell.styles.fillColor = [254, 242, 242]
+          },
+          didDrawPage: () => drawFooter(doc),
+        })
+      })
+
+      // Plany indywidualne — osobna tabelka na zawodniczkę
+      const individuals = athletes.filter(a => individualIds.has(a.id))
+      for (const person of individuals) {
+        const own = exercises.filter(e => e.athlete_id === person.id).sort((a, b) => a.exercise_order - b.exercise_order || a.id - b.id)
+        if (own.length === 0) continue
+        const prevY = (doc as any).lastAutoTable?.finalY ?? startY
+        autoTable(doc, {
+          startY: prevY + 8,
+          head: [[{ content: pl(`Plan indywidualny - ${person.full_name}`), colSpan: own.length, styles: { halign: 'left' } }],
+            own.map(ex => { const p = formatExercisePresc(ex); return pl(`${ex.name || 'Bez nazwy'}${p ? `\n${p}` : ''}`) })],
+          body: [own.map(ex => pdfCellText(ex, entryMap.get(entryKey(ex.id, person.id))))],
+          ...TABLE_STYLES,
+          styles: { ...TABLE_STYLES.styles, fontSize: 7, valign: 'top' },
+          headStyles: { ...TABLE_STYLES.headStyles, fontSize: 7.5 },
+          didDrawPage: () => drawFooter(doc),
+        })
+      }
+
+      doc.save(`trening_${pl(group.name).replace(/\s+/g, '_')}_${trainingDate}.pdf`)
+    } catch (e: any) {
+      setError(`Nie udało się wygenerować PDF: ${e?.message || e}`)
+    } finally {
+      setExportingPdf(false)
+    }
+  }
+
   async function handleCopyFromPrevious() {
     setCopying(true); setError('')
     const { data: prevTraining } = await supabase
@@ -1269,6 +1368,9 @@ export default function GroupTrainingClient({ group, training, athletes, initial
             </Button>
             <Button variant="ghost" size="small" onClick={() => router.push(`/coach/groups/${group.id}/feedback`)}>
               <MessageCircle size={13} /> Feedback po treningu
+            </Button>
+            <Button variant="dark" size="small" onClick={exportTrainingPdf} disabled={exportingPdf || sortedExercises.length === 0} style={{ color: 'var(--gold)' }}>
+              <Download size={13} /> {exportingPdf ? 'Generuję...' : 'PDF'}
             </Button>
             <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '11px', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>Data</span>
             <input
