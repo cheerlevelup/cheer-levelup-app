@@ -1522,7 +1522,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
       // osobno, żeby mieć pewne mapowanie stare id → nowe id dla wpisów.
       const stripRow = ({ id, training_id, created_at, updated_at, ...rest }: any) => rest
       const copied = await Promise.all(prevExercises.map((e: any) =>
-        supabase.from('group_training_exercises').insert({ ...stripRow(e), training_id: training.id }).select().single()
+        supabase.from('group_training_exercises').insert({ ...stripRow(e), training_id: training.id, block_index: e.block_index ?? 0 }).select().single()
       ))
       const failed = copied.find(r => r.error || !r.data)
       const newExercises = copied.filter(r => r.data).map(r => r.data as Exercise)
