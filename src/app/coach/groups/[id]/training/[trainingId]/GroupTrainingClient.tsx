@@ -1297,6 +1297,24 @@ export default function GroupTrainingClient({ group, training, athletes, initial
       const MARGIN = 8
       const NAME_W = 34
       const LINK_ICON_W = 7
+
+      // Fioletowy długopis (skośny korpus + grot) stojący na linii bazowej tekstu;
+      // h ≈ wysokość wielkiej litery. Zwraca szerokość zajętą przez ikonkę z odstępem.
+      function drawPenIcon(doc: any, x: number, baselineY: number, h: number): number {
+        const d = [Math.SQRT1_2, -Math.SQRT1_2]   // kierunek grot → koniec (w górę i w prawo)
+        const n = [Math.SQRT1_2, Math.SQRT1_2]    // prostopadle
+        const w = h * 0.17, len = h * 1.25
+        const T = [x, baselineY]
+        const at = (t: number, s: number) => [T[0] + d[0] * t + n[0] * s, T[1] + d[1] * t + n[1] * s]
+        doc.setFillColor(...PURPLE)
+        const [b1, b2, e1, e2] = [at(len * 0.3, w), at(len * 0.3, -w), at(len, w), at(len, -w)]
+        doc.triangle(T[0], T[1], b1[0], b1[1], b2[0], b2[1], 'F')                        // grot
+        const [g1, g2] = [at(len * 0.38, w), at(len * 0.38, -w)]                          // przerwa za grotem
+        doc.triangle(g1[0], g1[1], g2[0], g2[1], e1[0], e1[1], 'F')                       // korpus (2 trójkąty)
+        doc.triangle(g2[0], g2[1], e2[0], e2[1], e1[0], e1[1], 'F')
+        // ≈ szerokość „> ", którą zastępuje — zawijanie liczone przez autoTable dalej pasuje
+        return len * Math.SQRT1_2 + w + h * 0.15
+      }
       const present = orderedAthletes.filter(r => !r.absent).map(r => r.athlete)
       const lineH = (pt: number) => pt * 0.3528 * 1.15
 
@@ -1361,7 +1379,10 @@ export default function GroupTrainingClient({ group, training, athletes, initial
               const fsMm = data.cell.styles.fontSize / doc.internal.scaleFactor
               const pos = data.cell.getTextPos()
               doc.setFont('helvetica', 'normal'); doc.setFontSize(data.cell.styles.fontSize); doc.setTextColor(...PURPLE)
-              p.lines.forEach((l: string, k: number) => doc.text(l, pos.x, pos.y + fsMm * (2 - 1.15) + (p.from + k) * fsMm * 1.15))
+              const baseline = (k: number) => pos.y + fsMm * (2 - 1.15) + (p.from + k) * fsMm * 1.15
+              // Zamiast znacznika „> " — ikonka długopisu przed pierwszą linią modyfikacji
+              const iconW = drawPenIcon(doc, pos.x, baseline(0), fsMm * 0.8)
+              p.lines.forEach((l: string, k: number) => doc.text(k === 0 ? l.replace(/^> /, '') : l, pos.x + (k === 0 ? iconW : 0), baseline(k)))
               doc.setTextColor(0, 0, 0)
               return
             }
