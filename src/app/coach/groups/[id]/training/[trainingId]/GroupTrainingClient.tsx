@@ -1187,26 +1187,44 @@ export default function GroupTrainingClient({ group, training, athletes, initial
   }
 
   // Skopiuj listę ćwiczeń z ostatniego wcześniejszego treningu tej grupy
-  // ── Eksport PDF: tabela treningu jak na ekranie (bloki, A1/A2, serie zawodniczek) ──
+  // ── Eksport PDF: każdy blok na osobnej stronie, tylko obecne zawodniczki ──
   const [exportingPdf, setExportingPdf] = useState(false)
 
-  // Zawartość komórki w PDF: zamiana ćwiczenia, serie (S1: 40 kg), ból, notatka
+  // Zawartość komórki w PDF — zwięźle, żeby wszystkie zawodniczki zmieściły się
+  // na stronie: "40 / 40 / x kg", pod spodem zamiana ćwiczenia, ból, notatka.
   function pdfCellText(ex: Exercise, entry: Entry | null | undefined): string {
     if (entry?.excluded) return 'nie robi'
     const repsMode = isMaxReps(resolvePresc(ex, entry).reps) || !!entry?.bodyweight || !!ex.bodyweight
-    const times = ex.iso ? isoSetTimes(ex) : []
-    const lines: string[] = []
+    const vals = effectiveSets(ex, entry).map(s => s.skipped ? 'x'
+      : repsMode ? (s.reps && !isMaxReps(s.reps) ? s.reps : '-')
+      : (s.weight || '-'))
+    const filled = vals.some(v => v !== '-' && v !== 'x')
+    const lines = [vals.join(' / ') + (filled ? (repsMode ? ' powt.' : ' kg') : '')]
     if (entry?.exercise_override) lines.push(`> ${entry.exercise_override}`)
-    effectiveSets(ex, entry).forEach((s, i) => {
-      const t = times[i] != null ? ` (${times[i]}s)` : ''
-      const val = s.skipped ? 'x'
-        : repsMode ? (s.reps && !isMaxReps(s.reps) ? `${s.reps} powt.` : '-')
-        : (s.weight ? `${s.weight} kg` : '-')
-      lines.push(`S${i + 1}${t}: ${val}`)
-    })
     if (entry?.pain || entry?.pain_vas != null) lines.push(`! bol${entry.pain_vas != null ? ` ${entry.pain_vas}/10` : ''}${entry.pain_comment ? `: ${entry.pain_comment}` : ''}`)
     if (entry?.comment) lines.push(`"${entry.comment}"`)
     return pl(lines.join('\n'))
+  }
+
+  // Rozpiska do nagłówka kolumny w PDF: "3 serie x 8/8/6 powt.  |  tempo 4141"
+  // albo dla ISO "2 serie x 45/60 s  |  @70%  |  HIMA".
+  function pdfPrescText(ex: Exercise): string {
+    const n = planSetCount(ex)
+    const series = `${n} ${n === 1 ? 'seria' : n < 5 ? 'serie' : 'serii'}`
+    const parts: string[] = []
+    if (ex.iso) {
+      const secs = joinPerSet(planValues(ex, 'iso_seconds'))
+      parts.push(secs ? `${series} x ${secs} s` : series)
+      const intensity = joinPerSet(planValues(ex, 'iso_intensity'), '%')
+      if (ex.iso_type !== 'HIMA' && intensity) parts.push(`@${intensity}`)
+      if (ex.iso_type) parts.push(ex.iso_type)
+    } else {
+      const reps = joinPerSet(planValues(ex, 'reps'))
+      parts.push(reps ? `${series} x ${reps} powt.` : series)
+      const tempo = joinPerSet(planValues(ex, 'tempo'))
+      if (tempo) parts.push(`tempo ${tempo}`)
+    }
+    return pl(parts.join('  |  '))
   }
 
   async function exportTrainingPdf() {
@@ -1214,67 +1232,105 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     setExportingPdf(true)
     try {
       const { jsPDF, autoTable } = await loadPdf()
-      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-      const blue: [number, number, number] = [13, 27, 42]
-      const gold: [number, number, number] = [245, 200, 66]
-      const exHead = (ex: Exercise) => {
-        const presc = formatExercisePresc(ex)
-        return pl(`${exerciseLabel.get(ex.id) ?? ''} ${ex.name || 'Bez nazwy'}${presc ? `\n${presc}` : ''}`)
-      }
-      const nameCell = (a: Athlete, absent: boolean) => pl(a.full_name + (absent ? ' (nieob.)' : ''))
-      const startY = drawHeaderBar(doc, group.name, 'Trening', `${formatDatePl(trainingDate)} - ${trainingDate}`)
+      const NAVY: [number, number, number] = [13, 27, 42]
+      const GOLD: [number, number, number] = [245, 200, 66]
+      const MARGIN = 8
+      const NAME_W = 34
+      const present = orderedAthletes.filter(r => !r.absent).map(r => r.athlete)
+      const lineH = (pt: number) => pt * 0.3528 * 1.15
 
-      // Kolumny dzielimy na strony po maks. 6 ćwiczeń (kolumna z nazwiskiem powtarza się)
-      const PER_PAGE = 6
-      const chunks: Exercise[][] = []
-      for (let i = 0; i < sortedExercises.length; i += PER_PAGE) chunks.push(sortedExercises.slice(i, i + PER_PAGE))
-      chunks.forEach((chunk, ci) => {
-        if (ci > 0) doc.addPage()
-        // wiersz bloków nad ćwiczeniami: „Blok A" na szerokość jego kolumn
-        const blockRow: any[] = [{ content: '', styles: { fillColor: [255, 255, 255] } }]
-        for (const ex of chunk) {
-          const b = blocks.find(bl => bl.exercises.includes(ex))!
-          const last = blockRow[blockRow.length - 1]
-          if (last?.blockIndex === b.index) last.colSpan += 1
-          else blockRow.push({ content: `Blok ${b.letter}`, colSpan: 1, blockIndex: b.index, styles: { fillColor: blue, textColor: gold, halign: 'left' } })
-        }
+      // Rysuje stronę jednego bloku z danym rozmiarem czcionki; true = zmieściła się na 1 stronie.
+      function drawBlockPage(doc: any, block: (typeof blocks)[number], fs: number): boolean {
+        const startPage = doc.getNumberOfPages()
+        const startY = drawHeaderBar(doc, group.name, `Trening - Blok ${block.letter}`, `${formatDatePl(trainingDate)} - ${trainingDate}`)
+        const pageW = doc.internal.pageSize.getWidth()
+        const colW = (pageW - 2 * MARGIN - NAME_W) / block.exercises.length
+        const pad = 2
+        const pillW = 7 + fs * 0.35, pillH = lineH(fs + 1) + 1
+        const nameFs = fs + 1.5, prescFs = fs
+
+        // Wysokość nagłówka: nazwa (zawijana obok etykiety A1) + rozpiska pod spodem
+        const headLayout = block.exercises.map(ex => {
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(nameFs)
+          const nameLines = doc.splitTextToSize(pl(ex.name || 'Bez nazwy'), colW - 3 * pad - pillW)
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(prescFs)
+          const prescLines = doc.splitTextToSize(pdfPrescText(ex), colW - 2 * pad)
+          const nameH = Math.max(pillH, nameLines.length * lineH(nameFs))
+          return { nameLines, prescLines, nameH, height: pad + nameH + 1.6 + prescLines.length * lineH(prescFs) + pad }
+        })
+        const headH = Math.max(...headLayout.map(h => h.height))
+
         autoTable(doc, {
-          startY: ci === 0 ? startY : 12,
-          head: [blockRow.map(({ blockIndex, ...cell }) => cell), ['Zawodniczka', ...chunk.map(exHead)]],
-          body: orderedAthletes.map(({ athlete, absent }) => [
-            nameCell(athlete, absent),
-            ...chunk.map(ex => absent ? '-' : pdfCellText(ex, entryMap.get(entryKey(ex.id, athlete.id)))),
-          ]),
+          startY,
+          margin: { left: MARGIN, right: MARGIN, bottom: 10 },
+          head: [['Zawodniczka', ...block.exercises.map(() => '')]],
+          body: present.map(a => [pl(a.full_name), ...block.exercises.map(ex => pdfCellText(ex, entryMap.get(entryKey(ex.id, a.id))))]),
           ...TABLE_STYLES,
-          styles: { ...TABLE_STYLES.styles, fontSize: 7, valign: 'top' },
-          headStyles: { ...TABLE_STYLES.headStyles, fontSize: 7.5, valign: 'top' },
-          columnStyles: { 0: { halign: 'left', fontStyle: 'bold', cellWidth: 36 } },
+          styles: { ...TABLE_STYLES.styles, fontSize: fs, cellPadding: Math.max(0.8, fs * 0.2), valign: 'top', overflow: 'linebreak' },
+          headStyles: { ...TABLE_STYLES.headStyles, fontSize: fs, minCellHeight: headH, valign: 'middle' },
+          columnStyles: Object.fromEntries([[0, { halign: 'left', fontStyle: 'bold', cellWidth: NAME_W }], ...block.exercises.map((_, i) => [i + 1, { cellWidth: colW }])]),
           didParseCell: (data: any) => {
             if (data.section !== 'body' || data.column.index === 0) return
             const text = String(data.cell.raw || '')
-            if (orderedAthletes[data.row.index]?.absent || text === 'nie robi') data.cell.styles.textColor = [160, 165, 175]
+            if (text === 'nie robi') data.cell.styles.textColor = [160, 165, 175]
             else if (/^! bol/m.test(text)) data.cell.styles.fillColor = [254, 242, 242]
+          },
+          // Nagłówek ćwiczenia rysowany ręcznie: złota etykieta A1, nazwa, rozpiska
+          didDrawCell: (data: any) => {
+            if (data.section !== 'head' || data.column.index === 0) return
+            const i = data.column.index - 1
+            const ex = block.exercises[i], hl = headLayout[i]
+            const { x, y } = data.cell
+            doc.setFillColor(...GOLD)
+            doc.roundedRect(x + pad, y + pad, pillW, pillH, 0.8, 0.8, 'F')
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(fs + 0.5); doc.setTextColor(...NAVY)
+            doc.text(exerciseLabel.get(ex.id) ?? '', x + pad + pillW / 2, y + pad + pillH / 2, { align: 'center', baseline: 'middle' })
+            doc.setFontSize(nameFs); doc.setTextColor(255, 255, 255)
+            doc.text(hl.nameLines, x + 2 * pad + pillW, y + pad + (hl.nameLines.length === 1 ? (pillH - lineH(nameFs)) / 2 : 0), { baseline: 'top', lineHeightFactor: 1.15 })
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(prescFs); doc.setTextColor(...GOLD)
+            doc.text(hl.prescLines, x + pad, y + pad + hl.nameH + 1.6, { baseline: 'top', lineHeightFactor: 1.15 })
+            doc.setTextColor(0, 0, 0)
           },
           didDrawPage: () => drawFooter(doc),
         })
+        return doc.getNumberOfPages() === startPage
+      }
+
+      // Największa czcionka, przy której blok mieści się na jednej stronie
+      function fitFontSize(block: (typeof blocks)[number]): number {
+        for (let fs = 8.5; fs > 4; fs -= 0.5) {
+          const probe = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+          if (drawBlockPage(probe, block, fs)) return fs
+        }
+        return 4
+      }
+
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+      blocks.forEach((block, bi) => {
+        if (bi > 0) doc.addPage()
+        drawBlockPage(doc, block, fitFontSize(block))
       })
 
-      // Plany indywidualne — osobna tabelka na zawodniczkę
+      // Plany indywidualne — osobna strona, tabelka na zawodniczkę
       const individuals = athletes.filter(a => individualIds.has(a.id))
-      for (const person of individuals) {
-        const own = exercises.filter(e => e.athlete_id === person.id).sort((a, b) => a.exercise_order - b.exercise_order || a.id - b.id)
-        if (own.length === 0) continue
-        const prevY = (doc as any).lastAutoTable?.finalY ?? startY
-        autoTable(doc, {
-          startY: prevY + 8,
-          head: [[{ content: pl(`Plan indywidualny - ${person.full_name}`), colSpan: own.length, styles: { halign: 'left' } }],
-            own.map(ex => { const p = formatExercisePresc(ex); return pl(`${ex.name || 'Bez nazwy'}${p ? `\n${p}` : ''}`) })],
-          body: [own.map(ex => pdfCellText(ex, entryMap.get(entryKey(ex.id, person.id))))],
-          ...TABLE_STYLES,
-          styles: { ...TABLE_STYLES.styles, fontSize: 7, valign: 'top' },
-          headStyles: { ...TABLE_STYLES.headStyles, fontSize: 7.5 },
-          didDrawPage: () => drawFooter(doc),
-        })
+        .map(person => ({ person, own: exercises.filter(e => e.athlete_id === person.id).sort((a, b) => a.exercise_order - b.exercise_order || a.id - b.id) }))
+        .filter(x => x.own.length > 0)
+      if (individuals.length) {
+        doc.addPage()
+        let y = drawHeaderBar(doc, group.name, 'Plany indywidualne', `${formatDatePl(trainingDate)} - ${trainingDate}`)
+        for (const { person, own } of individuals) {
+          autoTable(doc, {
+            startY: y,
+            margin: { left: MARGIN, right: MARGIN, bottom: 10 },
+            head: [[{ content: pl(person.full_name), colSpan: own.length, styles: { halign: 'left', fontSize: 9 } }],
+              own.map(ex => pl(`${ex.name || 'Bez nazwy'}\n`) + pdfPrescText(ex))],
+            body: [own.map(ex => pdfCellText(ex, entryMap.get(entryKey(ex.id, person.id))))],
+            ...TABLE_STYLES,
+            styles: { ...TABLE_STYLES.styles, fontSize: 7.5, valign: 'top' },
+            didDrawPage: () => drawFooter(doc),
+          })
+          y = (doc as any).lastAutoTable.finalY + 6
+        }
       }
 
       doc.save(`trening_${pl(group.name).replace(/\s+/g, '_')}_${trainingDate}.pdf`)
