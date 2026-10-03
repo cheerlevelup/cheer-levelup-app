@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { formatDatePl } from '@/lib/groupTraining'
-import { CheckSquare, MessageCircle, Info, AlertTriangle, Pencil, Plus, Check, X, Trash2, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { CheckSquare, MessageCircle, Info, AlertTriangle, Pencil, Plus, Check, X, Trash2, PanelLeftClose, PanelLeftOpen, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { SetPageMeta, usePageMeta } from '@/components/coach/PageMetaContext'
 import { Button } from '@/components/coach/ui'
 
@@ -17,6 +17,8 @@ type Exercise = {
   training_id: number
   name: string
   exercise_order: number
+  // blok ćwiczeń (0 = A, 1 = B...); brak = blok A
+  block_index?: number | null
   // rozpiska dla całej grupy (nagłówek kolumny)
   sets_planned?: number | null
   reps?: string | null
@@ -153,6 +155,11 @@ function avatarBg(name: string) {
 // Ćwiczenie „na maksa" — w polu POWT. wpisano max/maks/amrap/do upadku.
 // Wtedy w komórkach zawodniczek wpisujemy wykonane powtórzenia, nie ciężar.
 const isMaxReps = (reps?: string | null) => /(amrap|maks|max|upad)/i.test((reps || '').trim())
+
+// Bloki ćwiczeń: numer bloku kolumny i litera wg pozycji bloku (A, B, ... Z, AA...)
+const blockOf = (ex: Exercise) => ex.block_index ?? 0
+const blockLetter = (pos: number): string =>
+  pos < 26 ? String.fromCharCode(65 + pos) : blockLetter(Math.floor(pos / 26) - 1) + String.fromCharCode(65 + (pos % 26))
 
 // Kolumny tabelki serii w nagłówku ćwiczenia: normalnie powt./tempo, dla ISO
 // czas (+ intensywność przy PIMA). Każda wartość ma wersję per seria (*_sets);
@@ -589,9 +596,55 @@ export default function GroupTrainingClient({ group, training, athletes, initial
 
   // Kolumny wspólne dla grupy (athlete_id puste) — to one tworzą główną siatkę.
   const sortedExercises = useMemo(
-    () => [...exercises].filter(e => !e.athlete_id).sort((a, b) => a.exercise_order - b.exercise_order || a.id - b.id),
+    () => [...exercises].filter(e => !e.athlete_id).sort((a, b) => blockOf(a) - blockOf(b) || a.exercise_order - b.exercise_order || a.id - b.id),
     [exercises]
   )
+
+  // Bloki ćwiczeń: litery A, B, C... wg kolejności niepustych bloków (po usunięciu
+  // wszystkich ćwiczeń bloku kolejne litery się przesuwają), ćwiczenia A1, A2...
+  const blocks = useMemo(() => {
+    const out: { index: number; letter: string; exercises: Exercise[] }[] = []
+    for (const ex of sortedExercises) {
+      const last = out[out.length - 1]
+      if (last && last.index === blockOf(ex)) last.exercises.push(ex)
+      else out.push({ index: blockOf(ex), letter: blockLetter(out.length), exercises: [ex] })
+    }
+    return out
+  }, [sortedExercises])
+  const exerciseLabel = useMemo(() => {
+    const m = new Map<number, string>()
+    for (const b of blocks) b.exercises.forEach((ex, i) => m.set(ex.id, `${b.letter}${i + 1}`))
+    return m
+  }, [blocks])
+  const lastBlockIndex = blocks.length ? blocks[blocks.length - 1].index : 0
+
+  // Zwinięte bloki — tylko widok, pamiętany w przeglądarce per trening
+  const collapsedKey = `gt-collapsed-blocks-${training.id}`
+  const [collapsedBlocks, setCollapsedBlocks] = useState<Set<number>>(() => new Set())
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(collapsedKey) || '[]')
+      if (Array.isArray(saved)) setCollapsedBlocks(new Set(saved.filter((n: unknown) => typeof n === 'number')))
+    } catch {}
+  }, [collapsedKey])
+  function toggleBlockCollapsed(blockIndex: number) {
+    setCollapsedBlocks(prev => {
+      const next = new Set(prev)
+      if (next.has(blockIndex)) next.delete(blockIndex); else next.add(blockIndex)
+      try { localStorage.setItem(collapsedKey, JSON.stringify(Array.from(next))) } catch {}
+      return next
+    })
+  }
+
+  // Kolumny siatki: ćwiczenia rozwiniętych bloków albo jeden wąski pasek za zwinięty
+  // blok. exIdx to pozycja w sortedExercises (nawigacja klawiaturą).
+  type BoardColumn =
+    | { kind: 'ex'; ex: Exercise; exIdx: number; blockStart: boolean }
+    | { kind: 'collapsed'; block: (typeof blocks)[number] }
+  const boardColumns = useMemo(() => blocks.flatMap((b): BoardColumn[] => collapsedBlocks.has(b.index)
+    ? [{ kind: 'collapsed', block: b }]
+    : b.exercises.map((ex, i) => ({ kind: 'ex', ex, exIdx: sortedExercises.indexOf(ex), blockStart: i === 0 }))
+  ), [blocks, collapsedBlocks, sortedExercises])
 
   // Zawodniczki "wyciągnięte" do treningu indywidualnego znikają z głównej siatki
   // i dostają własną sekcję niżej — niezależnie od tego, kto jest nieobecny.
@@ -664,16 +717,24 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     await saveEntryMeta(athlete, ex, { excluded: !entry?.excluded })
   }
 
-  // Nowa kolumna ćwiczenia — od razu z pustym polem nazwy do wpisania (jak w Excelu)
-  async function handleAddExercise() {
+  // Nowa kolumna ćwiczenia — od razu z pustym polem nazwy do wpisania (jak w Excelu).
+  // Domyślnie trafia do ostatniego bloku; „Nowy blok" podaje kolejny numer bloku.
+  async function handleAddExercise(blockIndex = lastBlockIndex) {
     setError('')
     const maxOrder = Math.max(0, ...exercises.map(e => e.exercise_order))
+    // block_index wysyłamy tylko poza blokiem A — bez migracji blok A dalej działa
     const { data, error: err } = await supabase
       .from('group_training_exercises')
-      .insert({ training_id: training.id, name: '', exercise_order: maxOrder + 1, sets_planned: 3 })
+      .insert({ training_id: training.id, name: '', exercise_order: maxOrder + 1, sets_planned: 3, ...(blockIndex ? { block_index: blockIndex } : {}) })
       .select()
       .single()
-    if (err || !data) { setError(err?.message || 'Błąd dodawania ćwiczenia'); return }
+    if (err || !data) {
+      setError(/'block_index'/.test(err?.message || '')
+        ? 'Aby grupować ćwiczenia w bloki, uruchom migrację 202610030003.'
+        : (err?.message || 'Błąd dodawania ćwiczenia'))
+      return
+    }
+    if (blockIndex && collapsedBlocks.has(blockIndex)) toggleBlockCollapsed(blockIndex)
     setExercises(prev => [...prev, data as Exercise])
     setFocusExerciseId((data as Exercise).id)
   }
@@ -858,15 +919,21 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     const fromIdx = ordered.findIndex(e => e.id === fromId)
     const toIdx = ordered.findIndex(e => e.id === targetId)
     if (fromIdx < 0 || toIdx < 0) return
+    // Przeciągnięte ćwiczenie przechodzi do bloku ćwiczenia, na które je upuszczono
+    const targetBlock = blockOf(ordered[toIdx])
+    const blockChanged = blockOf(ordered[fromIdx]) !== targetBlock
     const [moved] = ordered.splice(fromIdx, 1)
-    ordered.splice(toIdx, 0, moved)
+    ordered.splice(toIdx, 0, { ...moved, block_index: targetBlock })
     const updates = ordered.map((e, i) => ({ id: e.id, exercise_order: i }))
     setExercises(prev => prev.map(e => {
       const u = updates.find(x => x.id === e.id)
-      return u ? { ...e, exercise_order: u.exercise_order } : e
+      if (!u) return e
+      return { ...e, exercise_order: u.exercise_order, ...(e.id === fromId ? { block_index: targetBlock } : {}) }
     }))
     const results = await Promise.all(updates.map(u =>
-      supabase.from('group_training_exercises').update({ exercise_order: u.exercise_order }).eq('id', u.id)
+      supabase.from('group_training_exercises')
+        .update({ exercise_order: u.exercise_order, ...(u.id === fromId && blockChanged ? { block_index: targetBlock } : {}) })
+        .eq('id', u.id)
     ))
     const failed = results.find(r => r.error)
     if (failed?.error) setError(failed.error.message)
@@ -992,14 +1059,19 @@ export default function GroupTrainingClient({ group, training, athletes, initial
   function handleSetNavKeyDown(e: React.KeyboardEvent<HTMLInputElement>, athlete: Athlete, ex: Exercise, exIdx: number, rowIdx: number, setIdx: number, field: 'weight' | 'reps') {
     if (e.key === 'ArrowRight') {
       e.preventDefault()
-      if (!focusSetCell(exIdx, rowIdx, setIdx + 1)) focusSetCell(exIdx + 1, rowIdx, 0)
+      // na krawędzi — pierwsze widoczne ćwiczenie dalej (zwinięte bloki pomijamy)
+      if (!focusSetCell(exIdx, rowIdx, setIdx + 1)) {
+        for (let j = exIdx + 1; j < sortedExercises.length; j++) if (focusSetCell(j, rowIdx, 0)) break
+      }
       return
     }
     if (e.key === 'ArrowLeft') {
       e.preventDefault()
       if (!focusSetCell(exIdx, rowIdx, setIdx - 1)) {
-        const last = lastSetIdxAt(exIdx - 1, rowIdx)
-        if (last >= 0) focusSetCell(exIdx - 1, rowIdx, last)
+        for (let j = exIdx - 1; j >= 0; j--) {
+          const last = lastSetIdxAt(j, rowIdx)
+          if (last >= 0 && focusSetCell(j, rowIdx, last)) break
+        }
       }
       return
     }
@@ -1138,6 +1210,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
         training_id: training.id,
         name: e.name,
         exercise_order: e.exercise_order,
+        ...(e.block_index ? { block_index: e.block_index } : {}),
         sets_planned: e.sets_planned ?? null,
         reps: e.reps ?? null,
         tempo: e.tempo ?? null,
@@ -1157,6 +1230,8 @@ export default function GroupTrainingClient({ group, training, athletes, initial
         .gt-sticky { position: sticky; left: 0; z-index: 2; background: #ffffff; box-shadow: 3px 0 8px rgba(13,27,42,0.05); }
         .gt-table thead th { position: sticky; top: 0; z-index: 4; box-shadow: 0 2px 6px rgba(13,27,42,0.05); }
         .gt-table thead th.gt-sticky { z-index: 5; }
+        .gt-table thead tr.gt-ex-row th { top: 30px; }
+        .gt-table th.gt-block-start, .gt-table td.gt-block-start { border-left: 2px solid var(--navy-900); }
         .gt-row td { transition: background 0.12s ease; }
         .gt-row:nth-child(even) td, .gt-row:nth-child(even) .gt-sticky { background: #FBFCFE; }
         .gt-row:hover td, .gt-row:hover .gt-sticky { background: #EFF4FB; }
@@ -1206,7 +1281,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
         </div>
         {helpOpen && (
           <p style={{ color: 'var(--muted)', fontSize: '0.8rem', margin: 0, maxWidth: 900, fontFamily: 'var(--font-inter), sans-serif' }}>
-            W nagłówku kolumny: serie, powtórzenia i tempo dla całej grupy. Przeciągnij ⠿, by zmienić kolejność. „BW" wpisuje 0 (masa ciała) w ciężar wszystkim, „P" przełącza kolumnę na wpisywanie powtórzeń zamiast kg. W wierszu zawodniczki wpisujesz ciężar, „+ ból"/„+ notatka" dają szybki wpis bez ✎. Kliknij numer serii (S1, S2…), by oznaczyć „nie zrobiła", a ✕ przy nazwisku wykreśla nieobecną. W polu z ciężarem: ← / → przechodzi między seriami (i ćwiczeniami), Enter — do tej samej serii u zawodniczki poniżej. Mały ⊘ przy komórce wyklucza jedną zawodniczkę z tego jednego ćwiczenia. Ikona osoby przy nazwisku przenosi ją do odrębnego planu indywidualnego.
+            W nagłówku kolumny: serie, powtórzenia i tempo dla całej grupy. Przeciągnij ⠿, by zmienić kolejność. „BW" wpisuje 0 (masa ciała) w ciężar wszystkim, „P" przełącza kolumnę na wpisywanie powtórzeń zamiast kg. W wierszu zawodniczki wpisujesz ciężar, „+ ból"/„+ notatka" dają szybki wpis bez ✎. Kliknij numer serii (S1, S2…), by oznaczyć „nie zrobiła", a ✕ przy nazwisku wykreśla nieobecną. W polu z ciężarem: ← / → przechodzi między seriami (i ćwiczeniami), Enter — do tej samej serii u zawodniczki poniżej. Mały ⊘ przy komórce wyklucza jedną zawodniczkę z tego jednego ćwiczenia. Ikona osoby przy nazwisku przenosi ją do odrębnego planu indywidualnego. Ćwiczenia grupujesz w bloki (A, B, C…): „+ Ćwiczenie" dodaje do ostatniego bloku, „+ Nowy blok" zaczyna kolejny, a « przy nazwie bloku zwija go w wąski pasek (» rozwija).
           </p>
         )}
 
@@ -1236,15 +1311,77 @@ export default function GroupTrainingClient({ group, training, athletes, initial
               <div ref={boardWrapRef} className="coach-attendance-grid-wrap" style={{ background: '#ffffff', overflow: 'auto', flex: '1 1 auto', minHeight: 260, boxShadow: 'var(--shadow)' }}>
                 <table className="gt-table">
                   <thead>
-                    <tr>
-                      <th className="gt-sticky" style={{ width: 165, minWidth: 165, maxWidth: 165, padding: '0.55rem 0.5rem', textAlign: 'left', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.6rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.08em', background: 'var(--bg)', zIndex: 5 }}>
+                    {/* Wiersz bloków: „Blok A" nad ćwiczeniami bloku, zwinięty blok = wąski pasek */}
+                    <tr className="gt-block-row">
+                      <th rowSpan={2} className="gt-sticky" style={{ width: 165, minWidth: 165, maxWidth: 165, padding: '0.55rem 0.5rem', textAlign: 'left', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.6rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.08em', background: 'var(--bg)', zIndex: 5 }}>
                         Zawodniczka
                       </th>
-                      {sortedExercises.map(ex => {
+                      {blocks.map(b => collapsedBlocks.has(b.index) ? (
+                        <th key={b.index} rowSpan={2} className="gt-block-start" style={{ width: 40, minWidth: 40, maxWidth: 40, padding: '0.4rem 0', background: 'var(--navy-900)', verticalAlign: 'top' }}>
+                          <button
+                            onClick={() => toggleBlockCollapsed(b.index)}
+                            title={`Rozwiń blok ${b.letter}`}
+                            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, width: '100%', border: 'none', background: 'none', color: 'var(--gold)', padding: 0, outline: 'none' }}
+                          >
+                            <ChevronsRight size={14} />
+                            <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.9rem', fontWeight: 800 }}>{b.letter}</span>
+                            <span style={{ writingMode: 'vertical-rl', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.6rem', fontWeight: 700, color: '#aeb7cc', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
+                              {b.exercises.map(ex => exerciseLabel.get(ex.id)).join(' · ')}
+                            </span>
+                          </button>
+                        </th>
+                      ) : (
+                        <th key={b.index} colSpan={b.exercises.length} className="gt-block-start" style={{ height: 30, padding: '0 0.5rem', background: 'var(--navy-900)', verticalAlign: 'middle' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'sticky', left: 173, width: 'max-content' }}>
+                            <button
+                              onClick={() => toggleBlockCollapsed(b.index)}
+                              title={`Zwiń blok ${b.letter}`}
+                              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, border: 'none', borderRadius: 5, background: 'rgba(255,255,255,0.08)', color: 'var(--gold)', padding: 0, outline: 'none' }}
+                            >
+                              <ChevronsLeft size={13} />
+                            </button>
+                            <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.74rem', fontWeight: 800, color: 'var(--gold)', letterSpacing: '0.04em' }}>Blok {b.letter}</span>
+                            <button
+                              onClick={() => handleAddExercise(b.index)}
+                              title={`Dodaj ćwiczenie do bloku ${b.letter}`}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 3, border: 'none', borderRadius: 5, background: 'rgba(255,255,255,0.08)', color: '#ffffff', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.6rem', fontWeight: 700, padding: '3px 7px', outline: 'none' }}
+                            >
+                              <Plus size={10} /> ćwiczenie
+                            </button>
+                          </div>
+                        </th>
+                      ))}
+                      <th rowSpan={2} style={{ width: 92, minWidth: 92, padding: '0.4rem 0.35rem', background: 'var(--bg)', border: 'none' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <button
+                            onClick={() => handleAddExercise()}
+                            title={blocks.length ? `Dodaj ćwiczenie do bloku ${blocks[blocks.length - 1].letter}` : 'Dodaj ćwiczenie'}
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, width: '100%', minHeight: 34, border: `1.5px dashed var(--muted-light)`, borderRadius: 8, background: '#ffffff', color: 'var(--navy-900)', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.62rem', fontWeight: 700, outline: 'none' }}
+                          >
+                            <Plus size={12} /> Ćwiczenie
+                          </button>
+                          {blocks.length > 0 && (
+                            <button
+                              onClick={() => handleAddExercise(lastBlockIndex + 1)}
+                              title={`Rozpocznij blok ${blockLetter(blocks.length)}`}
+                              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, width: '100%', minHeight: 34, border: 'none', borderRadius: 8, background: 'var(--navy-900)', color: 'var(--gold)', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.62rem', fontWeight: 700, outline: 'none' }}
+                            >
+                              <Plus size={12} /> Nowy blok
+                            </button>
+                          )}
+                        </div>
+                      </th>
+                      {/* Wypełniacz — nie pozwala kolumnom ćwiczeń rozciągać się na cały ekran */}
+                      <th rowSpan={2} style={{ width: '100%', background: 'var(--bg)', border: 'none' }} />
+                    </tr>
+                    <tr className="gt-ex-row">
+                      {boardColumns.map(col => {
+                        if (col.kind !== 'ex') return null
+                        const ex = col.ex
                         return (
                           <th
                             key={ex.id}
-                            className="gt-ex-header"
+                            className={`gt-ex-header${col.blockStart ? ' gt-block-start' : ''}`}
                             onDragOver={e => { if (dragExId.current != null) { e.preventDefault(); if (dragOverExId !== ex.id) setDragOverExId(ex.id) } }}
                             onDrop={e => { e.preventDefault(); reorderExercise(ex.id) }}
                             style={{ width: 336, minWidth: 336, maxWidth: 336, padding: '0.35rem 0.5rem', background: 'var(--bg)', boxShadow: dragOverExId === ex.id ? `inset 3px 0 0 var(--gold)` : undefined }}
@@ -1259,6 +1396,9 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 style={{ cursor: 'grab', color: 'var(--muted-light)', fontSize: '0.82rem', lineHeight: 1, flexShrink: 0, padding: '0 1px', userSelect: 'none' }}
                               >
                                 ⠿
+                              </span>
+                              <span style={{ flexShrink: 0, minWidth: 26, textAlign: 'center', borderRadius: 6, background: 'var(--navy-900)', color: 'var(--gold)', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.66rem', fontWeight: 800, padding: '3px 5px', lineHeight: 1 }}>
+                                {exerciseLabel.get(ex.id)}
                               </span>
                               <input
                                 ref={el => { if (el) nameInputRefs.current.set(ex.id, el); else nameInputRefs.current.delete(ex.id) }}
@@ -1335,17 +1475,6 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                           </th>
                         )
                       })}
-                      <th style={{ width: 44, minWidth: 44, padding: 0, background: 'var(--bg)', border: 'none' }}>
-                        <button
-                          onClick={handleAddExercise}
-                          title="Dodaj ćwiczenie (nowa kolumna)"
-                          style={{ width: '100%', height: '100%', minHeight: 44, border: 'none', background: 'none', color: 'var(--navy-900)', fontWeight: 800, fontSize: '1.05rem' }}
-                        >
-                          ＋
-                        </button>
-                      </th>
-                      {/* Wypełniacz — nie pozwala kolumnom ćwiczeń rozciągać się na cały ekran */}
-                      <th style={{ width: '100%', background: 'var(--bg)', border: 'none' }} />
                     </tr>
                   </thead>
                   <tbody>
@@ -1375,7 +1504,11 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                             </button>
                           </div>
                         </td>
-                        {sortedExercises.map((ex, exIdx) => {
+                        {boardColumns.map(col => {
+                          if (col.kind === 'collapsed') {
+                            return <td key={`block-${col.block.index}`} className="gt-block-start" style={{ background: 'var(--bg)', width: 40, minWidth: 40, maxWidth: 40 }} />
+                          }
+                          const { ex, exIdx } = col
                           const entry = entryMap.get(entryKey(ex.id, athlete.id)) || null
                           const sets = effectiveSets(ex, entry)
                           // Tryb powtórzeń: „P" kolumny, „max" z rozpiski, albo „bez ciężaru"
@@ -1383,7 +1516,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                           const repsMode = isMaxReps(resolvePresc(ex, entry).reps) || !!entry?.bodyweight || !!ex.bodyweight
                           const excluded = !!entry?.excluded
                           return (
-                            <td key={ex.id} style={{ padding: '0.35rem 0.4rem', ...(absent || excluded ? { opacity: 0.35, pointerEvents: 'none' as const } : {}) }}>
+                            <td key={ex.id} className={col.blockStart ? 'gt-block-start' : undefined} style={{ padding: '0.35rem 0.4rem', ...(absent || excluded ? { opacity: 0.35, pointerEvents: 'none' as const } : {}) }}>
                               <button
                                 onClick={() => toggleExcludeFromExercise(athlete, ex)}
                                 title={excluded ? 'Przywróć do tego ćwiczenia' : 'Ta zawodniczka nie robi tego ćwiczenia'}
@@ -1793,7 +1926,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                 const excludedCount = boardAthletes.filter(a => !absentIds.has(a.id) && entryMap.get(entryKey(ex.id, a.id))?.excluded).length
                 return (
                   <div key={ex.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '0.5rem 0', borderBottom: `1px solid var(--border)`, fontSize: '0.82rem' }}>
-                    <span>{ex.name || 'Bez nazwy'}</span>
+                    <span><b>{exerciseLabel.get(ex.id)}</b> {ex.name || 'Bez nazwy'}</span>
                     <b>{done}/{active.length} uzupełnionych{excludedCount ? ` · ${excludedCount} nie robi tego ćwiczenia` : ''}</b>
                   </div>
                 )
