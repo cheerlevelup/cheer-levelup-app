@@ -1234,6 +1234,9 @@ export default function GroupTrainingClient({ group, training, athletes, initial
       const { jsPDF, autoTable } = await loadPdf()
       const NAVY: [number, number, number] = [13, 27, 42]
       const GOLD: [number, number, number] = [245, 200, 66]
+      // modyfikacja ćwiczenia — jak na ekranie (#7c3aed na jasnofioletowym tle)
+      const PURPLE: [number, number, number] = [124, 58, 237]
+      const PURPLE_BG: [number, number, number] = [243, 236, 253]
       const MARGIN = 8
       const NAME_W = 34
       const present = orderedAthletes.filter(r => !r.absent).map(r => r.athlete)
@@ -1273,11 +1276,38 @@ export default function GroupTrainingClient({ group, training, athletes, initial
             if (data.section !== 'body' || data.column.index === 0) return
             const text = String(data.cell.raw || '')
             if (text === 'nie robi') data.cell.styles.textColor = [160, 165, 175]
+            else if (/^> /m.test(text)) data.cell.styles.fillColor = PURPLE_BG
             else if (/^! bol/m.test(text)) data.cell.styles.fillColor = [254, 242, 242]
           },
-          // Nagłówek ćwiczenia rysowany ręcznie: złota etykieta A1, nazwa, rozpiska
+          // Linie modyfikacji ćwiczenia („> ...", także zawinięte) rysujemy na fioletowo:
+          // autoTable ma jeden kolor na komórkę, więc tu je wygaszamy, a w didDrawCell dorysowujemy.
+          willDrawCell: (data: any) => {
+            if (data.section !== 'body' || data.column.index === 0) return
+            const cell = data.cell
+            if (!cell.purple) {
+              const lines: string[] = cell.text
+              const from = lines.findIndex(l => l.startsWith('> '))
+              if (from < 0) return
+              let to = from + 1
+              while (to < lines.length && !lines[to].startsWith('! bol') && !lines[to].startsWith('"')) to++
+              cell.purple = { from, lines: lines.slice(from, to) }
+              cell.text = lines.map((l, i) => i >= from && i < to ? '' : l)
+            }
+          },
           didDrawCell: (data: any) => {
-            if (data.section !== 'head' || data.column.index === 0) return
+            if (data.section === 'body') {
+              const p = data.cell.purple
+              if (!p) return
+              // ta sama geometria co autoTableText (wyrównanie do góry, interlinia 1.15)
+              const fsMm = data.cell.styles.fontSize / doc.internal.scaleFactor
+              const pos = data.cell.getTextPos()
+              doc.setFont('helvetica', 'normal'); doc.setFontSize(data.cell.styles.fontSize); doc.setTextColor(...PURPLE)
+              p.lines.forEach((l: string, k: number) => doc.text(l, pos.x, pos.y + fsMm * (2 - 1.15) + (p.from + k) * fsMm * 1.15))
+              doc.setTextColor(0, 0, 0)
+              return
+            }
+            // Nagłówek ćwiczenia rysowany ręcznie: złota etykieta A1, nazwa, rozpiska
+            if (data.column.index === 0) return
             const i = data.column.index - 1
             const ex = block.exercises[i], hl = headLayout[i]
             const { x, y } = data.cell
@@ -1674,7 +1704,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                           const repsMode = isMaxReps(resolvePresc(ex, entry).reps) || !!entry?.bodyweight || !!ex.bodyweight
                           const excluded = !!entry?.excluded
                           return (
-                            <td key={ex.id} className={col.blockStart ? 'gt-block-start' : undefined} style={{ padding: '0.35rem 0.4rem', ...(absent || excluded ? { opacity: 0.35, pointerEvents: 'none' as const } : {}) }}>
+                            <td key={ex.id} className={col.blockStart ? 'gt-block-start' : undefined} style={{ padding: '0.35rem 0.4rem', ...(entry?.exercise_override ? { background: '#F7F2FE' } : {}), ...(absent || excluded ? { opacity: 0.35, pointerEvents: 'none' as const } : {}) }}>
                               <button
                                 onClick={() => toggleExcludeFromExercise(athlete, ex)}
                                 title={excluded ? 'Przywróć do tego ćwiczenia' : 'Ta zawodniczka nie robi tego ćwiczenia'}
