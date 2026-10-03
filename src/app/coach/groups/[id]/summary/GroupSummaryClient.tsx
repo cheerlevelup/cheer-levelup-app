@@ -28,25 +28,37 @@ type Exercise = {
   id: number; name: string; exercise_order: number; sets_planned?: number | null; reps?: string | null; tempo?: string | null
   bodyweight?: boolean | null; variants?: TaskVariant[] | null; individual?: boolean | null
   iso?: boolean | null; iso_type?: 'PIMA' | 'HIMA' | null; iso_seconds?: number | null; iso_intensity?: number | null
-  iso_seconds_sets?: (number | null)[] | null
+  iso_seconds_sets?: (number | null)[] | null; iso_intensity_sets?: (number | null)[] | null
+  reps_sets?: (string | null)[] | null; tempo_sets?: (string | null)[] | null
+}
+
+// Wartości per seria (tabelka serii w edytorze) — własna wartość serii albo wspólna
+function perSet<T>(ex: Exercise, sets: (T | null)[] | null | undefined, base: T | null | undefined): (T | null)[] {
+  return Array.from({ length: Math.max(ex.sets_planned ?? 0, 1) }, (_, i) => sets?.[i] ?? base ?? null)
+}
+// "8" gdy wszystkie serie równe, inaczej "8/8/6"
+function joinPerSet(values: (string | number | null)[], suffix = ''): string {
+  if (values.every(v => v == null || v === '')) return ''
+  if (values.every(v => v === values[0])) return `${values[0]}${suffix}`
+  return `${values.map(v => v ?? '?').join('/')}${suffix}`
 }
 
 // Skrótowy opis rozpiski — jak w edytorze treningu (GroupTrainingClient): "3×8, tempo 3010"
-// albo dla ISO "3×20s @70% (PIMA)" / "3×20s (HIMA)".
+// albo dla ISO "3×20s @70% (PIMA)" / "3×20s (HIMA)"; różne serie: "8/8/6" / "45/40/30s".
 function formatExercisePresc(ex: Exercise): string {
   if (ex.iso) {
-    const sets = ex.sets_planned != null ? `${ex.sets_planned}×` : ''
-    const secs = ex.iso_seconds != null ? `${ex.iso_seconds}s` : ''
-    const intensity = ex.iso_type !== 'HIMA' && ex.iso_intensity != null ? ` @${ex.iso_intensity}%` : ''
+    const times = perSet(ex, ex.iso_seconds_sets, ex.iso_seconds)
+    const sets = ex.sets_planned != null && new Set(times).size <= 1 ? `${ex.sets_planned}×` : ''
+    const intensityVal = joinPerSet(perSet(ex, ex.iso_intensity_sets, ex.iso_intensity), '%')
+    const intensity = ex.iso_type !== 'HIMA' && intensityVal ? ` @${intensityVal}` : ''
     const type = ex.iso_type ? ` (${ex.iso_type})` : ''
-    // Różne czasy w seriach: "45/40/30s" zamiast "3×45s"
-    const perSet = Array.from({ length: Math.max(ex.sets_planned ?? 0, 1) }, (_, i) => ex.iso_seconds_sets?.[i] ?? ex.iso_seconds ?? null)
-    if (perSet.some(t => t !== ex.iso_seconds)) return `${perSet.map(t => t ?? '?').join('/')}s${intensity}${type}`.trim()
-    return `${sets}${secs}${intensity}${type}`.trim()
+    return `${sets}${joinPerSet(times, 's')}${intensity}${type}`.trim()
   }
+  const reps = perSet(ex, ex.reps_sets, ex.reps)
+  const repsStr = joinPerSet(reps)
   return [
-    ex.sets_planned && ex.reps ? `${ex.sets_planned} × ${ex.reps}` : ex.sets_planned ? `${ex.sets_planned} ser.` : ex.reps ? `${ex.reps} powt.` : '',
-    ex.tempo || '',
+    ex.sets_planned && repsStr ? (new Set(reps).size > 1 ? repsStr : `${ex.sets_planned} × ${repsStr}`) : ex.sets_planned ? `${ex.sets_planned} ser.` : repsStr ? `${repsStr} powt.` : '',
+    joinPerSet(perSet(ex, ex.tempo_sets, ex.tempo)),
   ].filter(Boolean).join(' · ')
 }
 type Entry = {
