@@ -1494,40 +1494,72 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     }
   }
 
+  // Kopia całego poprzedniego treningu „jak ten sam trening": wszystkie kolumny ćwiczeń
+  // (bloki, serie, ISO, linki, plany indywidualne) i wszystkie wpisy zawodniczek
+  // (serie, ciężary, ból, komentarze, modyfikacje). Nieobecności się nie kopiują.
   async function handleCopyFromPrevious() {
     setCopying(true); setError('')
-    const { data: prevTraining } = await supabase
-      .from('group_trainings')
-      .select('id, training_date')
-      .eq('group_id', group.id)
-      .neq('id', training.id)
-      .lt('training_date', trainingDate)
-      .order('training_date', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    if (!prevTraining) { setError('Brak wcześniejszego treningu do skopiowania.'); setCopying(false); return }
-    const { data: prevExercises } = await supabase
-      .from('group_training_exercises')
-      .select('*')
-      .eq('training_id', prevTraining.id)
-      .order('exercise_order', { ascending: true })
-    if (!prevExercises || prevExercises.length === 0) { setError('Poprzedni trening nie miał ćwiczeń.'); setCopying(false); return }
-    const { data: inserted, error: err } = await supabase
-      .from('group_training_exercises')
-      .insert(prevExercises.map((e: any) => ({
-        training_id: training.id,
-        name: e.name,
-        exercise_order: e.exercise_order,
-        ...(e.block_index ? { block_index: e.block_index } : {}),
-        ...(e.link_url ? { link_url: e.link_url } : {}),
-        sets_planned: e.sets_planned ?? null,
-        reps: e.reps ?? null,
-        tempo: e.tempo ?? null,
-      })))
-      .select()
-    setCopying(false)
-    if (err || !inserted) { setError(err?.message || 'Błąd kopiowania'); return }
-    setExercises(prev => [...prev, ...(inserted as Exercise[])])
+    try {
+      const { data: prevTraining } = await supabase
+        .from('group_trainings')
+        .select('*')
+        .eq('group_id', group.id)
+        .neq('id', training.id)
+        .lt('training_date', trainingDate)
+        .order('training_date', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (!prevTraining) { setError('Brak wcześniejszego treningu do skopiowania.'); return }
+      const { data: prevExercises, error: exErr } = await supabase
+        .from('group_training_exercises')
+        .select('*')
+        .eq('training_id', prevTraining.id)
+        .order('exercise_order', { ascending: true })
+      if (exErr) { setError(exErr.message); return }
+      if (!prevExercises || prevExercises.length === 0) { setError('Poprzedni trening nie miał ćwiczeń.'); return }
+
+      // Każdy wiersz kopiujemy w całości (te same kolumny co w bazie, bez id) —
+      // osobno, żeby mieć pewne mapowanie stare id → nowe id dla wpisów.
+      const stripRow = ({ id, training_id, created_at, updated_at, ...rest }: any) => rest
+      const copied = await Promise.all(prevExercises.map((e: any) =>
+        supabase.from('group_training_exercises').insert({ ...stripRow(e), training_id: training.id }).select().single()
+      ))
+      const failed = copied.find(r => r.error || !r.data)
+      const newExercises = copied.filter(r => r.data).map(r => r.data as Exercise)
+      if (newExercises.length) setExercises(prev => [...prev, ...newExercises])
+      if (failed) { setError(failed.error?.message || 'Błąd kopiowania ćwiczeń'); return }
+      const idMap = new Map<number, number>(prevExercises.map((e: any, i: number) => [e.id, newExercises[i].id]))
+
+      const { data: prevEntries, error: enErr } = await supabase
+        .from('group_training_entries')
+        .select('*')
+        .eq('training_id', prevTraining.id)
+      if (enErr) { setError(enErr.message); return }
+      const rows = (prevEntries || [])
+        .filter((en: any) => idMap.has(en.exercise_id))
+        .map((en: any) => ({ ...stripRow(en), training_id: training.id, exercise_id: idMap.get(en.exercise_id), updated_at: new Date().toISOString() }))
+      if (rows.length) {
+        const { data: newEntries, error: insErr } = await supabase.from('group_training_entries').insert(rows).select()
+        if (insErr) { setError(insErr.message); return }
+        latestSetsRef.current.clear()
+        setEntryMap(prev => {
+          const next = new Map(prev)
+          for (const en of (newEntries || []) as Entry[]) next.set(entryKey(en.exercise_id, en.athlete_id), en)
+          return next
+        })
+      }
+
+      // Zawodniczki na planie indywidualnym — tak samo jak w poprzednim treningu
+      const prevIndividual: number[] = prevTraining.individual_athlete_ids || []
+      if (prevIndividual.length) {
+        const merged = Array.from(new Set([...Array.from(individualIds), ...prevIndividual]))
+        const { error: trErr } = await supabase.from('group_trainings').update({ individual_athlete_ids: merged }).eq('id', training.id)
+        if (trErr) setError(trErr.message)
+        else setIndividualIds(new Set(merged))
+      }
+    } finally {
+      setCopying(false)
+    }
   }
 
   return (
