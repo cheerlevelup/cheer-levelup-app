@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { formatDatePl } from '@/lib/groupTraining'
-import { CheckSquare, MessageCircle, Info, AlertTriangle, Pencil, Plus, Check, X, Trash2, PanelLeftClose, PanelLeftOpen, ChevronsLeft, ChevronsRight, Download } from 'lucide-react'
+import { CheckSquare, MessageCircle, Info, AlertTriangle, Pencil, Plus, Check, X, Trash2, PanelLeftClose, PanelLeftOpen, ChevronsLeft, ChevronsRight, Download, Link2 } from 'lucide-react'
 import { SetPageMeta, usePageMeta } from '@/components/coach/PageMetaContext'
 import { Button } from '@/components/coach/ui'
 import { loadPdf, pl, drawHeaderBar, drawFooter, TABLE_STYLES } from '@/lib/groupPdf'
@@ -20,6 +20,8 @@ type Exercise = {
   exercise_order: number
   // blok ćwiczeń (0 = A, 1 = B...); brak = blok A
   block_index?: number | null
+  // link do ćwiczenia (np. film z techniką) — ikonka w nagłówku i w PDF
+  link_url?: string | null
   // rozpiska dla całej grupy (nagłówek kolumny)
   sets_planned?: number | null
   reps?: string | null
@@ -142,6 +144,46 @@ function InlineFieldEditor({ initialValue, initialScale, placeholder, borderColo
         <X size={13} />
       </button>
     </div>
+  )
+}
+
+// Link wklejony bez protokołu (youtu.be/...) — dopisujemy https://, żeby działał po kliknięciu
+function normalizeUrl(raw: string): string | null {
+  const v = raw.trim()
+  if (!v) return null
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(v) ? v : `https://${v}`
+}
+
+// Link do ćwiczenia pod nazwą: edytor (po kliknięciu ikonki) albo klikalny adres
+function ExerciseLinkRow({ ex, editing, onSave, onCancel }: {
+  ex: Exercise
+  editing: boolean
+  onSave: (url: string) => void
+  onCancel: () => void
+}) {
+  if (editing) {
+    return (
+      <InlineFieldEditor
+        initialValue={ex.link_url || ''}
+        placeholder="Wklej link, np. https://youtu.be/... (puste = usuń)"
+        borderColor="#2c5aa3"
+        bg="#eaf1fb"
+        onSave={val => onSave(val)}
+        onCancel={onCancel}
+      />
+    )
+  }
+  if (!ex.link_url) return null
+  let label = ex.link_url
+  try { const u = new URL(ex.link_url); label = u.hostname.replace(/^www\./, '') + (u.pathname.length > 1 ? u.pathname : '') } catch {}
+  return (
+    <a
+      href={ex.link_url} target="_blank" rel="noopener noreferrer" title={ex.link_url}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%', marginTop: 4, fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.64rem', fontWeight: 600, color: '#2c5aa3', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+    >
+      <Link2 size={11} style={{ flexShrink: 0 }} />
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+    </a>
   )
 }
 
@@ -750,6 +792,21 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     }))
   }
 
+  // Link do ćwiczenia — zapis od razu po zatwierdzeniu w polu pod nazwą
+  const [linkEditId, setLinkEditId] = useState<number | null>(null)
+  async function saveExerciseLink(exerciseId: number, raw: string) {
+    setLinkEditId(null)
+    const url = normalizeUrl(raw)
+    const prev = exercises.find(e => e.id === exerciseId)?.link_url ?? null
+    if (url === prev) return
+    setExercises(p => p.map(e => e.id === exerciseId ? { ...e, link_url: url } : e))
+    const { error: err } = await supabase.from('group_training_exercises').update({ link_url: url }).eq('id', exerciseId)
+    if (err) {
+      setExercises(p => p.map(e => e.id === exerciseId ? { ...e, link_url: prev } : e))
+      setError(/'link_url'/.test(err.message) ? 'Aby dodawać linki do ćwiczeń, uruchom migrację 202610030004.' : err.message)
+    }
+  }
+
   // Tabelka serii — liczba wierszy to sets_planned, wartości w *_sets; pole
   // bazowe (reps, tempo, iso_seconds...) trzyma wartość 1. serii dla starszych widoków.
   // `mutate` dostaje wiersze serii (wartość każdej kolumny) i zwraca nowe.
@@ -1239,6 +1296,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
       const PURPLE_BG: [number, number, number] = [243, 236, 253]
       const MARGIN = 8
       const NAME_W = 34
+      const LINK_ICON_W = 7
       const present = orderedAthletes.filter(r => !r.absent).map(r => r.athlete)
       const lineH = (pt: number) => pt * 0.3528 * 1.15
 
@@ -1255,7 +1313,8 @@ export default function GroupTrainingClient({ group, training, athletes, initial
         // Wysokość nagłówka: nazwa (zawijana obok etykiety A1) + rozpiska pod spodem
         const headLayout = block.exercises.map(ex => {
           doc.setFont('helvetica', 'bold'); doc.setFontSize(nameFs)
-          const nameLines = doc.splitTextToSize(pl(ex.name || 'Bez nazwy'), colW - 3 * pad - pillW)
+          // z linkiem — miejsce na ikonkę w prawym górnym rogu
+          const nameLines = doc.splitTextToSize(pl(ex.name || 'Bez nazwy'), colW - 3 * pad - pillW - (ex.link_url ? LINK_ICON_W + pad : 0))
           doc.setFont('helvetica', 'normal'); doc.setFontSize(prescFs)
           const prescLines = doc.splitTextToSize(pdfPrescText(ex), colW - 2 * pad)
           const nameH = Math.max(pillH, nameLines.length * lineH(nameFs))
@@ -1320,6 +1379,18 @@ export default function GroupTrainingClient({ group, training, athletes, initial
             doc.setFont('helvetica', 'normal'); doc.setFontSize(prescFs); doc.setTextColor(...GOLD)
             doc.text(hl.prescLines, x + pad, y + pad + hl.nameH + 1.6, { baseline: 'top', lineHeightFactor: 1.15 })
             doc.setTextColor(0, 0, 0)
+            // Ikonka linku (dwa ogniwa łańcucha) — klikalna w PDF, otwiera link ćwiczenia
+            if (ex.link_url) {
+              const bw = LINK_ICON_W, bh = pillH
+              const bx = x + data.cell.width - pad - bw, by = y + pad
+              doc.setFillColor(44, 90, 163)
+              doc.roundedRect(bx, by, bw, bh, 0.8, 0.8, 'F')
+              const lw = bw * 0.36, lh = bh * 0.42, ly = by + (bh - lh) / 2
+              doc.setDrawColor(255, 255, 255); doc.setLineWidth(0.35)
+              doc.roundedRect(bx + bw * 0.16, ly, lw, lh, lh / 2, lh / 2, 'S')
+              doc.roundedRect(bx + bw * 0.48, ly, lw, lh, lh / 2, lh / 2, 'S')
+              doc.link(bx, by, bw, bh, { url: ex.link_url })
+            }
           },
           didDrawPage: () => drawFooter(doc),
         })
@@ -1396,6 +1467,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
         name: e.name,
         exercise_order: e.exercise_order,
         ...(e.block_index ? { block_index: e.block_index } : {}),
+        ...(e.link_url ? { link_url: e.link_url } : {}),
         sets_planned: e.sets_planned ?? null,
         reps: e.reps ?? null,
         tempo: e.tempo ?? null,
@@ -1603,6 +1675,13 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 onFocus={e => { e.target.style.background = '#ffffff'; e.target.style.borderColor = 'var(--gold)' }}
                               />
                               <button
+                                onClick={() => setLinkEditId(prev => prev === ex.id ? null : ex.id)}
+                                title={ex.link_url ? `Link: ${ex.link_url} (kliknij, by zmienić)` : 'Dodaj link do ćwiczenia (np. film z techniką)'}
+                                style={{ flexShrink: 0, width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: `1.5px solid ${ex.link_url ? '#2c5aa3' : 'var(--border)'}`, background: ex.link_url ? '#eaf1fb' : '#ffffff', color: ex.link_url ? '#2c5aa3' : 'var(--muted-light)', borderRadius: 7, outline: 'none' }}
+                              >
+                                <Link2 size={13} />
+                              </button>
+                              <button
                                 onClick={() => handleDeleteExercise(ex)}
                                 title="Usuń ćwiczenie"
                                 style={{ flexShrink: 0, width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: `1.5px solid var(--border)`, background: '#ffffff', color: 'var(--muted-light)', borderRadius: 7, outline: 'none' }}
@@ -1610,6 +1689,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 <Trash2 size={12} />
                               </button>
                             </div>
+                            <ExerciseLinkRow ex={ex} editing={linkEditId === ex.id} onSave={url => saveExerciseLink(ex.id, url)} onCancel={() => setLinkEditId(null)} />
                             {/* Rozpiska dla całej grupy — tabelka serii: powt./tempo, dla ISO czas (+ intensywność przy PIMA) */}
                             <SetPlanTable ex={ex} onChange={(i, field, v) => handlePlanCell(ex.id, i, field, v)} onCommit={() => persistExercise(ex.id)} onAdd={() => addPlanRow(ex.id)} onRemove={i => removePlanRow(ex.id, i)} />
                             <div style={{ display: 'flex', gap: 4, rowGap: 4, marginTop: 6, flexWrap: 'wrap' }}>
@@ -1913,7 +1993,11 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                   placeholder="nazwa ćwiczenia"
                                   style={{ flex: 1, minWidth: 0, border: 'none', background: 'none', fontWeight: 700, fontSize: '0.88rem', color: 'var(--navy-900)', padding: '0.2rem 0', outline: 'none', fontFamily: 'var(--font-inter), sans-serif' }}
                                 />
+                                <button onClick={() => setLinkEditId(prev => prev === ex.id ? null : ex.id)} title={ex.link_url ? `Link: ${ex.link_url} (kliknij, by zmienić)` : 'Dodaj link do ćwiczenia'} style={{ border: 'none', background: 'none', color: ex.link_url ? '#2c5aa3' : 'var(--muted-light)', padding: 2, flexShrink: 0, display: 'inline-flex' }}><Link2 size={13} /></button>
                                 <button onClick={() => handleDeleteExercise(ex)} title="Usuń ćwiczenie" style={{ border: 'none', background: 'none', color: 'var(--muted-light)', fontSize: '0.78rem', padding: 2, flexShrink: 0 }}>✕</button>
+                              </div>
+                              <div style={{ marginTop: -4, marginBottom: 6 }}>
+                                <ExerciseLinkRow ex={ex} editing={linkEditId === ex.id} onSave={url => saveExerciseLink(ex.id, url)} onCancel={() => setLinkEditId(null)} />
                               </div>
                               <div style={{ display: 'flex', gap: 4, rowGap: 4, flexWrap: 'wrap', marginBottom: 6, alignItems: 'flex-end' }}>
                                 <button
