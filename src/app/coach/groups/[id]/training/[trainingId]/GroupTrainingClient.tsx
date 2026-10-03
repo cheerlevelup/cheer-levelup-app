@@ -1258,7 +1258,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     const filled = vals.some(v => v !== '-' && v !== 'x')
     const lines = [vals.join(' / ') + (filled ? (repsMode ? ' powt.' : ' kg') : '')]
     if (entry?.exercise_override) lines.push(`> ${entry.exercise_override}`)
-    if (entry?.pain || entry?.pain_vas != null) lines.push(`! bol${entry.pain_vas != null ? ` ${entry.pain_vas}/10` : ''}${entry.pain_comment ? `: ${entry.pain_comment}` : ''}`)
+    if (entry?.pain || entry?.pain_vas != null) lines.push(`(!) bol${entry.pain_vas != null ? ` ${entry.pain_vas}/10` : ''}${entry.pain_comment ? `: ${entry.pain_comment}` : ''}`)
     if (entry?.comment) lines.push(`"${entry.comment}"`)
     return pl(lines.join('\n'))
   }
@@ -1315,6 +1315,19 @@ export default function GroupTrainingClient({ group, training, athletes, initial
         // ≈ szerokość „> ", którą zastępuje — zawijanie liczone przez autoTable dalej pasuje
         return len * Math.SQRT1_2 + w + h * 0.15
       }
+
+      // Czerwony trójkąt ostrzegawczy z białym wykrzyknikiem, stojący na linii bazowej;
+      // h = wysokość trójkąta. Zwraca szerokość z odstępem (≈ szerokość „(!) ").
+      function drawWarningIcon(doc: any, x: number, baselineY: number, h: number): number {
+        const w = h * 1.15, top = baselineY - h, cx = x + w / 2
+        doc.setFillColor(194, 59, 59)
+        doc.triangle(cx, top, x + w, baselineY, x, baselineY, 'F')
+        doc.setFillColor(255, 255, 255)
+        const bw = h * 0.13
+        doc.rect(cx - bw / 2, top + h * 0.32, bw, h * 0.36, 'F')   // kreska wykrzyknika
+        doc.rect(cx - bw / 2, top + h * 0.76, bw, h * 0.12, 'F')   // kropka
+        return w + h * 0.35
+      }
       const present = orderedAthletes.filter(r => !r.absent).map(r => r.athlete)
       const lineH = (pt: number) => pt * 0.3528 * 1.15
 
@@ -1354,35 +1367,53 @@ export default function GroupTrainingClient({ group, training, athletes, initial
             const text = String(data.cell.raw || '')
             if (text === 'nie robi') data.cell.styles.textColor = [160, 165, 175]
             else if (/^> /m.test(text)) data.cell.styles.fillColor = PURPLE_BG
-            else if (/^! bol/m.test(text)) data.cell.styles.fillColor = [254, 242, 242]
+            else if (/^\(!\) bol/m.test(text)) data.cell.styles.fillColor = [254, 242, 242]
           },
-          // Linie modyfikacji ćwiczenia („> ...", także zawinięte) rysujemy na fioletowo:
-          // autoTable ma jeden kolor na komórkę, więc tu je wygaszamy, a w didDrawCell dorysowujemy.
+          // Linie ze znacznikami rysujemy sami (autoTable ma jeden kolor na komórkę):
+          // modyfikacja „> ..." (także zawinięta) na fioletowo z długopisem, ból „(!) ..."
+          // z trójkątem ostrzegawczym. Tu je wygaszamy, w didDrawCell dorysowujemy.
           willDrawCell: (data: any) => {
             if (data.section !== 'body' || data.column.index === 0) return
             const cell = data.cell
-            if (!cell.purple) {
-              const lines: string[] = cell.text
-              const from = lines.findIndex(l => l.startsWith('> '))
-              if (from < 0) return
+            if (cell.marks) return
+            const lines: string[] = [...cell.text]
+            cell.marks = {}
+            const from = lines.findIndex(l => l.startsWith('> '))
+            if (from >= 0) {
               let to = from + 1
-              while (to < lines.length && !lines[to].startsWith('! bol') && !lines[to].startsWith('"')) to++
-              cell.purple = { from, lines: lines.slice(from, to) }
-              cell.text = lines.map((l, i) => i >= from && i < to ? '' : l)
+              while (to < lines.length && !lines[to].startsWith('(!) bol') && !lines[to].startsWith('"')) to++
+              cell.marks.purple = { from, lines: lines.slice(from, to) }
+              for (let i = from; i < to; i++) lines[i] = ''
             }
+            const painIdx = lines.findIndex(l => l.startsWith('(!) bol'))
+            if (painIdx >= 0) {
+              cell.marks.pain = { idx: painIdx, text: lines[painIdx].replace(/^\(!\) /, '') }
+              lines[painIdx] = ''
+            }
+            cell.text = lines
           },
           didDrawCell: (data: any) => {
             if (data.section === 'body') {
-              const p = data.cell.purple
-              if (!p) return
+              const m = data.cell.marks
+              if (!m || (!m.purple && !m.pain)) return
               // ta sama geometria co autoTableText (wyrównanie do góry, interlinia 1.15)
               const fsMm = data.cell.styles.fontSize / doc.internal.scaleFactor
               const pos = data.cell.getTextPos()
-              doc.setFont('helvetica', 'normal'); doc.setFontSize(data.cell.styles.fontSize); doc.setTextColor(...PURPLE)
-              const baseline = (k: number) => pos.y + fsMm * (2 - 1.15) + (p.from + k) * fsMm * 1.15
-              // Zamiast znacznika „> " — ikonka długopisu przed pierwszą linią modyfikacji
-              const iconW = drawPenIcon(doc, pos.x, baseline(0), fsMm * 0.8)
-              p.lines.forEach((l: string, k: number) => doc.text(k === 0 ? l.replace(/^> /, '') : l, pos.x + (k === 0 ? iconW : 0), baseline(k)))
+              const baseline = (line: number) => pos.y + fsMm * (2 - 1.15) + line * fsMm * 1.15
+              doc.setFont('helvetica', 'normal'); doc.setFontSize(data.cell.styles.fontSize)
+              if (m.purple) {
+                const p = m.purple
+                doc.setTextColor(...PURPLE)
+                // Zamiast znacznika „> " — ikonka długopisu przed pierwszą linią modyfikacji
+                const iconW = drawPenIcon(doc, pos.x, baseline(p.from), fsMm * 0.8)
+                p.lines.forEach((l: string, k: number) => doc.text(k === 0 ? l.replace(/^> /, '') : l, pos.x + (k === 0 ? iconW : 0), baseline(p.from + k)))
+              }
+              if (m.pain) {
+                // Zamiast „(!) " — czerwony trójkąt z wykrzyknikiem
+                const iconW = drawWarningIcon(doc, pos.x, baseline(m.pain.idx), fsMm * 0.85)
+                doc.setTextColor(...(data.cell.styles.textColor as [number, number, number]))
+                doc.text(m.pain.text, pos.x + iconW, baseline(m.pain.idx))
+              }
               doc.setTextColor(0, 0, 0)
               return
             }
