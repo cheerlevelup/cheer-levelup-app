@@ -337,8 +337,9 @@ export async function POST(req: NextRequest) {
       .single()
 
     // Email zawodniczki: najpierw z zalogowanej sesji (najbardziej niezawodne),
-    // fallback do admin API jeśli dostępne
-    let athleteEmail: string | null = user.email || null
+    // fallback do admin API jeśli dostępne. Gdy raport wysyła trener (zakończył
+    // trening za zawodniczkę w siatce planu), jego adres nie jest adresem zawodniczki.
+    let athleteEmail: string | null = user.email === 'cheerlevelup@gmail.com' ? null : (user.email || null)
 
     if (!athleteEmail && athlete?.user_id) {
       try {

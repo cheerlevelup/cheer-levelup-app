@@ -43,9 +43,14 @@ export default async function GroupPlanDayPage({ params }: Props) {
     .map(b => ({ ...b, workout_block_exercises: ((b.workout_block_exercises || []) as any[]).sort((x, y) => x.exercise_order - y.exercise_order) }))
   const exIds = blocks.flatMap(b => b.workout_block_exercises.map((e: any) => e.id))
 
-  const [{ data: overrides }, { data: sessions }, { data: assignments }] = await Promise.all([
+  const blockIds = blocks.map(b => b.id)
+  const [{ data: overrides }, { data: extras }, { data: sessions }, { data: assignments }] = await Promise.all([
     exIds.length && athleteIds.length
       ? supabase.from('athlete_exercise_overrides').select('*').in('block_exercise_id', exIds).in('athlete_id', athleteIds)
+      : Promise.resolve({ data: [] as any[] }),
+    // Dodatkowe ćwiczenia trenera dla pojedynczych zawodniczek (poza planem)
+    blockIds.length && athleteIds.length
+      ? supabase.from('athlete_extra_exercises').select('*, exercise:exercises(id, name)').in('block_id', blockIds).in('athlete_id', athleteIds).order('exercise_order', { ascending: true })
       : Promise.resolve({ data: [] as any[] }),
     athleteIds.length
       ? supabase.from('workout_sessions').select('*').eq('workout_day_id', dayId).in('athlete_id', athleteIds).order('created_at', { ascending: false })
@@ -64,9 +69,12 @@ export default async function GroupPlanDayPage({ params }: Props) {
   }
   const sessionIds = Object.values(sessionByAthlete).map((s: any) => s.id)
 
+  // Serie robocze i rozgrzewkowe — ćwiczenia z planu i dodatkowe (u zawodniczki
+  // seria dodatkowego ćwiczenia ma block_exercise_id = id z athlete_extra_exercises)
+  const logExIds = [...exIds, ...((extras || []) as any[]).map(e => e.id)]
   const [{ data: setLogs }, { data: painLogs }] = await Promise.all([
-    sessionIds.length && exIds.length
-      ? supabase.from('set_logs').select('*').in('workout_session_id', sessionIds).in('block_exercise_id', exIds).eq('is_warmup', false).order('created_at', { ascending: false })
+    sessionIds.length && logExIds.length
+      ? supabase.from('set_logs').select('*').in('workout_session_id', sessionIds).in('block_exercise_id', logExIds).order('created_at', { ascending: false })
       : Promise.resolve({ data: [] as any[] }),
     sessionIds.length
       ? supabase.from('pain_logs').select('*').in('workout_session_id', sessionIds).order('created_at', { ascending: false })
@@ -98,6 +106,7 @@ export default async function GroupPlanDayPage({ params }: Props) {
       blocks={blocks}
       athletes={athletes}
       overrides={overrides || []}
+      extras={extras || []}
       sessions={Object.values(sessionByAthlete)}
       setLogs={setLogs || []}
       painLogs={painLogs || []}

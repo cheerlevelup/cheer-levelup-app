@@ -19,12 +19,22 @@ type BlockEx = {
   id: number; block_id: number; exercise_order: number; sets: number | null; reps?: string | null; tempo?: string | null
   weight_kg?: number | null; rir?: number | null; coach_comment?: string | null; exercise_code?: string | null
   exercise?: { id: number; name: string } | null
+  warmup_sets?: WarmupSet[] | null; warmup_reps?: string | null; warmup_weight?: number | null
 }
+type WarmupSet = { reps?: string | null; weight_kg?: string | number | null; note?: string | null }
+// Dodatkowe ćwiczenie trenera dla jednej zawodniczki (athlete_extra_exercises)
+type Extra = {
+  id: number; athlete_id: number; block_id: number; exercise_order: number; sets: number | null; reps?: string | null
+  tempo?: string | null; weight_kg?: number | null; rir?: number | null; coach_note?: string | null; exercise_code?: string | null
+  exercise?: { id: number; name: string } | null
+}
+// Ćwiczenie w komórce zawodniczki — z planu (z jej modyfikacjami) albo dodatkowe
+type CellExercise = { id: number; name: string; sets: number; reps: string; weight: number | null; warmups: WarmupSet[] }
 type Block = { id: number; block_name: string | null; block_order: number; rounds?: number | null; workout_block_exercises: BlockEx[] }
-type Session = { id: number; athlete_id: number; workout_day_id: number; assignment_id: number | null; completed: boolean; date_completed?: string | null; created_at?: string }
-type SetLog = { id: number; workout_session_id: number; block_exercise_id: number; athlete_id: number; set_number: number; weight: number | null; reps_completed: number | null; completed: boolean; athlete_note?: string | null }
+type Session = { id: number; athlete_id: number; workout_day_id: number; assignment_id: number | null; completed: boolean; report_sent?: boolean | null; date_completed?: string | null; created_at?: string }
+type SetLog = { id: number; workout_session_id: number; block_exercise_id: number; athlete_id: number; set_number: number; weight: number | null; reps_completed: number | null; completed: boolean; is_warmup: boolean; athlete_note?: string | null }
 type PainLog = { id: number; workout_session_id: number; vas_score: number | null; pain_comment: string | null; pain_location: string | null }
-type Override = { athlete_id: number; block_exercise_id: number; sets_override?: number | null; reps_override?: string | null; tempo_override?: string | null; weight_override?: number | null; skip?: boolean | null; exercise_code_override?: string | null; is_substitution?: boolean | null }
+type Override = { athlete_id: number; block_exercise_id: number; sets_override?: number | null; reps_override?: string | null; tempo_override?: string | null; weight_override?: number | null; skip?: boolean | null; exercise_code_override?: string | null; is_substitution?: boolean | null; warmup_sets_override?: WarmupSet[] | null }
 
 interface Props {
   group: { id: number; name: string }
@@ -34,6 +44,7 @@ interface Props {
   blocks: Block[]
   athletes: Athlete[]
   overrides: Override[]
+  extras: Extra[]
   sessions: Session[]
   setLogs: SetLog[]
   painLogs: PainLog[]
@@ -43,7 +54,8 @@ interface Props {
 const INTER = 'var(--font-inter), sans-serif'
 const fmtName = (s: string) => s.replace(/-/g, ' ')
 const isAmrap = (r: unknown) => typeof r === 'string' && /(amrap|maks|max|upad)/i.test(r)
-const logKey = (sessionId: number, exId: number, setNum: number) => `${sessionId}_${exId}_${setNum}`
+// Seria robocza i rozgrzewkowa o tym samym numerze to osobne wiersze set_logs
+const logKey = (sessionId: number, exId: number, setNum: number, warmup = false) => `${sessionId}_${exId}_${setNum}_${warmup ? 'w' : 's'}`
 const ovrKey = (athleteId: number, exId: number) => `${athleteId}_${exId}`
 const blockLetter = (pos: number) => String.fromCharCode(65 + (pos % 26))
 
@@ -77,14 +89,14 @@ function InlineEditor({ initialValue, initialScale, showScale, placeholder, colo
   )
 }
 
-export default function DayFillClient({ group, plan, day, dayNav, blocks, athletes, overrides, sessions: initialSessions, setLogs: initialLogs, painLogs: initialPains, assignmentByAthlete }: Props) {
+export default function DayFillClient({ group, plan, day, dayNav, blocks, athletes, overrides, extras, sessions: initialSessions, setLogs: initialLogs, painLogs: initialPains, assignmentByAthlete }: Props) {
   const router = useRouter()
   const supabase = createClient()
 
   // Stan z serwera; po „Odśwież" (router.refresh) przychodzą nowe propsy — przejmujemy je
   const buildLogs = (logs: SetLog[]) => {
     const m: Record<string, SetLog> = {}
-    for (const l of logs) { const k = logKey(l.workout_session_id, l.block_exercise_id, l.set_number); if (!m[k]) m[k] = l } // najnowszy wygrywa
+    for (const l of logs) { const k = logKey(l.workout_session_id, l.block_exercise_id, l.set_number, l.is_warmup); if (!m[k]) m[k] = l } // najnowszy wygrywa
     return m
   }
   const [sessions, setSessions] = useState<Record<number, Session>>(() => Object.fromEntries(initialSessions.map(s => [s.athlete_id, s])))
@@ -105,7 +117,21 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
   const ovrMap = useMemo(() => new Map(overrides.map(o => [ovrKey(o.athlete_id, o.block_exercise_id), o])), [overrides])
 
   // Kolumny: ćwiczenia wszystkich bloków dnia (A1, A2, B1...)
-  const columns = useMemo(() => blocks.flatMap((b, bi) => b.workout_block_exercises.map((ex, i) => ({ ex, block: b, label: `${blockLetter(bi)}${i + 1}`, blockStart: i === 0 }))), [blocks])
+  // + kolumna „Dodatkowe" na końcu bloku, jeśli któraś zawodniczka ma w nim własne ćwiczenia
+  type Column =
+    | { kind: 'ex'; ex: BlockEx; block: Block; label: string; blockStart: boolean }
+    | { kind: 'extra'; block: Block; label: string; blockStart: boolean; extras: Extra[] }
+  const columns = useMemo(() => blocks.flatMap((b, bi): Column[] => {
+    const cols: Column[] = b.workout_block_exercises.map((ex, i) => ({ kind: 'ex', ex, block: b, label: `${blockLetter(bi)}${i + 1}`, blockStart: i === 0 }))
+    const blockExtras = extras.filter(e => e.block_id === b.id)
+    if (blockExtras.length) cols.push({ kind: 'extra', block: b, label: `${blockLetter(bi)}+`, blockStart: cols.length === 0, extras: blockExtras })
+    return cols
+  }), [blocks, extras])
+
+  // Serie rozgrzewkowe z planu (nowy format warmup_sets albo stare pola warmup_reps/weight)
+  const planWarmups = (ex: BlockEx): WarmupSet[] =>
+    Array.isArray(ex.warmup_sets) && ex.warmup_sets.length ? ex.warmup_sets
+      : ex.warmup_reps ? [{ reps: ex.warmup_reps, weight_kg: ex.warmup_weight ?? null }] : []
 
   const exName = (ex: BlockEx, o?: Override) => o?.exercise_code_override || fmtName(ex.exercise?.name || ex.exercise_code || 'Ćwiczenie')
 
@@ -146,11 +172,12 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
     return res
   }
 
-  // Zapis jednej serii (ciężar albo wykonane powtórzenia w trybie AMRAP/max)
-  async function saveSet(athleteId: number, ex: BlockEx, setNum: number, field: 'weight' | 'reps_completed', raw: string) {
+  // Zapis jednej serii (ciężar albo wykonane powtórzenia w trybie AMRAP/max).
+  // Rozgrzewka — jak u zawodniczki: tylko ciężar, is_warmup = true.
+  async function saveSet(athleteId: number, exId: number, setNum: number, field: 'weight' | 'reps_completed', raw: string, warmup = false) {
     const value = raw.trim().replace(',', '.')
     const session = sessions[athleteId]
-    const existing = session ? logs[logKey(session.id, ex.id, setNum)] : undefined
+    const existing = session ? logs[logKey(session.id, exId, setNum, warmup)] : undefined
     const current = existing?.[field] != null ? String(existing[field]) : ''
     if (value === current) return
     if (!value && !existing) return
@@ -161,42 +188,42 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
       const s = await ensureSession(athleteId)
       if (!s) return
       const other = field === 'weight' ? 'reps_completed' : 'weight'
-      const prev = logs[logKey(s.id, ex.id, setNum)]
+      const prev = logs[logKey(s.id, exId, setNum, warmup)]
       const payload = {
-        workout_session_id: s.id, block_exercise_id: ex.id, athlete_id: athleteId, set_number: setNum, is_warmup: false,
-        [field]: num, [other]: prev?.[other] ?? null,
-        completed: num != null || prev?.[other] != null,
+        workout_session_id: s.id, block_exercise_id: exId, athlete_id: athleteId, set_number: setNum, is_warmup: warmup,
+        [field]: num, [other]: warmup ? null : (prev?.[other] ?? null),
+        completed: num != null || (!warmup && prev?.[other] != null),
       }
       let id = prev?.id
       if (!id) {
-        const { data: found } = await supabase.from('set_logs').select('id').eq('workout_session_id', s.id).eq('block_exercise_id', ex.id)
-          .eq('set_number', setNum).eq('is_warmup', false).order('created_at', { ascending: false }).limit(1).maybeSingle()
+        const { data: found } = await supabase.from('set_logs').select('id').eq('workout_session_id', s.id).eq('block_exercise_id', exId)
+          .eq('set_number', setNum).eq('is_warmup', warmup).order('created_at', { ascending: false }).limit(1).maybeSingle()
         id = found?.id
       }
       const res = id
         ? await supabase.from('set_logs').update(payload).eq('id', id).select().single()
         : await supabase.from('set_logs').insert(payload).select().single()
       if (res.error || !res.data) { setError(res.error?.message || 'Błąd zapisu serii'); return }
-      setLogs(m => ({ ...m, [logKey(s.id, ex.id, setNum)]: res.data as SetLog }))
+      setLogs(m => ({ ...m, [logKey(s.id, exId, setNum, warmup)]: res.data as SetLog }))
     })())
   }
 
-  // Notatka do ćwiczenia — jak u zawodniczki: athlete_note pierwszej serii
-  async function saveNote(athleteId: number, ex: BlockEx, text: string) {
+  // Notatka do ćwiczenia — jak u zawodniczki: athlete_note pierwszej serii roboczej
+  async function saveNote(athleteId: number, exId: number, text: string) {
     await track((async () => {
       const s = await ensureSession(athleteId)
       if (!s) return
       const note = text.trim() || null
-      const first = Object.values(logs).filter(l => l.workout_session_id === s.id && l.block_exercise_id === ex.id).sort((a, b) => a.set_number - b.set_number)[0]
+      const first = Object.values(logs).filter(l => l.workout_session_id === s.id && l.block_exercise_id === exId && !l.is_warmup).sort((a, b) => a.set_number - b.set_number)[0]
       const res = first
         ? await supabase.from('set_logs').update({ athlete_note: note }).eq('id', first.id).select().single()
         : note
-          ? await supabase.from('set_logs').insert({ workout_session_id: s.id, block_exercise_id: ex.id, athlete_id: athleteId, set_number: 1, is_warmup: false, weight: null, reps_completed: null, completed: false, athlete_note: note }).select().single()
+          ? await supabase.from('set_logs').insert({ workout_session_id: s.id, block_exercise_id: exId, athlete_id: athleteId, set_number: 1, is_warmup: false, weight: null, reps_completed: null, completed: false, athlete_note: note }).select().single()
           : null
       if (!res) return
       if (res.error || !res.data) { setError(res.error?.message || 'Błąd zapisu notatki'); return }
       const l = res.data as SetLog
-      setLogs(m => ({ ...m, [logKey(l.workout_session_id, l.block_exercise_id, l.set_number)]: l }))
+      setLogs(m => ({ ...m, [logKey(l.workout_session_id, l.block_exercise_id, l.set_number, l.is_warmup)]: l }))
     })())
   }
 
@@ -245,6 +272,17 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
         return
       }
       setSessions(prev => ({ ...prev, [athleteId]: data as Session }))
+
+      // Raport mailowy (do zawodniczki i trenera) — jak po zakończeniu treningu w
+      // aplikacji zawodniczki; tylko raz na trening, ponowne zakończenie go nie dubluje
+      if (next && !(data as Session).report_sent) {
+        const r = await fetch('/api/send-report', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: s.id, athleteId }),
+        }).catch(() => null)
+        if (r?.ok) setSessions(prev => ({ ...prev, [athleteId]: { ...(prev[athleteId] as Session), report_sent: true } }))
+        else setError('Trening oznaczony jako zakończony, ale nie udało się wysłać raportu mailem.')
+      }
     })())
   }
 
@@ -261,6 +299,90 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
   }
 
   const doneCount = athletes.filter(a => sessions[a.id]?.completed).length
+
+  // Pola jednego ćwiczenia w komórce: rozgrzewka (R1…), serie (S1…), ból i notatka
+  function renderExercise(athlete: Athlete, session: Session | undefined, item: CellExercise, nav: { row: number; col: number; next: number }) {
+    const cellKey = ovrKey(athlete.id, item.id)
+    const amrap = isAmrap(item.reps)
+    const field: 'weight' | 'reps_completed' = amrap ? 'reps_completed' : 'weight'
+    const exLogs = session ? Object.values(logs).filter(l => l.workout_session_id === session.id && l.block_exercise_id === item.id) : []
+    const workLogs = exLogs.filter(l => !l.is_warmup)
+    const nSets = Math.max(item.sets, 0, ...workLogs.map(l => l.set_number))
+    const nWarm = Math.max(item.warmups.length, 0, ...exLogs.filter(l => l.is_warmup).map(l => l.set_number))
+    const note = [...workLogs].sort((a, b) => a.set_number - b.set_number)[0]?.athlete_note || ''
+    const pain = painFor(session?.id, item.name)
+
+    const input = (label: string, setNum: number, warmup: boolean, placeholder: string) => {
+      const log = session ? logs[logKey(session.id, item.id, setNum, warmup)] : undefined
+      const f = warmup ? 'weight' : field
+      const val = log?.[f] != null ? String(log[f]) : ''
+      const s = nav.next++
+      return (
+        <div key={`${warmup ? 'w' : 's'}${setNum}_${val}`}>
+          <div style={{ fontFamily: INTER, fontSize: '0.5rem', color: warmup ? '#c07f1e' : 'var(--muted-light)', textAlign: 'center', marginBottom: 1 }}>{label}</div>
+          <input
+            defaultValue={val} placeholder={placeholder} inputMode="decimal"
+            className={`df-w${val ? ' filled' : ''}`}
+            style={warmup ? { borderStyle: 'dashed' } : undefined}
+            data-r={nav.row} data-c={nav.col} data-s={s}
+            onBlur={e => saveSet(athlete.id, item.id, setNum, f, e.target.value, warmup)}
+            onKeyDown={e => handleKeyDown(e, nav.row, nav.col, s)}
+          />
+        </div>
+      )
+    }
+
+    return (
+      <>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, flexWrap: 'wrap' }}>
+          {Array.from({ length: nWarm }, (_, i) => {
+            const w = item.warmups[i]
+            return input(`R${i + 1}`, i + 1, true, w?.weight_kg != null && w.weight_kg !== '' ? String(w.weight_kg) : 'kg')
+          })}
+          {nWarm > 0 && <span style={{ width: 1, alignSelf: 'stretch', background: 'var(--border)', margin: '0 2px' }} />}
+          {Array.from({ length: nSets }, (_, i) => input(`S${i + 1}`, i + 1, false, amrap ? 'powt.' : item.weight != null ? String(item.weight) : 'kg'))}
+          <button
+            onClick={() => setCellEdit(prev => prev?.key === cellKey && prev.type === 'pain' ? null : { key: cellKey, type: 'pain' })}
+            title={pain ? `Ból ${pain.vas_score ?? ''}/10${pain.pain_comment ? `: ${pain.pain_comment}` : ''}` : 'Zaznacz ból'}
+            style={pain ? { ...qiBtn, border: '1.5px solid #c23b3b', background: '#FDEDED', color: '#c23b3b' } : qiBtn}
+          >
+            <AlertTriangle size={11} />
+          </button>
+          <button
+            onClick={() => setCellEdit(prev => prev?.key === cellKey && prev.type === 'note' ? null : { key: cellKey, type: 'note' })}
+            title={note || 'Dodaj notatkę'}
+            style={note ? { ...qiBtn, border: '1.5px solid #2c5aa3', background: '#eaf1fb', color: '#2c5aa3' } : qiBtn}
+          >
+            <MessageCircle size={11} />
+          </button>
+        </div>
+        {pain && !(cellEdit?.key === cellKey && cellEdit.type === 'pain') && (
+          <button onClick={() => setCellEdit({ key: cellKey, type: 'pain' })} style={{ display: 'block', marginTop: 3, border: 'none', background: 'none', padding: 0, fontFamily: INTER, fontSize: '0.66rem', fontWeight: 700, color: (pain.vas_score ?? 0) >= 5 ? '#c23b3b' : '#c07f1e', textAlign: 'left', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            ⚠ {pain.vas_score != null ? `${pain.vas_score}/10 ` : ''}{pain.pain_comment || ''}
+          </button>
+        )}
+        {note && !(cellEdit?.key === cellKey && cellEdit.type === 'note') && (
+          <button onClick={() => setCellEdit({ key: cellKey, type: 'note' })} style={{ display: 'block', marginTop: 3, border: 'none', background: 'none', padding: 0, fontFamily: INTER, fontSize: '0.66rem', fontWeight: 700, color: '#2c5aa3', textAlign: 'left', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            💬 {note}
+          </button>
+        )}
+        {cellEdit?.key === cellKey && (cellEdit.type === 'pain' ? (
+          <InlineEditor
+            initialValue={pain?.pain_comment || ''} initialScale={pain?.vas_score ?? null} showScale
+            placeholder="Opisz ból (puste = usuń)" color="#c23b3b" bg="#FEF2F2"
+            onSave={(val, scale) => { savePain(athlete.id, item.name, val, scale); setCellEdit(null) }}
+            onCancel={() => setCellEdit(null)}
+          />
+        ) : (
+          <InlineEditor
+            initialValue={note} placeholder="Notatka do ćwiczenia..." color="var(--gold)" bg="#FFFBEB"
+            onSave={val => { saveNote(athlete.id, item.id, val); setCellEdit(null) }}
+            onCancel={() => setCellEdit(null)}
+          />
+        ))}
+      </>
+    )
+  }
 
   return (
     <>
@@ -324,29 +446,50 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                   <th rowSpan={2} className="df-sticky" style={{ width: 190, minWidth: 190, padding: '0.55rem 0.5rem', textAlign: 'left', fontFamily: INTER, fontSize: '0.6rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.08em', background: 'var(--bg)' }}>
                     Zawodniczka
                   </th>
-                  {blocks.map((b, bi) => b.workout_block_exercises.length > 0 && (
-                    <th key={b.id} colSpan={b.workout_block_exercises.length} className="df-block-start" style={{ height: 30, padding: '0 0.6rem', background: 'var(--navy-900)', verticalAlign: 'middle', textAlign: 'left' }}>
-                      <span style={{ fontFamily: INTER, fontSize: '0.74rem', fontWeight: 800, color: 'var(--gold)' }}>Blok {blockLetter(bi)}</span>
-                      {b.block_name && <span style={{ fontFamily: INTER, fontSize: '0.68rem', fontWeight: 600, color: '#aeb7cc', marginLeft: 8 }}>{b.block_name}{b.rounds && b.rounds > 1 ? ` · ${b.rounds} rundy` : ''}</span>}
-                    </th>
-                  ))}
+                  {blocks.map((b, bi) => {
+                    const span = columns.filter(c => c.block.id === b.id).length
+                    return span > 0 && (
+                      <th key={b.id} colSpan={span} className="df-block-start" style={{ height: 30, padding: '0 0.6rem', background: 'var(--navy-900)', verticalAlign: 'middle', textAlign: 'left' }}>
+                        <span style={{ fontFamily: INTER, fontSize: '0.74rem', fontWeight: 800, color: 'var(--gold)' }}>Blok {blockLetter(bi)}</span>
+                        {b.block_name && <span style={{ fontFamily: INTER, fontSize: '0.68rem', fontWeight: 600, color: '#aeb7cc', marginLeft: 8 }}>{b.block_name}{b.rounds && b.rounds > 1 ? ` · ${b.rounds} rundy` : ''}</span>}
+                      </th>
+                    )
+                  })}
                   <th rowSpan={2} style={{ width: '100%', background: 'var(--bg)', border: 'none' }} />
                 </tr>
                 <tr className="df-ex-row">
-                  {columns.map(({ ex, label, blockStart }) => {
+                  {columns.map(col => {
+                    const headStyle: React.CSSProperties = { width: 280, minWidth: 280, maxWidth: 280, padding: '0.45rem 0.55rem', background: 'var(--bg)', textAlign: 'left' }
+                    const pill = (text: string, purple = false) => (
+                      <span style={{ flexShrink: 0, minWidth: 26, textAlign: 'center', borderRadius: 6, background: purple ? '#7c3aed' : 'var(--navy-900)', color: purple ? '#ffffff' : 'var(--gold)', fontFamily: INTER, fontSize: '0.66rem', fontWeight: 800, padding: '3px 5px', lineHeight: 1 }}>{text}</span>
+                    )
+                    if (col.kind === 'extra') {
+                      return (
+                        <th key={`extra-${col.block.id}`} className={col.blockStart ? 'df-block-start' : undefined} style={headStyle}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {pill(col.label, true)}
+                            <span style={{ fontWeight: 800, fontSize: '0.84rem', color: '#7c3aed' }}>Dodatkowe</span>
+                          </div>
+                          <div style={{ marginTop: 4, fontFamily: INTER, fontSize: '0.62rem', color: 'var(--muted-light)' }}>ćwiczenia dodane pojedynczym zawodniczkom</div>
+                        </th>
+                      )
+                    }
+                    const ex = col.ex
                     const presc = [
                       ex.sets ? `${ex.sets}×${ex.reps || '?'}` : ex.reps,
                       ex.tempo ? `tempo ${ex.tempo}` : '',
                       ex.weight_kg != null ? `${ex.weight_kg} kg` : '',
                       ex.rir != null ? `RIR ${ex.rir}` : '',
                     ].filter(Boolean).join(' · ')
+                    const warmups = planWarmups(ex)
                     return (
-                      <th key={ex.id} className={blockStart ? 'df-block-start' : undefined} style={{ width: 280, minWidth: 280, maxWidth: 280, padding: '0.45rem 0.55rem', background: 'var(--bg)', textAlign: 'left' }}>
+                      <th key={ex.id} className={col.blockStart ? 'df-block-start' : undefined} style={headStyle}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ flexShrink: 0, minWidth: 26, textAlign: 'center', borderRadius: 6, background: 'var(--navy-900)', color: 'var(--gold)', fontFamily: INTER, fontSize: '0.66rem', fontWeight: 800, padding: '3px 5px', lineHeight: 1 }}>{label}</span>
+                          {pill(col.label)}
                           <span style={{ fontWeight: 800, fontSize: '0.84rem', color: 'var(--navy-900)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={exName(ex)}>{exName(ex)}</span>
                         </div>
                         {presc && <div style={{ marginTop: 4, fontFamily: INTER, fontSize: '0.66rem', fontWeight: 700, color: 'var(--muted)' }}>{presc}</div>}
+                        {warmups.length > 0 && <div style={{ marginTop: 2, fontFamily: INTER, fontSize: '0.6rem', fontWeight: 700, color: '#c07f1e' }}>+ rozgrzewka: {warmups.length} {warmups.length === 1 ? 'seria' : 'serie'}</div>}
                         {ex.coach_comment && <div style={{ marginTop: 2, fontFamily: INTER, fontSize: '0.6rem', color: 'var(--muted-light)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={ex.coach_comment}>{ex.coach_comment}</div>}
                       </th>
                     )
@@ -363,94 +506,58 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                         <div style={{ fontWeight: 700, fontSize: '0.78rem', color: 'var(--navy-900)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 176 }}>{athlete.full_name}</div>
                         <button
                           onClick={() => toggleCompleted(athlete.id)}
-                          title={done ? 'Kliknij, by cofnąć — zawodniczka znów będzie mogła dokończyć trening' : 'Oznacz trening jako zakończony'}
+                          title={done ? 'Kliknij, by cofnąć — zawodniczka znów będzie mogła dokończyć trening' : 'Oznacz trening jako zakończony (wyśle raport mailem)'}
                           style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 4, border: `1.5px solid ${done ? '#15803d' : 'var(--border)'}`, background: done ? '#EEF8F1' : '#ffffff', color: done ? '#15803d' : 'var(--muted)', borderRadius: 6, padding: '2px 7px', fontFamily: INTER, fontSize: '0.6rem', fontWeight: 700, outline: 'none' }}
                         >
                           {done ? <><Check size={11} /> zakończony</> : session ? 'w trakcie · zakończ' : 'nie rozpoczęty · zakończ'}
                         </button>
                       </td>
-                      {columns.map(({ ex, blockStart }, colIdx) => {
-                        const o = ovrMap.get(ovrKey(athlete.id, ex.id))
-                        const cellKey = ovrKey(athlete.id, ex.id)
-                        if (o?.skip) {
-                          return <td key={ex.id} className={blockStart ? 'df-block-start' : undefined} style={{ padding: '0.45rem 0.55rem', fontFamily: INTER, fontSize: '0.66rem', color: 'var(--muted-light)', fontStyle: 'italic' }}>pominięte dla tej zawodniczki</td>
+                      {columns.map((col, colIdx) => {
+                        const tdClass = col.blockStart ? 'df-block-start' : undefined
+                        const tdStyle: React.CSSProperties = { padding: '0.4rem 0.5rem', ...(done ? { background: '#F4FBF6' } : {}) }
+                        // numeracja pól w komórce (rozgrzewka + serie, kolejne ćwiczenia) — do nawigacji klawiaturą
+                        const nav = { row: rowIdx, col: colIdx, next: 0 }
+                        if (col.kind === 'extra') {
+                          const own = col.extras.filter(e => e.athlete_id === athlete.id)
+                          return (
+                            <td key={`extra-${col.block.id}`} className={tdClass} style={tdStyle}>
+                              {own.length === 0
+                                ? <span style={{ fontFamily: INTER, fontSize: '0.62rem', color: 'var(--muted-light)' }}>—</span>
+                                : own.map((e, i) => (
+                                  <div key={e.id} style={i > 0 ? { marginTop: 8, paddingTop: 6, borderTop: '1px dashed var(--border)' } : undefined}>
+                                    <div style={{ fontFamily: INTER, fontSize: '0.68rem', fontWeight: 800, color: '#7c3aed', marginBottom: 2 }}>
+                                      {fmtName(e.exercise?.name || e.exercise_code || 'Ćwiczenie')}
+                                      <span style={{ fontWeight: 600, color: 'var(--muted)', marginLeft: 6 }}>{e.sets || 1}×{e.reps || '?'}{e.weight_kg != null ? ` · ${e.weight_kg} kg` : ''}</span>
+                                    </div>
+                                    {renderExercise(athlete, session, {
+                                      id: e.id, name: fmtName(e.exercise?.name || e.exercise_code || 'Ćwiczenie'),
+                                      sets: e.sets || 1, reps: e.reps || '', weight: e.weight_kg ?? null, warmups: [],
+                                    }, nav)}
+                                  </div>
+                                ))}
+                            </td>
+                          )
                         }
-                        const name = exName(ex, o)
-                        const reps = o?.reps_override || ex.reps || ''
-                        const amrap = isAmrap(reps)
-                        const field: 'weight' | 'reps_completed' = amrap ? 'reps_completed' : 'weight'
+                        const ex = col.ex
+                        const o = ovrMap.get(ovrKey(athlete.id, ex.id))
+                        if (o?.skip) {
+                          return <td key={ex.id} className={tdClass} style={{ padding: '0.45rem 0.55rem', fontFamily: INTER, fontSize: '0.66rem', color: 'var(--muted-light)', fontStyle: 'italic' }}>pominięte dla tej zawodniczki</td>
+                        }
                         const planned = o?.sets_override || ex.sets || 1
-                        const sessionLogs = session ? Object.values(logs).filter(l => l.workout_session_id === session.id && l.block_exercise_id === ex.id) : []
-                        const maxLogged = Math.max(0, ...sessionLogs.map(l => l.set_number))
-                        const nSets = Math.max(planned, maxLogged)
-                        const note = sessionLogs.sort((a, b) => a.set_number - b.set_number)[0]?.athlete_note || ''
-                        const pain = painFor(session?.id, name)
+                        const reps = o?.reps_override || ex.reps || ''
                         const changed = o && (o.sets_override || o.reps_override || o.weight_override != null || o.exercise_code_override)
                         return (
-                          <td key={ex.id} className={blockStart ? 'df-block-start' : undefined} style={{ padding: '0.4rem 0.5rem', ...(done ? { background: '#F4FBF6' } : {}) }}>
+                          <td key={ex.id} className={tdClass} style={tdStyle}>
                             {changed && (
                               <div style={{ fontFamily: INTER, fontSize: '0.6rem', fontWeight: 700, color: '#7c3aed', marginBottom: 3 }}>
                                 ✎ {o?.exercise_code_override ? `${o.exercise_code_override} · ` : ''}{planned}×{reps || '?'}{o?.weight_override != null ? ` · ${o.weight_override} kg` : ''}
                               </div>
                             )}
-                            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, flexWrap: 'wrap' }}>
-                              {Array.from({ length: nSets }, (_, i) => {
-                                const log = session ? logs[logKey(session.id, ex.id, i + 1)] : undefined
-                                const val = log?.[field] != null ? String(log[field]) : ''
-                                return (
-                                  <div key={`${i}_${val}`}>
-                                    <div style={{ fontFamily: INTER, fontSize: '0.5rem', color: 'var(--muted-light)', textAlign: 'center', marginBottom: 1 }}>S{i + 1}</div>
-                                    <input
-                                      defaultValue={val}
-                                      placeholder={amrap ? 'powt.' : (o?.weight_override ?? ex.weight_kg) != null ? String(o?.weight_override ?? ex.weight_kg) : 'kg'}
-                                      inputMode="decimal"
-                                      className={`df-w${val ? ' filled' : ''}`}
-                                      data-r={rowIdx} data-c={colIdx} data-s={i}
-                                      onBlur={e => saveSet(athlete.id, ex, i + 1, field, e.target.value)}
-                                      onKeyDown={e => handleKeyDown(e, rowIdx, colIdx, i)}
-                                    />
-                                  </div>
-                                )
-                              })}
-                              <button
-                                onClick={() => setCellEdit(prev => prev?.key === cellKey && prev.type === 'pain' ? null : { key: cellKey, type: 'pain' })}
-                                title={pain ? `Ból ${pain.vas_score ?? ''}/10${pain.pain_comment ? `: ${pain.pain_comment}` : ''}` : 'Zaznacz ból'}
-                                style={pain ? { ...qiBtn, border: '1.5px solid #c23b3b', background: '#FDEDED', color: '#c23b3b' } : qiBtn}
-                              >
-                                <AlertTriangle size={11} />
-                              </button>
-                              <button
-                                onClick={() => setCellEdit(prev => prev?.key === cellKey && prev.type === 'note' ? null : { key: cellKey, type: 'note' })}
-                                title={note || 'Dodaj notatkę'}
-                                style={note ? { ...qiBtn, border: '1.5px solid #2c5aa3', background: '#eaf1fb', color: '#2c5aa3' } : qiBtn}
-                              >
-                                <MessageCircle size={11} />
-                              </button>
-                            </div>
-                            {pain && !(cellEdit?.key === cellKey && cellEdit.type === 'pain') && (
-                              <button onClick={() => setCellEdit({ key: cellKey, type: 'pain' })} style={{ display: 'block', marginTop: 3, border: 'none', background: 'none', padding: 0, fontFamily: INTER, fontSize: '0.66rem', fontWeight: 700, color: (pain.vas_score ?? 0) >= 5 ? '#c23b3b' : '#c07f1e', textAlign: 'left', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                ⚠ {pain.vas_score != null ? `${pain.vas_score}/10 ` : ''}{pain.pain_comment || ''}
-                              </button>
-                            )}
-                            {note && !(cellEdit?.key === cellKey && cellEdit.type === 'note') && (
-                              <button onClick={() => setCellEdit({ key: cellKey, type: 'note' })} style={{ display: 'block', marginTop: 3, border: 'none', background: 'none', padding: 0, fontFamily: INTER, fontSize: '0.66rem', fontWeight: 700, color: '#2c5aa3', textAlign: 'left', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                💬 {note}
-                              </button>
-                            )}
-                            {cellEdit?.key === cellKey && (cellEdit.type === 'pain' ? (
-                              <InlineEditor
-                                initialValue={pain?.pain_comment || ''} initialScale={pain?.vas_score ?? null} showScale
-                                placeholder="Opisz ból (puste = usuń)" color="#c23b3b" bg="#FEF2F2"
-                                onSave={(val, scale) => { savePain(athlete.id, name, val, scale); setCellEdit(null) }}
-                                onCancel={() => setCellEdit(null)}
-                              />
-                            ) : (
-                              <InlineEditor
-                                initialValue={note} placeholder="Notatka do ćwiczenia..." color="var(--gold)" bg="#FFFBEB"
-                                onSave={val => { saveNote(athlete.id, ex, val); setCellEdit(null) }}
-                                onCancel={() => setCellEdit(null)}
-                              />
-                            ))}
+                            {renderExercise(athlete, session, {
+                              id: ex.id, name: exName(ex, o), sets: planned, reps,
+                              weight: o?.weight_override ?? ex.weight_kg ?? null,
+                              warmups: o?.warmup_sets_override ?? planWarmups(ex),
+                            }, nav)}
                           </td>
                         )
                       })}
