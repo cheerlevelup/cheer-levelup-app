@@ -9,6 +9,7 @@ import { TabsNav, Card } from '@/components/coach/ui'
 import PlanExerciseTable, { ActualEntry, PainEntry } from '@/components/coach/PlanExerciseTable'
 import GroupHero from '@/components/coach/GroupHero'
 import { dedupeLogs } from '@/lib/coach/dedupeLogs'
+import GroupPlansPanel, { GroupPlanItem } from './GroupPlansPanel'
 
 type Group = { id: number; name: string; group_type?: string }
 type PlanDay = { id: number; day_name?: string | null }
@@ -19,6 +20,7 @@ interface Props {
   athletes: any[]
   currentPlan: Plan
   activePlanDays: PlanDay[]
+  groupPlans?: GroupPlanItem[]
 }
 
 type PlanExData = {
@@ -29,7 +31,7 @@ type PlanExData = {
   painByAthleteEx?: Record<number, Record<string, PainEntry>>
 }
 
-export default function GroupPlanSelfClient({ group, athletes, currentPlan, activePlanDays }: Props) {
+export default function GroupPlanSelfClient({ group, athletes, currentPlan, activePlanDays, groupPlans = [] }: Props) {
   const [planExData, setPlanExData] = useState<PlanExData | null>(null)
   const [planExLoading, setPlanExLoading] = useState(false)
 
@@ -155,10 +157,11 @@ export default function GroupPlanSelfClient({ group, athletes, currentPlan, acti
           { key: 'zawodniczki', label: 'Zawodniczki', href: `/coach/groups/${group.id}/athletes` },
           { key: 'testy', label: 'Testy', href: `/coach/groups/${group.id}/tests` },
         ]} />
+        <GroupPlansPanel groupId={group.id} athletes={athletes} plans={groupPlans} currentPlanId={currentPlan?.id ?? null} />
         {athletes.length === 0 ? (
           <Card><div style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted-light)' }}>Brak zawodniczek w tej grupie.</div></Card>
         ) : !currentPlan || activePlanDays.length === 0 ? (
-          <Card><div style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted-light)' }}>Brak przypisanego planu.</div></Card>
+          <Card><div style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted-light)' }}>Brak aktywnego planu — utwórz go wyżej przyciskiem „Nowy plan".</div></Card>
         ) : (
           <Card>
             <div style={{ padding: '0.875rem 1.25rem', borderBottom: `1.5px solid var(--border)`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>

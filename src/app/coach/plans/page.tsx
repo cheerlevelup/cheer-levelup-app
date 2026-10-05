@@ -9,10 +9,19 @@ export default async function CoachPlansPage() {
   if (error || !user) redirect('/login')
   if (user.email !== 'cheerlevelup@gmail.com') redirect('/athlete')
 
-  const { data: plans } = await supabase
+  // Plany grup samodzielnych żyją w zakładce Plan swojej grupy — tu tylko ogólne
+  let { data: plans, error: plansErr } = await supabase
     .from('workout_plans')
     .select('*')
+    .is('group_id', null)
     .order('created_at', { ascending: false })
+  if (plansErr) {
+    // brak migracji 202610050001 (kolumna group_id) — pokaż wszystkie plany
+    ;({ data: plans } = await supabase
+      .from('workout_plans')
+      .select('*')
+      .order('created_at', { ascending: false }))
+  }
 
   return <CoachPlansClient plans={plans || []} />
 }

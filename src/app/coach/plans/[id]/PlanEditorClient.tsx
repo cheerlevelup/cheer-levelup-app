@@ -13,6 +13,8 @@ import { Modal, Button, Field } from '@/components/coach/ui'
 type Plan = {
   id: number
   name: string
+  // plan grupy samodzielnej — edytor otwierany z jej zakładki Plan
+  group_id?: number | null
 }
 
 type Week = {
@@ -682,6 +684,8 @@ function MoveModal({
 export default function PlanEditorClient({ plan, weeks, days, blocks, exercises, allPlans, allWeeks, allDays, allBlocks }: Props) {
   const router = useRouter()
   const supabase = createClient()
+  // Plan grupy samodzielnej wraca do zakładki Plan tej grupy, ogólny — do listy planów
+  const backHref = plan.group_id ? `/coach/groups/${plan.group_id}/plan` : '/coach/plans'
   const { sidebarCollapsed, setSidebarCollapsed } = usePageMeta()
 
   const [planName, setPlanName] = useState(plan.name)
@@ -798,7 +802,7 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
       }
 
       setPlanSaveMessage('Plan zapisany')
-      router.push('/coach/plans')
+      router.push(backHref)
     } catch (error) {
       const message = error instanceof Error ? error.message : JSON.stringify(error)
       setPlanSaveMessage(message && message !== '{}'
@@ -1142,7 +1146,7 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
 
   return (
     <>
-      <SetPageMeta title={plan.name} backHref="/coach/plans" backLabel="Plany" sidebarCollapsible />
+      <SetPageMeta title={plan.name} backHref={backHref} backLabel={plan.group_id ? "Plan grupy" : "Plany"} sidebarCollapsible />
 
       <div className="coach-content">
         {globalError && (

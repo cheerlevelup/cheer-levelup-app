@@ -40,10 +40,6 @@ export default async function GroupPlanPage({ params }: Props) {
     return <GroupPlanClient group={group} athletesCount={athletes.length} />
   }
 
-  if (athletes.length === 0) {
-    return <GroupPlanSelfClient group={group} athletes={[]} currentPlan={null} activePlanDays={[]} />
-  }
-
   const athleteIds = athletes.map((a: any) => a.id)
 
   const { data: groupAssignments } = await supabase
@@ -51,11 +47,13 @@ export default async function GroupPlanPage({ params }: Props) {
     .select('*, plan:workout_plans(*)')
     .eq('group_id', groupId)
     .eq('is_active', true)
-  const { data: athleteAssignments } = await supabase
-    .from('athlete_workout_assignments')
-    .select('*, plan:workout_plans(*)')
-    .in('athlete_id', athleteIds)
-    .eq('is_active', true)
+  const { data: athleteAssignments } = athleteIds.length > 0
+    ? await supabase
+        .from('athlete_workout_assignments')
+        .select('*, plan:workout_plans(*)')
+        .in('athlete_id', athleteIds)
+        .eq('is_active', true)
+    : { data: [] }
   const allAssignments = [...(groupAssignments || []), ...(athleteAssignments || [])]
   const currentPlan = allAssignments[0]?.plan ?? null
 
@@ -77,12 +75,57 @@ export default async function GroupPlanPage({ params }: Props) {
     }
   }
 
+  // Plany tej grupy (tworzone w zakładce Plan) + aktywny plan, nawet jeśli jest ogólny.
+  // Brak migracji 202610050001 (kolumna group_id) — lista pokazuje tylko aktywny plan.
+  const { data: ownPlans } = await supabase
+    .from('workout_plans')
+    .select('id, name, is_archived, created_at, group_id')
+    .eq('group_id', groupId)
+    .order('created_at', { ascending: false })
+  const planList: any[] = [...(ownPlans || [])]
+  if (currentPlan && !planList.some(p => p.id === currentPlan.id)) planList.unshift(currentPlan)
+
+  // Treningi (dni) każdego planu — do linków „Uzupełnij"
+  const listPlanIds = planList.map(p => p.id)
+  const { data: listWeeks } = listPlanIds.length > 0
+    ? await supabase.from('workout_weeks').select('id, plan_id, week_number').in('plan_id', listPlanIds)
+    : { data: [] }
+  const listWeekIds = (listWeeks || []).map((w: any) => w.id)
+  const { data: listDays } = listWeekIds.length > 0
+    ? await supabase.from('workout_days').select('id, week_id, day_name, day_order').in('week_id', listWeekIds)
+    : { data: [] }
+  const weekById = new Map((listWeeks || []).map((w: any) => [w.id, w]))
+
+  // Ile zawodniczek ma dany trening zakończony
+  const listDayIds = (listDays || []).map((d: any) => d.id)
+  const { data: doneSessions } = listDayIds.length > 0 && athleteIds.length > 0
+    ? await supabase.from('workout_sessions').select('athlete_id, workout_day_id')
+        .in('workout_day_id', listDayIds).in('athlete_id', athleteIds).eq('completed', true)
+    : { data: [] }
+  const doneByDay = new Map<number, Set<number>>()
+  for (const s of (doneSessions || []) as any[]) {
+    if (!doneByDay.has(s.workout_day_id)) doneByDay.set(s.workout_day_id, new Set())
+    doneByDay.get(s.workout_day_id)!.add(s.athlete_id)
+  }
+
+  const groupPlans = planList.map(p => ({
+    id: p.id,
+    name: p.name,
+    is_archived: !!p.is_archived,
+    owned: p.group_id === groupId,
+    days: (listDays || [])
+      .filter((d: any) => (weekById.get(d.week_id) as any)?.plan_id === p.id)
+      .map((d: any) => ({ id: d.id, day_name: d.day_name, day_order: d.day_order, week_number: (weekById.get(d.week_id) as any)?.week_number ?? 1, done: doneByDay.get(d.id)?.size ?? 0 }))
+      .sort((a: any, b: any) => a.week_number - b.week_number || a.day_order - b.day_order),
+  }))
+
   return (
     <GroupPlanSelfClient
       group={group}
       athletes={athletes}
       currentPlan={currentPlan}
       activePlanDays={activePlanDays}
+      groupPlans={groupPlans}
     />
   )
 }
