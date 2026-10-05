@@ -481,7 +481,7 @@ function ExerciseEditForm({
               ? [{ field: 'seconds' as const, label: 'Czas (s)', placeholder: '20' }, { field: 'reps' as const, label: 'Powt.', placeholder: '-' }, { field: 'rest' as const, label: 'Rest (s)', placeholder: '-' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'intensity' as const, label: 'Intensywność (%)', placeholder: '%' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }]
               : [{ field: 'seconds' as const, label: 'Czas (s)', placeholder: '20' }, { field: 'reps' as const, label: 'Powt.', placeholder: '-' }, { field: 'rest' as const, label: 'Rest (s)', placeholder: '-' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }])
             : [{ field: 'reps' as const, label: 'Powt.', placeholder: '8-10' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'tempo' as const, label: 'Tempo', placeholder: '3-1-2-0' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }]
-          const gridCols = `30px ${cols.map(() => '1fr').join(' ')} 30px`
+          const gridCols = `30px ${cols.map(() => 'minmax(0, 1fr)').join(' ')} 30px`
           return (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: 6, marginBottom: 4, padding: '0 2px' }}>
@@ -505,7 +505,7 @@ function ExerciseEditForm({
                         onChange={e => updateWorkSet(index, c.field, e.target.value)}
                         onKeyDown={e => handleWorkSetKeyDown(e, index, colIndex)}
                         placeholder={c.placeholder}
-                        style={{ textAlign: 'center' }}
+                        style={{ textAlign: 'center', width: '100%', minWidth: 0, boxSizing: 'border-box' }}
                       />
                     ))}
                     <button type="button" onClick={() => removeWorkSet(index)} className="coach-icon-btn coach-danger" style={{ width: 30, height: 30 }} disabled={workSets.length === 1}>
@@ -536,13 +536,13 @@ function ExerciseEditForm({
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {warmupSets.map((set, index) => (
-              <div key={index} style={{ display: 'grid', gridTemplateColumns: '38px 1fr 1fr 1.4fr 30px', gap: 6, alignItems: 'center' }}>
+              <div key={index} style={{ display: 'grid', gridTemplateColumns: '38px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr) 30px', gap: 6, alignItems: 'center' }}>
                 <div style={{ height: 32, borderRadius: 8, background: 'var(--navy-900)', color: 'var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11 }}>
                   R{index + 1}
                 </div>
-                <input value={set.reps || ''} onChange={e => updateWarmupSet(index, 'reps', e.target.value)} placeholder="powt." style={{ textAlign: 'center' }} />
-                <input value={set.weight_kg || ''} onChange={e => updateWarmupSet(index, 'weight_kg', e.target.value)} placeholder="kg" style={{ textAlign: 'center' }} />
-                <input value={set.note || ''} onChange={e => updateWarmupSet(index, 'note', e.target.value)} placeholder="komentarz" />
+                <input value={set.reps || ''} onChange={e => updateWarmupSet(index, 'reps', e.target.value)} placeholder="powt." style={{ textAlign: 'center', width: '100%', minWidth: 0, boxSizing: 'border-box' }} />
+                <input value={set.weight_kg || ''} onChange={e => updateWarmupSet(index, 'weight_kg', e.target.value)} placeholder="kg" style={{ textAlign: 'center', width: '100%', minWidth: 0, boxSizing: 'border-box' }} />
+                <input value={set.note || ''} onChange={e => updateWarmupSet(index, 'note', e.target.value)} placeholder="komentarz" style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }} />
                 <button type="button" onClick={() => removeWarmupSet(index)} className="coach-icon-btn coach-danger" style={{ width: 30, height: 30 }}>
                   <X size={13} />
                 </button>
