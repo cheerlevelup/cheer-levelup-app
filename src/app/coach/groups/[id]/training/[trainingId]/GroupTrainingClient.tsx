@@ -22,6 +22,8 @@ type Exercise = {
   block_index?: number | null
   // link do ćwiczenia (np. film z techniką) — ikonka w nagłówku i w PDF
   link_url?: string | null
+  // komentarz trenera do ćwiczenia (pod przyciskami w nagłówku) — także w PDF
+  coach_comment?: string | null
   // rozpiska dla całej grupy (nagłówek kolumny)
   sets_planned?: number | null
   reps?: string | null
@@ -184,6 +186,23 @@ function ExerciseLinkRow({ ex, editing, onSave, onCancel }: {
       <Link2 size={11} style={{ flexShrink: 0 }} />
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
     </a>
+  )
+}
+
+// Komentarz trenera do ćwiczenia — pole w nagłówku kolumny, zapis po wyjściu z pola
+function ExerciseCommentField({ ex, onSave }: { ex: Exercise; onSave: (value: string) => void }) {
+  const [value, setValue] = useState(ex.coach_comment || '')
+  useEffect(() => { setValue(ex.coach_comment || '') }, [ex.coach_comment])
+  return (
+    <textarea
+      value={value}
+      onChange={e => setValue(e.target.value)}
+      onBlur={() => { if (value.trim() !== (ex.coach_comment || '')) onSave(value) }}
+      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); (e.target as HTMLTextAreaElement).blur() } }}
+      placeholder="Komentarz do ćwiczenia…"
+      rows={value ? 2 : 1}
+      style={{ display: 'block', width: '100%', marginTop: 6, resize: 'vertical', border: `1px solid ${value ? 'var(--gold)' : 'var(--border)'}`, borderRadius: 8, background: value ? '#FFFBEB' : '#ffffff', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.68rem', fontWeight: 500, color: 'var(--navy-900)', padding: '5px 8px', outline: 'none', lineHeight: 1.35 }}
+    />
   )
 }
 
@@ -792,6 +811,17 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     }))
   }
 
+  async function saveExerciseComment(exerciseId: number, raw: string) {
+    const value = raw.trim() || null
+    const prev = exercises.find(e => e.id === exerciseId)?.coach_comment ?? null
+    setExercises(p => p.map(e => e.id === exerciseId ? { ...e, coach_comment: value } : e))
+    const { error: err } = await supabase.from('group_training_exercises').update({ coach_comment: value }).eq('id', exerciseId)
+    if (err) {
+      setExercises(p => p.map(e => e.id === exerciseId ? { ...e, coach_comment: prev } : e))
+      setError(/'coach_comment'/.test(err.message) ? 'Aby dodawać komentarze do ćwiczeń, uruchom migrację 202610050002.' : err.message)
+    }
+  }
+
   // Link do ćwiczenia — zapis od razu po zatwierdzeniu w polu pod nazwą
   const [linkEditId, setLinkEditId] = useState<number | null>(null)
   async function saveExerciseLink(exerciseId: number, raw: string) {
@@ -1349,7 +1379,12 @@ export default function GroupTrainingClient({ group, training, athletes, initial
           doc.setFont('helvetica', 'normal'); doc.setFontSize(prescFs)
           const prescLines = doc.splitTextToSize(pdfPrescText(ex), colW - 2 * pad)
           const nameH = Math.max(pillH, nameLines.length * lineH(nameFs))
-          return { nameLines, prescLines, nameH, height: pad + nameH + 1.6 + prescLines.length * lineH(prescFs) + pad }
+          // komentarz trenera do ćwiczenia — kursywą pod rozpiską
+          doc.setFont('helvetica', 'italic'); doc.setFontSize(prescFs)
+          const commentLines: string[] = ex.coach_comment ? doc.splitTextToSize(pl(ex.coach_comment), colW - 2 * pad) : []
+          const prescH = prescLines.length * lineH(prescFs)
+          const commentH = commentLines.length ? 1.2 + commentLines.length * lineH(prescFs) : 0
+          return { nameLines, prescLines, commentLines, nameH, prescH, height: pad + nameH + 1.6 + prescH + commentH + pad }
         })
         const headH = Math.max(...headLayout.map(h => h.height))
 
@@ -1430,6 +1465,11 @@ export default function GroupTrainingClient({ group, training, athletes, initial
             doc.text(hl.nameLines, x + 2 * pad + pillW, y + pad + (hl.nameLines.length === 1 ? (pillH - lineH(nameFs)) / 2 : 0), { baseline: 'top', lineHeightFactor: 1.15 })
             doc.setFont('helvetica', 'normal'); doc.setFontSize(prescFs); doc.setTextColor(...GOLD)
             doc.text(hl.prescLines, x + pad, y + pad + hl.nameH + 1.6, { baseline: 'top', lineHeightFactor: 1.15 })
+            if (hl.commentLines.length) {
+              doc.setFont('helvetica', 'italic'); doc.setTextColor(205, 213, 228)
+              doc.text(hl.commentLines, x + pad, y + pad + hl.nameH + 1.6 + hl.prescH + 1.2, { baseline: 'top', lineHeightFactor: 1.15 })
+              doc.setFont('helvetica', 'normal')
+            }
             doc.setTextColor(0, 0, 0)
             // Ikonka linku (dwa ogniwa łańcucha) — klikalna w PDF, otwiera link ćwiczenia
             if (ex.link_url) {
@@ -1476,7 +1516,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
             startY: y,
             margin: { left: MARGIN, right: MARGIN, bottom: 10 },
             head: [[{ content: pl(person.full_name), colSpan: own.length, styles: { halign: 'left', fontSize: 9 } }],
-              own.map(ex => pl(`${ex.name || 'Bez nazwy'}\n`) + pdfPrescText(ex))],
+              own.map(ex => pl(`${ex.name || 'Bez nazwy'}\n`) + pdfPrescText(ex) + (ex.coach_comment ? pl(`\n"${ex.coach_comment}"`) : ''))],
             body: [own.map(ex => pdfCellText(ex, entryMap.get(entryKey(ex.id, person.id))))],
             ...TABLE_STYLES,
             styles: { ...TABLE_STYLES.styles, fontSize: 7.5, valign: 'top' },
@@ -1814,16 +1854,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 </>
                               )}
                             </div>
-                            {(isMaxReps(ex.reps) || ex.bodyweight) && (
-                              <div style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.5rem', fontWeight: 700, color: '#854F0B', background: '#FEF6E0', border: '1px solid #F7D27A', borderRadius: 6, padding: '2px 5px', marginTop: 4, textAlign: 'center' }}>
-                                {ex.bodyweight ? '↓ masa własna — wpisuj powt.' : '↓ wpisuj wykonane powt.'}
-                              </div>
-                            )}
-                            {ex.individual && (
-                              <div style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.5rem', fontWeight: 700, color: '#854F0B', background: '#FEF6E0', border: '1px solid #F7D27A', borderRadius: 6, padding: '2px 5px', marginTop: 4, textAlign: 'center' }}>
-                                tryb indywidualny — dane z zawodniczek
-                              </div>
-                            )}
+                            <ExerciseCommentField ex={ex} onSave={v => saveExerciseComment(ex.id, v)} />
                           </th>
                         )
                       })}
@@ -2105,7 +2136,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                   </>
                                 )}
                               </div>
-                              <div style={{ marginTop: -6, marginBottom: 6 }}><SetPlanTable ex={ex} onChange={(i, field, v) => handlePlanCell(ex.id, i, field, v)} onCommit={() => persistExercise(ex.id)} onAdd={() => addPlanRow(ex.id)} onRemove={i => removePlanRow(ex.id, i)} /></div>
+                              <div style={{ marginTop: -6, marginBottom: 6 }}><SetPlanTable ex={ex} onChange={(i, field, v) => handlePlanCell(ex.id, i, field, v)} onCommit={() => persistExercise(ex.id)} onAdd={() => addPlanRow(ex.id)} onRemove={i => removePlanRow(ex.id, i)} /><ExerciseCommentField ex={ex} onSave={v => saveExerciseComment(ex.id, v)} /></div>
                               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, flexWrap: 'wrap', width: 260 }}>
                                 {sets.map((s, i) => {
                                   const repsPerf = s.reps && !isMaxReps(s.reps) ? s.reps : ''
