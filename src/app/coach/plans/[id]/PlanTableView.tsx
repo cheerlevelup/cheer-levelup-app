@@ -32,15 +32,32 @@ function fmtRange(values: (string | undefined)[], suffix = ''): string {
 // Wartość do edytowalnej komórki — brak wartości to puste pole, nie „—"
 const orBlank = (v: string) => (v === '—' ? '' : v)
 
-// ISO w kolumnie Powt.: "1× 90''" gdy serie równe, inaczej seria po serii:
-// "1× 90'' / 1× 120''" (albo "90'' / 120''", gdy nie podano powtórzeń)
-function isoPowtSummary(ex: BlockExercise): string {
+// ISO w kolumnie Powt.: jedna linia, gdy serie są równe ("1× 90''"), inaczej
+// linia na serię: "S1 90''", "S2 120''" (powtórzenia tylko, gdy któraś seria ma ich więcej niż 1)
+function isoPowtLines(ex: BlockExercise): string[] {
   const sets = ex.work_sets || []
   const reps = sets.map(s => s.reps?.trim() || '')
   const secs = sets.map(s => s.seconds?.trim() || '')
   const one = (r: string, t: string) => `${r ? `${r}× ` : ''}${t ? `${t}''` : '—'}`
-  if (new Set(reps).size <= 1 && new Set(secs).size <= 1) return one(reps[0] || '', secs[0] || '')
-  return sets.map((_, i) => one(reps[i], secs[i])).join(' / ')
+  if (new Set(reps).size <= 1 && new Set(secs).size <= 1) return [one(reps[0] || '', secs[0] || '')]
+  const showReps = reps.some(r => r && r !== '1')
+  return sets.map((_, i) => `S${i + 1} ${one(showReps ? reps[i] : '', secs[i])}`)
+}
+
+// Powtórzenia zwykłego ćwiczenia: linia na serię ("S1 8", "S2 6"), gdy serie się różnią
+function repsLines(ex: BlockExercise): string[] | null {
+  const reps = (ex.work_sets || []).map(s => s.reps?.trim() || '')
+  if (new Set(reps).size <= 1) return null
+  return reps.map((r, i) => `S${i + 1} ${r || '—'}`)
+}
+
+// Wartości serii jedna pod drugą (kolumna Powt.)
+function SeriesLines({ lines }: { lines: string[] }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.35, whiteSpace: 'nowrap', width: 'max-content', margin: '0 auto' }}>
+      {lines.map((l, i) => <span key={i}>{l}</span>)}
+    </div>
+  )
 }
 type Block = {
   id: number; day_id: number; block_name: string; block_order: number; rounds: number
@@ -900,7 +917,12 @@ export default function PlanTableView(props: Props) {
                                       <td style={td({ background: '#eff6ff' })}>
                                         {isoReps ? (
                                           <div onClick={() => props.onEditExercise(block.id, ex)} title={`Ćwiczenie ${ex.iso_type} — kliknij, by edytować czas i powtórzenia serii`} style={{ cursor: 'pointer', fontFamily: 'var(--font-inter),sans-serif', fontSize: '12px', fontWeight: 700, textAlign: 'center', padding: '2px 4px', whiteSpace: 'nowrap' }}>
-                                            {isoPowtSummary(ex)}
+                                            <SeriesLines lines={isoPowtLines(ex)} />
+                                          </div>
+                                        ) : repsLines(ex) ? (
+                                          // różne powtórzenia w seriach — edycja serii w oknie (✏️), żeby nie nadpisać wszystkich jedną wartością
+                                          <div onClick={() => props.onEditExercise(block.id, ex)} title="Serie mają różne powtórzenia — kliknij, by edytować serie" style={{ cursor: 'pointer', fontFamily: 'var(--font-inter),sans-serif', fontSize: '12px', padding: '2px 4px' }}>
+                                            <SeriesLines lines={repsLines(ex)!} />
                                           </div>
                                         ) : (
                                           <EditCell
