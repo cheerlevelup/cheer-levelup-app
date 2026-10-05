@@ -9,7 +9,7 @@ export type ActualSet = { num: number; weight: number | null; reps: number | nul
 export type ActualEntry = { sets: ActualSet[]; inProgress?: boolean }
 export type PainEntry = { vas: number; comment: string | null }
 
-export default function PlanExerciseTable({ rows, athletes, overrides, actual, uniqueDays, painByAthleteDay, painByAthleteEx }: {
+export default function PlanExerciseTable({ rows, athletes, overrides, actual, uniqueDays, painByAthleteDay, painByAthleteEx, absentByDay }: {
   rows: { exId: number; name: string; block: string; day: string; dayId: number; sets: number; reps: string; tempo: string; weight: number | null }[]
   athletes: any[]
   overrides: Record<number, Record<number, any>>
@@ -17,6 +17,8 @@ export default function PlanExerciseTable({ rows, athletes, overrides, actual, u
   uniqueDays: { id: number; label: string }[]
   painByAthleteDay?: Record<number, Set<number>>
   painByAthleteEx?: Record<number, Record<string, PainEntry>>
+  // nieobecne na danym treningu planu (id dnia → id zawodniczek)
+  absentByDay?: Record<number, number[]>
 }) {
   const [selDayId, setSelDayId] = useState(uniqueDays[0]?.id ?? 0)
   const filtered = rows.filter(r => r.dayId === selDayId)
@@ -65,7 +67,7 @@ export default function PlanExerciseTable({ rows, athletes, overrides, actual, u
       )}
       {filtered.length > 0 && (
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ borderCollapse: 'collapse', minWidth: '100%' }}>
+          <table style={{ borderCollapse: 'collapse', width: 'max-content' }}>
             <thead>
               <tr style={{ background: 'var(--navy-900)' }}>
                 {/* sticky first col: athlete name */}
@@ -86,7 +88,9 @@ export default function PlanExerciseTable({ rows, athletes, overrides, actual, u
                   <tr key={a.id} style={{ background: rowBg }}>
                     <td style={{ padding: '0.6rem 1rem', fontWeight: 700, color: 'var(--navy-900)', borderBottom: `1px solid var(--border)`, fontSize: '0.88rem', whiteSpace: 'nowrap', position: 'sticky', left: 0, zIndex: 1, background: rowBg }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        {a.full_name}
+                        {(absentByDay?.[selDayId] || []).includes(a.id)
+                          ? <span style={{ textDecoration: 'line-through', color: 'var(--muted-light)' }}>{a.full_name}</span>
+                          : a.full_name}
                         {painByAthleteDay?.[a.id]?.has(selDayId) && (
                           <span title="Zawodniczka zgłosiła ból w tym treningu" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, borderRadius: '50%', background: '#EF4444', color: '#fff', fontSize: '0.6rem', fontWeight: 900, flexShrink: 0 }}>!</span>
                         )}
@@ -99,6 +103,14 @@ export default function PlanExerciseTable({ rows, athletes, overrides, actual, u
                       const planS = effectiveSets(row.exId, a.id, row.sets)
                       const planR = effectiveReps(row.exId, a.id, row.reps)
                       const planT = effectiveTempo(row.exId, a.id, row.tempo)
+                      const absent = (absentByDay?.[row.dayId] || []).includes(a.id)
+                      if (absent) {
+                        return (
+                          <td key={`${row.exId}-${ci}`} style={{ padding: '0.4rem 0.6rem', textAlign: 'center', borderBottom: `1px solid var(--border)`, verticalAlign: 'middle', background: '#F6F7F9' }}>
+                            <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.62rem', fontWeight: 700, color: '#c23b3b' }}>nieobecna</span>
+                          </td>
+                        )
+                      }
                       const act = actual[row.exId]?.[a.id] ?? null
                       const hasAct = act !== null && act.sets.length > 0
 
@@ -135,9 +147,6 @@ export default function PlanExerciseTable({ rows, athletes, overrides, actual, u
                               ))}
                               {mod && (
                                 <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.5rem', color: 'var(--gold)', marginTop: 1 }}>✎ mod.</span>
-                              )}
-                              {act.inProgress && (
-                                <span title="Trening nie jest jeszcze oznaczony jako zakończony" style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.5rem', fontWeight: 700, color: '#92600A', marginTop: 1 }}>w trakcie</span>
                               )}
                             </div>
                           ) : mod ? (

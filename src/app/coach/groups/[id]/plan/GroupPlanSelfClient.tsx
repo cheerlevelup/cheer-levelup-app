@@ -211,7 +211,8 @@ export default function GroupPlanSelfClient({ group, athletes, currentPlan, acti
               )
 
               const uniqueDays = activePlanDays.map((d, i) => ({ id: d.id, label: d.day_name || `T${i + 1}` }))
-              return <PlanExerciseTable rows={rows} athletes={athletes} overrides={planExData.overrides} actual={planExData.actual || {}} uniqueDays={uniqueDays} painByAthleteDay={planExData.painByAthleteDay} painByAthleteEx={planExData.painByAthleteEx} />
+              const absentByDay = Object.fromEntries(activePlanDays.map((d: any) => [d.id, ((d.absent_athlete_ids || []) as number[]).map(Number)]))
+              return <PlanExerciseTable absentByDay={absentByDay} rows={rows} athletes={athletes} overrides={planExData.overrides} actual={planExData.actual || {}} uniqueDays={uniqueDays} painByAthleteDay={planExData.painByAthleteDay} painByAthleteEx={planExData.painByAthleteEx} />
             })()}
           </Card>
         )}
