@@ -5,7 +5,8 @@
 import { useState } from 'react'
 
 export type ActualSet = { num: number; weight: number | null; reps: number | null; note?: string | null }
-export type ActualEntry = { sets: ActualSet[] }
+// inProgress — wpisy z treningu jeszcze nieoznaczonego jako zakończony
+export type ActualEntry = { sets: ActualSet[]; inProgress?: boolean }
 export type PainEntry = { vas: number; comment: string | null }
 
 export default function PlanExerciseTable({ rows, athletes, overrides, actual, uniqueDays, painByAthleteDay, painByAthleteEx }: {
@@ -134,6 +135,9 @@ export default function PlanExerciseTable({ rows, athletes, overrides, actual, u
                               ))}
                               {mod && (
                                 <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.5rem', color: 'var(--gold)', marginTop: 1 }}>✎ mod.</span>
+                              )}
+                              {act.inProgress && (
+                                <span title="Trening nie jest jeszcze oznaczony jako zakończony" style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.5rem', fontWeight: 700, color: '#92600A', marginTop: 1 }}>w trakcie</span>
                               )}
                             </div>
                           ) : mod ? (

@@ -65,13 +65,23 @@ export default function GroupPlanSelfClient({ group, athletes, currentPlan, acti
       ovrMap[o.block_exercise_id][o.athlete_id] = o
     }
 
-    // Faktyczne dane treningowe z set_logs (sesje dla tych dni i zawodniczek)
-    const { data: sessionsForPlan } = await sb
+    // Faktyczne dane treningowe z set_logs — także treningi w trakcie (wpisy trenera
+    // z siatki albo zawodniczki przed zakończeniem). Jedna sesja na zawodniczkę i dzień:
+    // niezakończona (ta, którą uzupełnia siatka i aplikacja), inaczej ostatnia zakończona.
+    const { data: allSessions } = await sb
       .from('workout_sessions')
-      .select('id, athlete_id, workout_day_id')
+      .select('id, athlete_id, workout_day_id, completed, created_at')
       .in('workout_day_id', planDayIds)
       .in('athlete_id', athleteIds2)
-      .eq('completed', true)
+      .order('created_at', { ascending: false })
+    const pickedByKey = new Map<string, any>()
+    for (const s of (allSessions || []) as any[]) {
+      const key = `${s.athlete_id}_${s.workout_day_id}`
+      const cur = pickedByKey.get(key)
+      if (!cur || (cur.completed && !s.completed)) pickedByKey.set(key, s)
+    }
+    const sessionsForPlan = Array.from(pickedByKey.values())
+    const inProgressSession = new Set(sessionsForPlan.filter((s: any) => !s.completed).map((s: any) => s.id))
 
     const sessionIds = (sessionsForPlan || []).map((s: any) => s.id)
 
@@ -93,7 +103,7 @@ export default function GroupPlanSelfClient({ group, athletes, currentPlan, acti
         const athleteId = sessionAthleteMap[l.workout_session_id]
         if (!athleteId) continue
         if (!actualMap[l.block_exercise_id]) actualMap[l.block_exercise_id] = {}
-        if (!actualMap[l.block_exercise_id][athleteId]) actualMap[l.block_exercise_id][athleteId] = { sets: [] }
+        if (!actualMap[l.block_exercise_id][athleteId]) actualMap[l.block_exercise_id][athleteId] = { sets: [], inProgress: inProgressSession.has(l.workout_session_id) }
         actualMap[l.block_exercise_id][athleteId].sets.push({
           num: l.set_number,
           weight: l.weight ?? null,
