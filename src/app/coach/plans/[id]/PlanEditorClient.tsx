@@ -10,6 +10,7 @@ import PlanWellnessConfig from '@/components/PlanWellnessConfig'
 import { SetPageMeta, usePageMeta } from '@/components/coach/PageMetaContext'
 import { Modal, Button, Field } from '@/components/coach/ui'
 import { insertExercisesWithVariants, sortWithVariants, variantLabels } from '@/lib/exerciseVariants'
+import { moveExercise, moveBlock } from '@/lib/planReorder'
 
 type Plan = {
   id: number
@@ -1185,6 +1186,51 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
     ))
   }
 
+  // ── Przeciąganie w obrębie treningu ──
+  // Ćwiczenie (z wariantami) na miejsce innego albo na koniec bloku — numeracja liczy się od nowa
+  async function dropExercise(exerciseId: number, fromBlockId: number, toBlockId: number, targetBaseId: number | null) {
+    const from = localBlocks.find(b => b.id === fromBlockId)
+    const to = localBlocks.find(b => b.id === toBlockId)
+    if (!from || !to || from.day_id !== to.day_id) return
+    const result = moveExercise(from.workout_block_exercises || [], to.workout_block_exercises || [], exerciseId, fromBlockId, toBlockId, targetBaseId)
+    if (!result || result.updates.length === 0) return
+    const apply = (list: Block[]) => list.map(b =>
+      b.id === toBlockId ? { ...b, workout_block_exercises: result.to }
+        : b.id === fromBlockId ? { ...b, workout_block_exercises: result.from }
+          : b)
+    setLocalBlocks(apply)
+    setTargetBlocks(apply)
+    const results = await Promise.all(result.updates.map(u =>
+      supabase.from('workout_block_exercises').update({ block_id: u.block_id, exercise_order: u.exercise_order }).eq('id', u.id)))
+    const failed = results.find(r => r.error)
+    if (failed?.error) showError(`Nie udało się zapisać nowej kolejności: ${failed.error.message}`)
+  }
+
+  // Cały blok na miejsce innego bloku w tym samym treningu — litery A/B/C liczą się od nowa
+  async function dropBlock(blockId: number, targetBlockId: number) {
+    const block = localBlocks.find(b => b.id === blockId)
+    if (!block) return
+    const result = moveBlock(localBlocks.filter(b => b.day_id === block.day_id), blockId, targetBlockId)
+    if (!result || result.updates.length === 0) return
+    // Domyślne nazwy „Blok A/B/C" idą za nową pozycją; własne nazwy zostają bez zmian
+    const renamed = new Map<number, string>()
+    result.blocks.forEach((b, i) => {
+      const name = (b as Block).block_name
+      if (/^Blok [A-Z]$/.test(name || '') && name !== nextBlockName(i)) renamed.set(b.id, nextBlockName(i))
+    })
+    const newOrder = new Map(result.blocks.map(b => [b.id, b.block_order]))
+    const apply = (list: Block[]) => list.map(b => newOrder.has(b.id)
+      ? { ...b, block_order: newOrder.get(b.id)!, ...(renamed.has(b.id) ? { block_name: renamed.get(b.id)! } : {}) }
+      : b)
+    setLocalBlocks(apply)
+    setTargetBlocks(apply)
+    const changedIds = new Set([...result.updates.map(u => u.id), ...renamed.keys()])
+    const results = await Promise.all([...changedIds].map(id =>
+      supabase.from('workout_day_blocks').update({ block_order: newOrder.get(id), ...(renamed.has(id) ? { block_name: renamed.get(id) } : {}) }).eq('id', id)))
+    const failed = results.find(r => r.error)
+    if (failed?.error) showError(`Nie udało się zapisać nowej kolejności bloków: ${failed.error.message}`)
+  }
+
   // ── Warianty ćwiczenia (1a/1b/1c) ──
   const [assignSlot, setAssignSlot] = useState<{ blockId: number; baseId: number } | null>(null)
 
@@ -1443,6 +1489,8 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
           onDeleteExercise={deleteExercise}
           athletes={athletes}
           onAddVariant={addVariant}
+          onDropExercise={dropExercise}
+          onDropBlock={dropBlock}
           onAssignVariants={(blockId, baseId) => setAssignSlot({ blockId, baseId })}
         />
 

@@ -622,6 +622,9 @@ interface Props {
   onEditExercise: (blockId: number, exercise: BlockExercise) => void
   onMoveExercise: (blockId: number, exercise: BlockExercise) => void
   onDeleteExercise: (blockId: number, exerciseId?: number) => void
+  // przeciąganie w obrębie treningu: ćwiczenie (z wariantami) na miejsce innego / na koniec bloku; blok na miejsce innego
+  onDropExercise: (exerciseId: number, fromBlockId: number, toBlockId: number, targetBaseId: number | null) => void
+  onDropBlock: (blockId: number, targetBlockId: number) => void
 }
 
 const iconBtn: CSSProperties = {
@@ -677,6 +680,23 @@ export default function PlanTableView(props: Props) {
     Math.min(6, Math.max(0, ...blocks.flatMap(b => (b.workout_block_exercises || []).map(ex =>
       ex.is_warmup ? (ex.warmup_sets || []).filter(s => s.reps || s.weight_kg || s.note).length : 0)))))
   const [exporting, setExporting] = useState<'xlsx' | 'pdf' | null>(null)
+  // Przeciąganie (uchwyt ⠿): ćwiczenie albo cały blok, tylko w obrębie jednego treningu
+  type DragItem = { kind: 'ex'; exId: number; blockId: number; dayId: number } | { kind: 'block'; blockId: number; dayId: number }
+  const [drag, setDrag] = useState<DragItem | null>(null)
+  const [dropKey, setDropKey] = useState<string | null>(null)
+  const endDrag = () => { setDrag(null); setDropKey(null) }
+  const dropLine: CSSProperties = { boxShadow: 'inset 0 3px 0 var(--gold)' }
+  const handle = (title: string, onStart: () => void) => (
+    <span
+      draggable
+      onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'plan-row'); onStart() }}
+      onDragEnd={endDrag}
+      title={title}
+      style={{ cursor: 'grab', color: 'var(--muted-light)', fontSize: 13, lineHeight: 1, padding: '0 3px', userSelect: 'none' }}
+    >
+      ⠿
+    </span>
+  )
 
   const allDays = [...days].sort((a, b) => a.day_order - b.day_order)
 
@@ -815,10 +835,22 @@ export default function PlanTableView(props: Props) {
 
                               // wiersz bloku: nazwa (edytowalna) + kopiuj / przenieś / usuń
                               const blockHeadRow = (
-                                <tr key={`head-${block.id}`}>
+                                <tr
+                                  key={`head-${block.id}`}
+                                  style={dropKey === `block-${block.id}` ? dropLine : undefined}
+                                  onDragOver={e => {
+                                    if (drag?.kind === 'block' && drag.dayId === day.id && drag.blockId !== block.id) { e.preventDefault(); setDropKey(`block-${block.id}`) }
+                                  }}
+                                  onDrop={e => {
+                                    e.preventDefault()
+                                    if (drag?.kind === 'block' && drag.dayId === day.id && drag.blockId !== block.id) props.onDropBlock(drag.blockId, block.id)
+                                    endDrag()
+                                  }}
+                                >
                                   <td className="coach-pt-block" style={td()}>{blockLabel(bi)}</td>
                                   <td colSpan={totalCols - 1} style={td({ textAlign: 'left', background: 'var(--bg)', padding: '3px 8px' })}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                      {handle('Przeciągnij, by przenieść cały blok w tym treningu', () => setDrag({ kind: 'block', blockId: block.id, dayId: day.id }))}
                                       <div style={{ minWidth: 140, fontWeight: 700 }}>
                                         <EditCell value={block.block_name} onCommit={v => props.onRenameBlock(block.id, v)} align="left" placeholder="nazwa bloku" />
                                       </div>
@@ -833,7 +865,18 @@ export default function PlanTableView(props: Props) {
                               )
 
                               const addExRow = (
-                                <tr key={`add-ex-${block.id}`}>
+                                <tr
+                                  key={`add-ex-${block.id}`}
+                                  style={dropKey === `end-${block.id}` ? dropLine : undefined}
+                                  onDragOver={e => {
+                                    if (drag?.kind === 'ex' && drag.dayId === day.id) { e.preventDefault(); setDropKey(`end-${block.id}`) }
+                                  }}
+                                  onDrop={e => {
+                                    e.preventDefault()
+                                    if (drag?.kind === 'ex' && drag.dayId === day.id) props.onDropExercise(drag.exId, drag.blockId, block.id, null)
+                                    endDrag()
+                                  }}
+                                >
                                   {exs.length === 0 && <td className="coach-pt-block" style={td()}></td>}
                                   <td colSpan={totalCols - 1} style={td({ padding: '3px 8px', textAlign: 'left' })}>
                                     <button onClick={() => onAddExercise(block.id)}
@@ -852,13 +895,30 @@ export default function PlanTableView(props: Props) {
                                   const name = fmtName(ex.exercise?.name || ex.exercise_code || '')
                                   const isoReps = !!ex.iso
                                   return (
-                                    <tr key={ex.id ?? `${block.id}-${i}`} style={ex.variant_of != null ? { background: '#faf7ff' } : undefined}>
+                                    <tr
+                                      key={ex.id ?? `${block.id}-${i}`}
+                                      style={{ ...(ex.variant_of != null ? { background: '#faf7ff' } : {}), ...(dropKey === `ex-${ex.variant_of ?? ex.id}` && ex.variant_of == null ? dropLine : {}) }}
+                                      onDragOver={e => {
+                                        const target = ex.variant_of ?? ex.id
+                                        if (drag?.kind === 'ex' && drag.dayId === day.id && target != null && drag.exId !== target) { e.preventDefault(); setDropKey(`ex-${target}`) }
+                                      }}
+                                      onDrop={e => {
+                                        e.preventDefault()
+                                        const target = ex.variant_of ?? ex.id
+                                        if (drag?.kind === 'ex' && drag.dayId === day.id && target != null && drag.exId !== target) props.onDropExercise(drag.exId, drag.blockId, block.id, target)
+                                        endDrag()
+                                      }}
+                                    >
                                       {i === 0 && (
                                         <td rowSpan={exs.length + 1} className="coach-pt-block" style={td()}>
                                           {blockLabel(bi)}
                                         </td>
                                       )}
-                                      <td style={td({ color: ex.variant_of != null ? '#7c3aed' : 'var(--muted-light)', fontWeight: labels.get(ex)?.match(/[a-z]/) ? 700 : 400, whiteSpace: 'nowrap' })}>{labels.get(ex) ?? i + 1}</td>
+                                      <td style={td({ color: ex.variant_of != null ? '#7c3aed' : 'var(--muted-light)', fontWeight: labels.get(ex)?.match(/[a-z]/) ? 700 : 400, whiteSpace: 'nowrap' })}>
+                                        {/* uchwyt tylko przy ćwiczeniu bazowym — warianty jadą razem z nim */}
+                                        {ex.variant_of == null && ex.id != null && handle('Przeciągnij, by przenieść ćwiczenie (z wariantami) w tym treningu', () => setDrag({ kind: 'ex', exId: ex.id as number, blockId: block.id, dayId: day.id }))}
+                                        {labels.get(ex) ?? i + 1}
+                                      </td>
                                       <td style={td({ textAlign: 'left', minWidth: 150 })}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                                           <div style={{ flex: 1, minWidth: 0 }}>
