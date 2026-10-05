@@ -60,6 +60,9 @@ type WorkSet = {
   // ISO: przerwa (w sekundach) między powtórzeniami W OBRĘBIE tej serii
   // (inaczej niż przerwa między samymi seriami, którą trenerka planuje sama).
   rest?: string
+  // ekscentryczne: czas fazy ekscentrycznej (s) i hold w rozciągnięciu (s) — zamiast tempa
+  ecc?: string
+  hold?: string
 }
 
 type BlockExercise = {
@@ -78,6 +81,8 @@ type BlockExercise = {
   work_sets?: WorkSet[] | null
   iso?: boolean | null
   iso_type?: 'PIMA' | 'HIMA' | null
+  // ćwiczenie ekscentryczne (obok standardowego i ISO)
+  ecc?: boolean | null
   coach_comment?: string | null
   exercise_url?: string | null
   exercise?: ExerciseLibraryItem | null
@@ -169,6 +174,8 @@ function normalizeWorkSets(exercise: BlockExercise): WorkSet[] {
       seconds: set.seconds?.toString() || '',
       intensity: set.intensity?.toString() || '',
       rest: set.rest?.toString() || '',
+      ecc: set.ecc?.toString() || '',
+      hold: set.hold?.toString() || '',
     }))
   }
   const count = Math.max(exercise.sets || 1, 1)
@@ -180,6 +187,8 @@ function normalizeWorkSets(exercise: BlockExercise): WorkSet[] {
     seconds: '',
     intensity: '',
     rest: '',
+    ecc: '',
+    hold: '',
   }))
 }
 
@@ -192,6 +201,8 @@ function cleanWorkSets(value: WorkSet[]): WorkSet[] {
     seconds: set.seconds?.trim() || '',
     intensity: set.intensity?.trim() || '',
     rest: set.rest?.trim() || '',
+    ecc: set.ecc?.trim() || '',
+    hold: set.hold?.trim() || '',
   }))
 }
 
@@ -209,6 +220,23 @@ function exercisePayloadWithoutWorkSets<T extends { work_sets?: WorkSet[] }>(pay
 function isIsoColumnError(error: { message?: string; code?: string } | null) {
   const message = error?.message?.toLowerCase() || ''
   return message.includes("'iso'") || message.includes('iso_type')
+}
+
+function isEccColumnError(error: { message?: string; code?: string } | null) {
+  return (error?.message?.toLowerCase() || '').includes("'ecc'")
+}
+
+function exercisePayloadWithoutEcc<T extends { ecc?: boolean }>(payload: T) {
+  const rest = { ...payload }
+  delete rest.ecc
+  return rest
+}
+
+// Skrót serii ekscentrycznej do kolumny tempo — tak widzi go zawodniczka w aplikacji
+// (która pokazuje tempo ćwiczenia): "ECC 5''" albo "ECC 5'' · hold 3''"
+function eccTempoLabel(set?: { ecc?: string; hold?: string } | null): string | null {
+  if (!set?.ecc && !set?.hold) return null
+  return [set.ecc ? `ECC ${set.ecc}''` : '', set.hold ? `hold ${set.hold}''` : ''].filter(Boolean).join(' · ')
 }
 
 function exercisePayloadWithoutIso<T extends { iso?: boolean; iso_type?: string | null }>(payload: T) {
@@ -236,6 +264,7 @@ function ExerciseEditForm({
   const [exerciseCode, setExerciseCode] = useState(exercise.exercise_code || '')
   const [iso, setIso] = useState(exercise.iso || false)
   const [isoType, setIsoType] = useState<'PIMA' | 'HIMA'>(exercise.iso_type || 'PIMA')
+  const [ecc, setEcc] = useState(!exercise.iso && !!exercise.ecc)
   const [workSets, setWorkSets] = useState<WorkSet[]>(() => normalizeWorkSets(exercise))
   const [comment, setComment] = useState(exercise.coach_comment || '')
   const [isWarmup, setIsWarmup] = useState(exercise.is_warmup || false)
@@ -283,13 +312,15 @@ function ExerciseEditForm({
       exercise_order: exercise.exercise_order,
       iso,
       iso_type: iso ? isoType : null,
+      // ecc wysyłamy tylko dla ćwiczeń ekscentrycznych (albo przy zmianie z ekscentrycznego) — bez migracji reszta działa
+      ...(ecc || exercise.ecc ? { ecc: !iso && ecc } : {}),
       // Kolumny sets/reps/tempo/weight_kg/rir zostają wypełnione danymi
       // pierwszej serii — tak widoki, które jeszcze nie znają work_sets
       // (np. tabela planu), pokazują sensowny skrót zamiast pustki. Dla ISO
       // reps/tempo nie mają zastosowania (jest czas/intensywność zamiast nich).
       sets: cleanSets.length || 1,
       reps: iso ? null : (first?.reps || null),
-      tempo: iso ? null : (first?.tempo || null),
+      tempo: iso ? null : ecc ? eccTempoLabel(first) : (first?.tempo || null),
       weight_kg: first?.weight_kg ? parseFloat(first.weight_kg) : null,
       rir: first?.rir ? parseInt(first.rir) : null,
       work_sets: cleanSets,
@@ -306,8 +337,13 @@ function ExerciseEditForm({
       : await supabase.from('workout_block_exercises').update(payload).eq('id', exercise.id)
     let data = 'data' in result ? result.data : null
     let error = result.error
+    if (isEccColumnError(error)) {
+      setSaving(false)
+      setSaveError('Aby dodawać ćwiczenia ekscentryczne, uruchom migrację 202610050004.')
+      return
+    }
     if (isIsoColumnError(error)) {
-      const withoutIso = exercisePayloadWithoutIso(payload)
+      const withoutIso = exercisePayloadWithoutEcc(exercisePayloadWithoutIso(payload))
       result = isNew
         ? await supabase.from('workout_block_exercises').insert(withoutIso).select('*, exercise:exercises(*)')
         : await supabase.from('workout_block_exercises').update(withoutIso).eq('id', exercise.id)
@@ -395,7 +431,7 @@ function ExerciseEditForm({
     setWorkSets(prev => {
       const last = prev[prev.length - 1]
       // nowa seria dziedziczy wartości z poprzedniej — szybciej się wpisuje
-      return [...prev, last ? { ...last } : { reps: '', weight_kg: '', tempo: '', rir: '', seconds: '', intensity: '', rest: '' }]
+      return [...prev, last ? { ...last } : { reps: '', weight_kg: '', tempo: '', rir: '', seconds: '', intensity: '', rest: '', ecc: '', hold: '' }]
     })
   }
 
@@ -432,11 +468,14 @@ function ExerciseEditForm({
       <div style={{ marginBottom: 10 }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>Typ ćwiczenia</div>
         <div className="coach-scheme-row" style={{ marginBottom: iso ? 8 : 0 }}>
-          <button type="button" className={`coach-scheme-btn ${!iso ? 'coach-active' : ''}`} onClick={() => setIso(false)}>
+          <button type="button" className={`coach-scheme-btn ${!iso && !ecc ? 'coach-active' : ''}`} onClick={() => { setIso(false); setEcc(false) }}>
             Standardowe
           </button>
-          <button type="button" className={`coach-scheme-btn ${iso ? 'coach-active' : ''}`} onClick={() => setIso(true)}>
+          <button type="button" className={`coach-scheme-btn ${iso ? 'coach-active' : ''}`} onClick={() => { setIso(true); setEcc(false) }}>
             Izometryczne (ISO)
+          </button>
+          <button type="button" className={`coach-scheme-btn ${ecc ? 'coach-active' : ''}`} onClick={() => { setEcc(true); setIso(false) }}>
+            Ekscentryczne
           </button>
         </div>
         {iso && (
@@ -469,14 +508,16 @@ function ExerciseEditForm({
           <div>
             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink)' }}>Serie</div>
             <div style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--font-inter),sans-serif' }}>
-              {iso ? 'Każda seria może mieć inny czas napięcia, liczbę powtórzeń, przerwę (rest) między nimi, ciężar i RIR.' : 'Każda seria może mieć inne powtórzenia, ciężar, tempo i RIR.'}
+              {ecc ? 'Każda seria może mieć inne powtórzenia, ciężar, czas fazy ekscentrycznej, hold w rozciągnięciu i RIR.' : iso ? 'Każda seria może mieć inny czas napięcia, liczbę powtórzeń, przerwę (rest) między nimi, ciężar i RIR.' : 'Każda seria może mieć inne powtórzenia, ciężar, tempo i RIR.'}
             </div>
           </div>
           <button type="button" className="coach-btn coach-btn-dark coach-btn-small" onClick={addWorkSet}>Dodaj serię</button>
         </div>
 
         {(() => {
-          const cols = iso
+          const cols = ecc
+            ? [{ field: 'reps' as const, label: 'Powt.', placeholder: '5' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'ecc' as const, label: 'Ekscentryka (s)', placeholder: '5' }, { field: 'hold' as const, label: 'Hold w rozciągnięciu (s)', placeholder: '-' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }]
+            : iso
             ? (isoType === 'PIMA'
               ? [{ field: 'seconds' as const, label: 'Czas (s)', placeholder: '20' }, { field: 'reps' as const, label: 'Powt.', placeholder: '-' }, { field: 'rest' as const, label: 'Rest (s)', placeholder: '-' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'intensity' as const, label: 'Intensywność (%)', placeholder: '%' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }]
               : [{ field: 'seconds' as const, label: 'Czas (s)', placeholder: '20' }, { field: 'reps' as const, label: 'Powt.', placeholder: '-' }, { field: 'rest' as const, label: 'Rest (s)', placeholder: '-' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }])
@@ -1040,6 +1081,7 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
           // osobne wartości serii i ISO — jak w oryginale
           work_sets: ex.work_sets || [],
           iso: !!ex.iso,
+          ...(ex.ecc ? { ecc: true } : {}),
           iso_type: ex.iso ? (ex.iso_type || null) : null,
         })
         // warianty (1b, 1c...) kopiujemy z przepiętym variant_of na nowe ćwiczenia bazowe

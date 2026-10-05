@@ -5,7 +5,7 @@ import type { CSSProperties } from 'react'
 import { sortWithVariants, variantLabels } from '@/lib/exerciseVariants'
 
 type WarmupSet = { reps?: string; weight_kg?: string; note?: string }
-type WorkSet = { reps?: string; weight_kg?: string; tempo?: string; rir?: string; seconds?: string; intensity?: string; rest?: string }
+type WorkSet = { reps?: string; weight_kg?: string; tempo?: string; rir?: string; seconds?: string; intensity?: string; rest?: string; ecc?: string; hold?: string }
 type ExerciseLibraryItem = { id: number; name: string; category?: string | null }
 type BlockExercise = {
   id?: number; block_id: number; exercise_id?: number | null; exercise_code?: string | null
@@ -14,6 +14,8 @@ type BlockExercise = {
   warmup_sets?: WarmupSet[] | null; coach_comment?: string | null
   exercise_url?: string | null; exercise?: ExerciseLibraryItem | null
   work_sets?: WorkSet[] | null; iso?: boolean | null; iso_type?: 'PIMA' | 'HIMA' | null
+  // ćwiczenie ekscentryczne: w seriach czas fazy ekscentrycznej (ecc) i hold w rozciągnięciu (hold)
+  ecc?: boolean | null
   // wariant ćwiczenia (1b, 1c...) — wskazuje na ćwiczenie bazowe (1a) i zawodniczki, które go robią
   variant_of?: number | null; variant_athlete_ids?: number[] | null
 }
@@ -49,6 +51,16 @@ function repsLines(ex: BlockExercise): string[] | null {
   const reps = (ex.work_sets || []).map(s => s.reps?.trim() || '')
   if (new Set(reps).size <= 1) return null
   return reps.map((r, i) => `S${i + 1} ${r || '—'}`)
+}
+
+// Ekscentryczne w kolumnie Tempo: "ECC 5'' · hold 3''" — jedna linia, gdy serie równe,
+// inaczej linia na serię ("S1 ECC 5''", "S2 ECC 6'' · hold 2''")
+function eccTempoLines(ex: BlockExercise): string[] {
+  const sets = ex.work_sets || []
+  const one = (s?: WorkSet) => [s?.ecc ? `ECC ${s.ecc}''` : '', s?.hold ? `hold ${s.hold}''` : ''].filter(Boolean).join(' · ') || '—'
+  const all = sets.map(one)
+  if (new Set(all).size <= 1) return [all[0] || (ex.tempo || '—')]
+  return all.map((l, i) => `S${i + 1} ${l}`)
 }
 
 // Wartości serii jedna pod drugą (kolumna Powt.)
@@ -853,6 +865,11 @@ export default function PlanTableView(props: Props) {
                                             {/* wpisana nazwa = własna nazwa (odpina od biblioteki); zmiana z biblioteki — przez ✏️ */}
                                             <EditCell value={name} onCommit={v => onUpdateExercise(block.id, ex, { exercise_code: v.trim() || name, exercise_id: null, exercise: null })} align="left" placeholder="nazwa" />
                                           </div>
+                                          {ex.ecc && !ex.iso && (
+                                            <span title="Ćwiczenie ekscentryczne" style={{ flexShrink: 0, background: '#7c2d12', color: '#fed7aa', fontFamily: 'var(--font-inter),sans-serif', fontSize: 9, fontWeight: 700, borderRadius: 4, padding: '1px 5px', letterSpacing: '.02em' }}>
+                                              ECC
+                                            </span>
+                                          )}
                                           {ex.iso && (
                                             <span title={`Ćwiczenie izometryczne (${ex.iso_type})`} style={{ flexShrink: 0, background: 'var(--navy-900)', color: 'var(--gold)', fontFamily: 'var(--font-inter),sans-serif', fontSize: 9, fontWeight: 700, borderRadius: 4, padding: '1px 5px', letterSpacing: '.02em' }}>
                                               {ex.iso_type}
@@ -943,7 +960,12 @@ export default function PlanTableView(props: Props) {
                                         />
                                       </td>
                                       <td style={td({ background: '#eff6ff' })}>
-                                        {ex.iso ? <span style={{ color: 'var(--muted-light)' }}>—</span> : (
+                                        {ex.iso ? <span style={{ color: 'var(--muted-light)' }}>—</span> : ex.ecc ? (
+                                          // ekscentryczne — czas fazy ekscentrycznej i hold edytuje się w oknie serii
+                                          <div onClick={() => props.onEditExercise(block.id, ex)} title="Ćwiczenie ekscentryczne — kliknij, by edytować czas ekscentryki i hold w seriach" style={{ cursor: 'pointer', fontFamily: 'var(--font-inter),sans-serif', fontSize: '12px', padding: '2px 4px' }}>
+                                            <SeriesLines lines={eccTempoLines(ex)} />
+                                          </div>
+                                        ) : (
                                           <EditCell
                                             value={ex.work_sets?.length ? orBlank(fmtRange(ex.work_sets.map(s => s.tempo))) : (ex.tempo || '')}
                                             onCommit={v => onUpdateExercise(block.id, ex, { tempo: v.trim() || null, ...(syncWorkSets(ex, 'tempo', v.trim()) ? { work_sets: syncWorkSets(ex, 'tempo', v.trim()) } : {}) })}
