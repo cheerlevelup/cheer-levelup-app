@@ -9,15 +9,17 @@ interface ModalProps {
   sub?: string
   children: React.ReactNode
   footer?: React.ReactNode
+  // szersze okno (np. formularz ćwiczenia z kilkoma kolumnami serii)
+  wide?: boolean
 }
 
 // Sama powłoka modala (overlay + box + nagłówek + stopka) — logika/formularz
 // zostają w komponencie, który z niej korzysta (np. MoveToGroupModal).
-export default function Modal({ open, onClose, title, eyebrow, sub, children, footer }: ModalProps) {
+export default function Modal({ open, onClose, title, eyebrow, sub, children, footer, wide }: ModalProps) {
   if (!open) return null
   return (
     <div className="coach-modal-overlay" onClick={onClose}>
-      <div className="coach-modal-box" onClick={(e) => e.stopPropagation()}>
+      <div className={`coach-modal-box${wide ? ' coach-modal-wide' : ''}`} onClick={(e) => e.stopPropagation()}>
         <div className="coach-modal-head">
           {eyebrow && <div className="coach-eyebrow">{eyebrow}</div>}
           <h3>{title}</h3>

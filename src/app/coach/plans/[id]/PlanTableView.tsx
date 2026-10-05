@@ -40,21 +40,10 @@ type Block = {
   id: number; day_id: number; block_name: string; block_order: number; rounds: number
   workout_block_exercises?: BlockExercise[]
 }
-type Day = { id: number; week_id: number; day_name: string; day_order: number }
+type Day = { id: number; week_id: number; day_name: string; day_order: number; coach_intro?: string | null; coach_closing?: string | null }
 type Week = { id: number; plan_id: number; week_number: number; name?: string | null }
 type Plan = { id: number; name: string }
 
-interface Props {
-  plan: Plan
-  weeks: Week[]
-  days: Day[]
-  blocks: Block[]
-  onBlocksChange: (blocks: Block[]) => void
-  onAddDay: (weekId: number) => Promise<void>
-  onAddBlock: (dayId: number) => Promise<void>
-  onAddExercise: (blockId: number) => void   // opens ExerciseModal in parent
-  onAddWeek: () => Promise<void>
-}
 
 function fmtName(s: string) { return s.replace(/-/g, ' ') }
 function blockLabel(i: number) { return String.fromCharCode(65 + i) }
@@ -567,32 +556,97 @@ async function exportPdf(plan: Plan, days: Day[], blocks: Block[], wCols: number
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
-export default function PlanTableView({ plan, weeks, days, blocks, onBlocksChange, onAddDay, onAddBlock, onAddExercise, onAddWeek }: Props) {
-  const [warmupCols, setWarmupCols] = useState(0)
+// Jedyny widok edytora planu (dawny widok „Bloki" usunięty) — wszystko edytuje
+// się tutaj: komórki tabeli zapisują się od razu, pełna edycja ćwiczenia
+// (biblioteka, ISO, osobne wartości serii) otwiera okno z formularzem.
+export type ExercisePatch = Partial<Pick<BlockExercise, 'exercise_id' | 'exercise_code' | 'exercise' | 'sets' | 'reps' | 'tempo' | 'weight_kg' | 'rir' | 'coach_comment' | 'exercise_url' | 'warmup_sets' | 'is_warmup' | 'work_sets'>>
+
+interface Props {
+  plan: Plan
+  weeks: Week[]
+  days: Day[]
+  blocks: Block[]
+  onUpdateExercise: (blockId: number, exercise: BlockExercise, patch: ExercisePatch) => void
+  onAddWeek: () => Promise<void>
+  onAddDay: (weekId: number) => Promise<void>
+  onRenameDay: (dayId: number, name: string) => void
+  onDeleteDay: (dayId: number) => void
+  onMoveDay: (day: Day) => void
+  onSaveDayMessage: (dayId: number, field: 'coach_intro' | 'coach_closing', value: string) => void
+  onAddBlock: (dayId: number) => Promise<void>
+  onRenameBlock: (blockId: number, name: string) => void
+  onCopyBlock: (block: Block) => void
+  onMoveBlock: (block: Block) => void
+  onDeleteBlock: (blockId: number) => void
+  onAddExercise: (blockId: number) => void          // otwiera formularz ćwiczenia w oknie
+  onEditExercise: (blockId: number, exercise: BlockExercise) => void
+  onMoveExercise: (blockId: number, exercise: BlockExercise) => void
+  onDeleteExercise: (blockId: number, exerciseId?: number) => void
+}
+
+const iconBtn: CSSProperties = {
+  border: 'none', background: 'transparent', color: 'var(--muted)', cursor: 'pointer', fontSize: '12px',
+  padding: '2px 4px', borderRadius: 4, lineHeight: 1,
+}
+
+// Notatka trenera do treningu (przemowa przed / wiadomość po) — zapis po wyjściu z pola
+function DayMessage({ label, icon, value, placeholder, onSave }: {
+  label: string; icon: string; value: string; placeholder: string; onSave: (v: string) => void
+}) {
+  const [draft, setDraft] = useState(value)
+  const [open, setOpen] = useState(!!value)
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="coach-btn coach-btn-ghost coach-btn-small">
+        {icon} {label}
+      </button>
+    )
+  }
+  return (
+    <div style={{ flex: '1 1 320px', minWidth: 260 }}>
+      <div style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 3 }}>{icon} {label}</div>
+      <textarea
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={() => { if (draft !== value) onSave(draft) }}
+        placeholder={placeholder}
+        rows={2}
+        style={{ width: '100%', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 8px', fontFamily: 'var(--font-inter),sans-serif', fontSize: 12, color: 'var(--ink)', resize: 'vertical', outline: 'none', background: '#fff' }}
+      />
+    </div>
+  )
+}
+
+// Wartość przepisana na wszystkie serie (work_sets) — żeby tabela i formularz
+// ćwiczenia pokazywały to samo po edycji komórki
+function syncWorkSets(ex: BlockExercise, field: 'reps' | 'weight_kg' | 'tempo' | 'rir', value: string): WorkSet[] | undefined {
+  if (!Array.isArray(ex.work_sets) || ex.work_sets.length === 0) return undefined
+  return ex.work_sets.map(s => ({ ...s, [field]: value }))
+}
+function resizeWorkSets(ex: BlockExercise, n: number): WorkSet[] | undefined {
+  if (!Array.isArray(ex.work_sets) || ex.work_sets.length === 0) return undefined
+  const sets = ex.work_sets.slice(0, n)
+  while (sets.length < n) sets.push({ ...(sets[sets.length - 1] || {}) })
+  return sets
+}
+
+export default function PlanTableView(props: Props) {
+  const { plan, weeks, days, blocks, onUpdateExercise, onAddWeek, onAddDay, onAddBlock, onAddExercise } = props
+  // Kolumny rozgrzewki: tyle, ile ma ćwiczenie z największą liczbą serii rozgrzewkowych
+  const [warmupCols, setWarmupCols] = useState(() =>
+    Math.min(6, Math.max(0, ...blocks.flatMap(b => (b.workout_block_exercises || []).map(ex =>
+      ex.is_warmup ? (ex.warmup_sets || []).filter(s => s.reps || s.weight_kg || s.note).length : 0)))))
   const [exporting, setExporting] = useState<'xlsx' | 'pdf' | null>(null)
 
   const allDays = [...days].sort((a, b) => a.day_order - b.day_order)
 
-  function updateExercise(blockId: number, exId: number | undefined, field: keyof BlockExercise, value: any) {
-    onBlocksChange(blocks.map(b => b.id !== blockId ? b : {
-      ...b,
-      workout_block_exercises: (b.workout_block_exercises || []).map(ex =>
-        ex.id === exId ? { ...ex, [field]: value } : ex
-      ),
-    }))
-  }
-
-  function updateWarmupSet(blockId: number, exId: number | undefined, rIdx: number, field: 'reps' | 'weight_kg' | 'note', value: string) {
-    onBlocksChange(blocks.map(b => b.id !== blockId ? b : {
-      ...b,
-      workout_block_exercises: (b.workout_block_exercises || []).map(ex => {
-        if (ex.id !== exId) return ex
-        const sets = [...(ex.warmup_sets || [])]
-        while (sets.length <= rIdx) sets.push({ reps: '', weight_kg: '', note: '' })
-        sets[rIdx] = { ...sets[rIdx], [field]: value }
-        return { ...ex, warmup_sets: sets }
-      }),
-    }))
+  function updateWarmupSet(blockId: number, ex: BlockExercise, rIdx: number, field: 'reps' | 'weight_kg' | 'note', value: string) {
+    const sets = [...(ex.warmup_sets || [])]
+    while (sets.length <= rIdx) sets.push({ reps: '', weight_kg: '', note: '' })
+    sets[rIdx] = { ...sets[rIdx], [field]: value }
+    // serie rozgrzewkowe liczą się tylko z włączonym is_warmup (tak zapisuje formularz)
+    const hasAny = sets.some(s => s.reps?.trim() || s.weight_kg?.trim() || s.note?.trim())
+    onUpdateExercise(blockId, ex, { warmup_sets: sets, is_warmup: hasAny })
   }
 
   async function doExport(type: 'xlsx' | 'pdf') {
@@ -614,8 +668,9 @@ export default function PlanTableView({ plan, weeks, days, blocks, onBlocksChang
   const warmHeadStyle: CSSProperties = { background: 'var(--navy-600)', color: 'var(--gold-light)' }
   const serieHeadStyle: CSSProperties = { background: 'var(--navy-800)', color: '#fff' }
 
-  // fixed col count before warmup: Blok + # + Nazwa + 🔗 + Komentarz = 5
+  // Blok + # + Nazwa + 🔗 + Komentarz = 5; potem rozgrzewka (3 na serię), 5 kolumn serii, akcje
   const fixedCols = 5
+  const totalCols = fixedCols + warmupCols * 3 + 5 + 1
 
   return (
     <div>
@@ -629,7 +684,7 @@ export default function PlanTableView({ plan, weeks, days, blocks, onBlocksChang
         </div>
         <button className="coach-btn coach-btn-dark coach-btn-small" onClick={onAddWeek}>+ Tydzień</button>
         <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: 11, color: 'var(--muted)' }}>
-          Kliknij komórkę aby edytować · Enter zatwierdza
+          Kliknij komórkę, by edytować (zapisuje się od razu) · ✏️ pełna edycja ćwiczenia (biblioteka, ISO, różne serie)
         </span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
           <button className="coach-btn coach-btn-excel" onClick={() => doExport('xlsx')} disabled={exporting !== null}>
@@ -642,7 +697,7 @@ export default function PlanTableView({ plan, weeks, days, blocks, onBlocksChang
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-        {weeks.sort((a, b) => a.week_number - b.week_number).map(week => {
+        {[...weeks].sort((a, b) => a.week_number - b.week_number).map(week => {
           const weekDays = allDays.filter(d => d.week_id === week.id)
           return (
             <div key={week.id}>
@@ -652,16 +707,32 @@ export default function PlanTableView({ plan, weeks, days, blocks, onBlocksChang
                 <button className="coach-btn coach-btn-ghost coach-btn-small" onClick={() => onAddDay(week.id)}>+ Trening</button>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                 {weekDays.map(day => {
                   const dayBlocks = blocks.filter(b => b.day_id === day.id).sort((a, b) => a.block_order - b.block_order)
 
                   return (
                     <div key={day.id}>
-                      {/* day header */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '0.35rem' }}>
-                        <div className="coach-training-pill-name">{day.day_name}</div>
+                      {/* day header: nazwa (edytowalna), akcje treningu */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '0.4rem', flexWrap: 'wrap' }}>
+                        <div className="coach-training-pill-name" style={{ minWidth: 160 }}>
+                          <EditCell value={day.day_name} onCommit={v => props.onRenameDay(day.id, v)} align="left" placeholder="nazwa treningu" />
+                        </div>
                         <button className="coach-btn coach-btn-ghost coach-btn-small" onClick={() => onAddBlock(day.id)}>+ Blok</button>
+                        <button style={iconBtn} title="Przenieś trening do innego tygodnia" onClick={() => props.onMoveDay(day)}>↔ przenieś</button>
+                        <button style={{ ...iconBtn, color: '#c23b3b' }} title="Usuń trening" onClick={() => props.onDeleteDay(day.id)}>✕ usuń</button>
+                      </div>
+                      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+                        <DayMessage
+                          key={`intro-${day.id}`} icon="📣" label="Przemowa przed treningiem" value={day.coach_intro || ''}
+                          placeholder="Motywacja, wskazówki… zawodniczki zobaczą to zanim zaczną ćwiczyć."
+                          onSave={v => props.onSaveDayMessage(day.id, 'coach_intro', v)}
+                        />
+                        <DayMessage
+                          key={`closing-${day.id}`} icon="💙" label="Wiadomość po treningu" value={day.coach_closing || ''}
+                          placeholder="Gratulacje, recovery, co dalej… widoczne na końcu, po raporcie."
+                          onSave={v => props.onSaveDayMessage(day.id, 'coach_closing', v)}
+                        />
                       </div>
 
                       <div className="coach-plan-table-wrap">
@@ -681,8 +752,7 @@ export default function PlanTableView({ plan, weeks, days, blocks, onBlocksChang
                               <th style={th({ minWidth: 75, ...serieHeadStyle })}>Ciężar</th>
                               <th style={th({ width: 72, ...serieHeadStyle })}>Tempo</th>
                               <th style={th({ width: 38, ...serieHeadStyle })}>RIR</th>
-                              <th style={th({ minWidth: 110, ...serieHeadStyle, textAlign: 'left' })}>Kom.</th>
-                              <th style={th({ width: 36 })}></th>
+                              <th style={th({ width: 78 })}></th>
                             </tr>
                             {warmupCols > 0 && (
                               <tr>
@@ -692,32 +762,52 @@ export default function PlanTableView({ plan, weeks, days, blocks, onBlocksChang
                                   <td key={`sh${i}b`} className="coach-pt-warm" style={td({ fontSize: '10px', fontWeight: 700 })}>ciężar</td>,
                                   <td key={`sh${i}c`} className="coach-pt-warm" style={td({ fontSize: '10px', fontWeight: 700, textAlign: 'left' })}>komentarz</td>,
                                 ])}
-                                {[...Array(7)].map((_, i) => <td key={`s${i}`} style={{ ...td(), background: '#eff6ff', padding: 0 }} />)}
+                                {[...Array(6)].map((_, i) => <td key={`s${i}`} style={{ ...td(), background: '#eff6ff', padding: 0 }} />)}
                               </tr>
                             )}
                           </thead>
                           <tbody>
                             {dayBlocks.map((block, bi) => {
-                              const exs = (block.workout_block_exercises || []).sort((a, b) => a.exercise_order - b.exercise_order)
+                              const exs = [...(block.workout_block_exercises || [])].sort((a, b) => a.exercise_order - b.exercise_order)
 
-                              const addExRow = (
-                                <tr key={`add-${block.id}`}>
+                              // wiersz bloku: nazwa (edytowalna) + kopiuj / przenieś / usuń
+                              const blockHeadRow = (
+                                <tr key={`head-${block.id}`}>
                                   <td className="coach-pt-block" style={td()}>{blockLabel(bi)}</td>
-                                  <td colSpan={fixedCols - 1 + warmupCols * 3 + 7} style={td()}>
-                                    <button onClick={() => onAddExercise(block.id)}
-                                      style={{ border: '1px dashed var(--border)', background: 'transparent', color: 'var(--muted)', borderRadius: 5, padding: '2px 12px', fontFamily: 'var(--font-inter),sans-serif', fontSize: '10px', cursor: 'pointer' }}>
-                                      + ćwiczenie
-                                    </button>
+                                  <td colSpan={totalCols - 1} style={td({ textAlign: 'left', background: 'var(--bg)', padding: '3px 8px' })}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                      <div style={{ minWidth: 140, fontWeight: 700 }}>
+                                        <EditCell value={block.block_name} onCommit={v => props.onRenameBlock(block.id, v)} align="left" placeholder="nazwa bloku" />
+                                      </div>
+                                      <div style={{ marginLeft: 'auto', display: 'flex', gap: 2 }}>
+                                        <button style={iconBtn} title="Kopiuj blok do wszystkich pozostałych treningów" onClick={() => props.onCopyBlock(block)}>⧉ kopiuj do treningów</button>
+                                        <button style={iconBtn} title="Przenieś blok do innego treningu" onClick={() => props.onMoveBlock(block)}>↔ przenieś</button>
+                                        <button style={{ ...iconBtn, color: '#c23b3b' }} title="Usuń blok z ćwiczeniami" onClick={() => props.onDeleteBlock(block.id)}>✕ usuń</button>
+                                      </div>
+                                    </div>
                                   </td>
-                                  <td style={td()}></td>
                                 </tr>
                               )
 
-                              if (exs.length === 0) return addExRow
+                              const addExRow = (
+                                <tr key={`add-ex-${block.id}`}>
+                                  {exs.length === 0 && <td className="coach-pt-block" style={td()}></td>}
+                                  <td colSpan={totalCols - 1} style={td({ padding: '3px 8px', textAlign: 'left' })}>
+                                    <button onClick={() => onAddExercise(block.id)}
+                                      style={{ border: '1px dashed var(--border)', background: 'transparent', color: 'var(--muted)', borderRadius: 5, padding: '2px 10px', fontFamily: 'var(--font-inter),sans-serif', fontSize: '10px', cursor: 'pointer' }}>
+                                      + ćwiczenie w bloku {blockLabel(bi)}
+                                    </button>
+                                  </td>
+                                </tr>
+                              )
+
+                              if (exs.length === 0) return [blockHeadRow, addExRow]
 
                               return [
+                                blockHeadRow,
                                 ...exs.map((ex, i) => {
                                   const name = fmtName(ex.exercise?.name || ex.exercise_code || '')
+                                  const isoReps = !!ex.iso
                                   return (
                                     <tr key={ex.id ?? `${block.id}-${i}`}>
                                       {i === 0 && (
@@ -729,7 +819,8 @@ export default function PlanTableView({ plan, weeks, days, blocks, onBlocksChang
                                       <td style={td({ textAlign: 'left', minWidth: 150 })}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                                           <div style={{ flex: 1, minWidth: 0 }}>
-                                            <EditCell value={name} onCommit={v => updateExercise(block.id, ex.id, 'exercise_code', v)} align="left" placeholder="nazwa" />
+                                            {/* wpisana nazwa = własna nazwa (odpina od biblioteki); zmiana z biblioteki — przez ✏️ */}
+                                            <EditCell value={name} onCommit={v => onUpdateExercise(block.id, ex, { exercise_code: v.trim() || name, exercise_id: null, exercise: null })} align="left" placeholder="nazwa" />
                                           </div>
                                           {ex.iso && (
                                             <span title={`Ćwiczenie izometryczne (${ex.iso_type})`} style={{ flexShrink: 0, background: 'var(--navy-900)', color: 'var(--gold)', fontFamily: 'var(--font-inter),sans-serif', fontSize: 9, fontWeight: 700, borderRadius: 4, padding: '1px 5px', letterSpacing: '.02em' }}>
@@ -741,7 +832,7 @@ export default function PlanTableView({ plan, weeks, days, blocks, onBlocksChang
                                       <td style={td({ width: 20, padding: '2px', textAlign: 'center' })}>
                                         <EditCell
                                           value={ex.exercise_url || ''}
-                                          onCommit={v => updateExercise(block.id, ex.id, 'exercise_url', v || null)}
+                                          onCommit={v => onUpdateExercise(block.id, ex, { exercise_url: v.trim() || null })}
                                           placeholder="+"
                                           renderDisplay={val => val
                                             ? <span title={val} style={{ cursor: 'text', fontSize: '14px' }}>🔗</span>
@@ -749,67 +840,79 @@ export default function PlanTableView({ plan, weeks, days, blocks, onBlocksChang
                                         />
                                       </td>
                                       <td className="coach-pt-comment" style={td({ textAlign: 'left' })}>
-                                        <EditCell value={ex.coach_comment || ''} onCommit={v => updateExercise(block.id, ex.id, 'coach_comment', v || null)} align="left" placeholder="komentarz" />
+                                        <EditCell value={ex.coach_comment || ''} onCommit={v => onUpdateExercise(block.id, ex, { coach_comment: v.trim() || null })} align="left" placeholder="komentarz" />
                                       </td>
                                       {Array.from({ length: warmupCols }).flatMap((_, r) => {
-                                        const ws = ex.warmup_sets?.[r]
+                                        const ws = ex.is_warmup ? ex.warmup_sets?.[r] : undefined
                                         return [
                                           <td key={`w${ex.id}-${r}-reps`} className="coach-pt-warm" style={td()}>
-                                            <EditCell value={ws?.reps || ''} onCommit={v => updateWarmupSet(block.id, ex.id, r, 'reps', v)} placeholder="powt." />
+                                            <EditCell value={ws?.reps || ''} onCommit={v => updateWarmupSet(block.id, ex, r, 'reps', v)} placeholder="powt." />
                                           </td>,
                                           <td key={`w${ex.id}-${r}-kg`} className="coach-pt-warm" style={td()}>
-                                            <EditCell value={ws?.weight_kg || ''} onCommit={v => updateWarmupSet(block.id, ex.id, r, 'weight_kg', v)} placeholder="ciężar" />
+                                            <EditCell value={ws?.weight_kg || ''} onCommit={v => updateWarmupSet(block.id, ex, r, 'weight_kg', v)} placeholder="ciężar" />
                                           </td>,
                                           <td key={`w${ex.id}-${r}-note`} className="coach-pt-warm" style={td({ textAlign: 'left' })}>
-                                            <EditCell value={ws?.note || ''} onCommit={v => updateWarmupSet(block.id, ex.id, r, 'note', v)} align="left" placeholder="komentarz" />
+                                            <EditCell value={ws?.note || ''} onCommit={v => updateWarmupSet(block.id, ex, r, 'note', v)} align="left" placeholder="komentarz" />
                                           </td>,
                                         ]
                                       })}
                                       <td style={td({ background: '#eff6ff', fontWeight: 700 })}>
-                                        <EditCell value={ex.sets?.toString() || ''} onCommit={v => updateExercise(block.id, ex.id, 'sets', parseInt(v) || 1)} />
+                                        <EditCell value={ex.sets?.toString() || ''} onCommit={v => {
+                                          const n = Math.max(1, Math.min(20, parseInt(v) || 1))
+                                          onUpdateExercise(block.id, ex, { sets: n, ...(resizeWorkSets(ex, n) ? { work_sets: resizeWorkSets(ex, n) } : {}) })
+                                        }} />
                                       </td>
                                       <td style={td({ background: '#eff6ff' })}>
-                                        {ex.iso ? (
-                                          <div title={`Ćwiczenie ${ex.iso_type} — kliknij ✏️, by edytować serie`} style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '12px', fontWeight: 700, textAlign: 'center', padding: '2px 4px', whiteSpace: 'nowrap' }}>
+                                        {isoReps ? (
+                                          <div onClick={() => props.onEditExercise(block.id, ex)} title={`Ćwiczenie ${ex.iso_type} — kliknij, by edytować czas i powtórzenia serii`} style={{ cursor: 'pointer', fontFamily: 'var(--font-inter),sans-serif', fontSize: '12px', fontWeight: 700, textAlign: 'center', padding: '2px 4px', whiteSpace: 'nowrap' }}>
                                             {isoPowtSummary(ex)}
                                           </div>
                                         ) : (
                                           <EditCell
-                                            value={ex.reps || ''}
-                                            onCommit={v => updateExercise(block.id, ex.id, 'reps', v || null)}
+                                            value={ex.work_sets?.length ? fmtRange(ex.work_sets.map(s => s.reps)).replace('—', '') : (ex.reps || '')}
+                                            onCommit={v => onUpdateExercise(block.id, ex, { reps: v.trim() || null, ...(syncWorkSets(ex, 'reps', v.trim()) ? { work_sets: syncWorkSets(ex, 'reps', v.trim()) } : {}) })}
                                             placeholder="powt."
                                           />
                                         )}
                                       </td>
                                       <td style={td({ background: '#eff6ff' })}>
-                                        <EditCell value={ex.weight_kg?.toString() || ''} onCommit={v => updateExercise(block.id, ex.id, 'weight_kg', v ? parseFloat(v) : null)} placeholder="—" />
+                                        <EditCell
+                                          value={ex.work_sets?.length ? fmtRange(ex.work_sets.map(s => s.weight_kg)).replace('—', '') : (ex.weight_kg?.toString() || '')}
+                                          onCommit={v => {
+                                            const num = v.trim() ? parseFloat(v.replace(',', '.')) : null
+                                            onUpdateExercise(block.id, ex, { weight_kg: num != null && !isNaN(num) ? num : null, ...(syncWorkSets(ex, 'weight_kg', v.trim()) ? { work_sets: syncWorkSets(ex, 'weight_kg', v.trim()) } : {}) })
+                                          }}
+                                          placeholder="—"
+                                        />
                                       </td>
                                       <td style={td({ background: '#eff6ff' })}>
-                                        <EditCell value={ex.tempo || ''} onCommit={v => updateExercise(block.id, ex.id, 'tempo', v || null)} placeholder="—" />
+                                        {ex.iso ? <span style={{ color: 'var(--muted-light)' }}>—</span> : (
+                                          <EditCell
+                                            value={ex.work_sets?.length ? fmtRange(ex.work_sets.map(s => s.tempo)).replace('—', '') : (ex.tempo || '')}
+                                            onCommit={v => onUpdateExercise(block.id, ex, { tempo: v.trim() || null, ...(syncWorkSets(ex, 'tempo', v.trim()) ? { work_sets: syncWorkSets(ex, 'tempo', v.trim()) } : {}) })}
+                                            placeholder="—"
+                                          />
+                                        )}
                                       </td>
                                       <td style={td({ background: '#eff6ff' })}>
-                                        <EditCell value={ex.rir?.toString() || ''} onCommit={v => updateExercise(block.id, ex.id, 'rir', v ? parseInt(v) : null)} placeholder="—" />
+                                        <EditCell
+                                          value={ex.work_sets?.length ? fmtRange(ex.work_sets.map(s => s.rir)).replace('—', '') : (ex.rir?.toString() || '')}
+                                          onCommit={v => {
+                                            const num = v.trim() ? parseInt(v) : null
+                                            onUpdateExercise(block.id, ex, { rir: num != null && !isNaN(num) ? num : null, ...(syncWorkSets(ex, 'rir', v.trim()) ? { work_sets: syncWorkSets(ex, 'rir', v.trim()) } : {}) })
+                                          }}
+                                          placeholder="—"
+                                        />
                                       </td>
-                                      <td style={td({ background: '#eff6ff', textAlign: 'left' })}>
-                                        <EditCell value={''} onCommit={() => {}} align="left" placeholder="notatka" />
-                                      </td>
-                                      <td style={td({ padding: '2px' })}>
-                                        <button onClick={() => onAddExercise(block.id)} title="Edytuj w oknie"
-                                          style={{ border: 'none', background: 'transparent', color: 'var(--muted)', cursor: 'pointer', fontSize: '12px', padding: '2px 4px' }}>✏️</button>
+                                      <td style={td({ padding: '2px', whiteSpace: 'nowrap' })}>
+                                        <button onClick={() => props.onEditExercise(block.id, ex)} title="Pełna edycja ćwiczenia" style={iconBtn}>✏️</button>
+                                        <button onClick={() => props.onMoveExercise(block.id, ex)} title="Przenieś do innego bloku" style={iconBtn}>↔</button>
+                                        <button onClick={() => props.onDeleteExercise(block.id, ex.id)} title="Usuń ćwiczenie" style={{ ...iconBtn, color: '#c23b3b' }}>✕</button>
                                       </td>
                                     </tr>
                                   )
                                 }),
-                                // + ćwiczenie row at bottom of block
-                                <tr key={`add-ex-${block.id}`}>
-                                  <td colSpan={fixedCols + warmupCols * 3 + 6} style={td({ padding: '3px 8px' })}>
-                                    <button onClick={() => onAddExercise(block.id)}
-                                      style={{ border: '1px dashed var(--border)', background: 'transparent', color: 'var(--muted)', borderRadius: 5, padding: '2px 10px', fontFamily: 'var(--font-inter),sans-serif', fontSize: '10px', cursor: 'pointer' }}>
-                                      + ćwiczenie w bloku {blockLabel(bi)}
-                                    </button>
-                                  </td>
-                                  <td style={td()}></td>
-                                </tr>,
+                                addExRow,
                               ]
                             })}
                           </tbody>

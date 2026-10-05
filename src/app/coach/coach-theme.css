@@ -1271,6 +1271,7 @@
     background:#fff;border-radius:14px;max-width:460px;width:100%;max-height:92vh;
     display:flex;flex-direction:column;overflow:hidden;
   }
+  .coach-modal-box.coach-modal-wide{max-width:780px;}
   .coach-modal-head{background:var(--navy-900);color:#fff;padding:12px 16px;position:relative;}
   .coach-modal-head .coach-eyebrow{font-size:9.5px;letter-spacing:.05em;color:var(--gold-light);font-family:var(--font-inter),sans-serif;font-weight:700;text-transform:uppercase;}
   .coach-modal-head h3{margin:2px 0 3px;font-size:14.5px;font-weight:600;display:flex;align-items:center;gap:6px;}
