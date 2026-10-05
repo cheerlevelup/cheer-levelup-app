@@ -1,5 +1,6 @@
 // src/app/coach/athletes/[id]/training/page.tsx
 import { redirect } from 'next/navigation'
+import { applyVariantsToBlocks } from '@/lib/exerciseVariants'
 import { createClient } from '@/utils/supabase/server'
 import CoachAthleteTrainingClient from './CoachAthleteTrainingClient'
 
@@ -87,7 +88,8 @@ export default async function CoachAthleteTrainingPage({ params }: Props) {
         .in('day_id', dayIds)
         .order('block_order', { ascending: true })
 
-      allBlockExercises = blocksData || []
+      // warianty ćwiczeń (1a/1b) — trener widzi wariant tej zawodniczki
+      allBlockExercises = applyVariantsToBlocks(blocksData || [], athleteId)
     }
   }
 

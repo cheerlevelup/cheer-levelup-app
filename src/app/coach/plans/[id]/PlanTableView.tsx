@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import type { CSSProperties } from 'react'
+import { sortWithVariants, variantLabels } from '@/lib/exerciseVariants'
 
 type WarmupSet = { reps?: string; weight_kg?: string; note?: string }
 type WorkSet = { reps?: string; weight_kg?: string; tempo?: string; rir?: string; seconds?: string; intensity?: string; rest?: string }
@@ -13,6 +14,8 @@ type BlockExercise = {
   warmup_sets?: WarmupSet[] | null; coach_comment?: string | null
   exercise_url?: string | null; exercise?: ExerciseLibraryItem | null
   work_sets?: WorkSet[] | null; iso?: boolean | null; iso_type?: 'PIMA' | 'HIMA' | null
+  // wariant ćwiczenia (1b, 1c...) — wskazuje na ćwiczenie bazowe (1a) i zawodniczki, które go robią
+  variant_of?: number | null; variant_athlete_ids?: number[] | null
 }
 
 // Wartość, która może się różnić między seriami: jedna wspólna, albo (jeśli
@@ -221,7 +224,8 @@ async function exportXlsx(plan: Plan, days: Day[], blocks: Block[], wCols: numbe
     // ── Data ──────────────────────────────────────────────────────────────
     let rowIdx = 5
     dayBlocks.forEach((block, bi) => {
-      const exs = (block.workout_block_exercises || []).sort((a, b) => a.exercise_order - b.exercise_order)
+      const exs = sortWithVariants(block.workout_block_exercises || [])
+      const labels = variantLabels(exs)
       if (exs.length === 0) return
 
       const blockStartRow = rowIdx
@@ -242,7 +246,7 @@ async function exportXlsx(plan: Plan, days: Day[], blocks: Block[], wCols: numbe
         blokCell.alignment = { horizontal: 'center', vertical: 'middle' }
         blokCell.border = { right: { style: 'medium', color: { argb: `FF${GOLD}` } } }
 
-        applyData(sheet.getCell(rowIdx, C_NR), i + 1, bg, { align: 'center', color: '64748B' })
+        applyData(sheet.getCell(rowIdx, C_NR), labels.get(ex) ?? String(i + 1), bg, { align: 'center', color: '64748B' })
         applyData(sheet.getCell(rowIdx, C_NAZWA),
           fmtName(ex.exercise?.name || ex.exercise_code || ''), bg,
           { bold: true, align: 'left', link: ex.exercise_url || undefined })
@@ -425,7 +429,8 @@ async function exportPdf(plan: Plan, days: Day[], blocks: Block[], wCols: number
     rowMeta.length = 0
 
     dayBlocks.forEach((block, bi) => {
-      const exs = (block.workout_block_exercises || []).sort((a, b) => a.exercise_order - b.exercise_order)
+      const exs = sortWithVariants(block.workout_block_exercises || [])
+      const labels = variantLabels(exs)
       if (exs.length === 0) return
 
       exs.forEach((ex, i) => {
@@ -435,7 +440,7 @@ async function exportPdf(plan: Plan, days: Day[], blocks: Block[], wCols: number
         }).flat()
         body.push([
           i === 0 ? blockLabel(bi) : '',  // 0: blok
-          i + 1,                           // 1: #
+          labels.get(ex) ?? String(i + 1), // 1: # (1, 2a, 2b...)
           pl(fmtName(ex.exercise?.name || ex.exercise_code || '')),  // 2: nazwa (clickable)
           pl(ex.coach_comment),            // 3: komentarz
           ...wd,                           // 4..: warmup
@@ -579,6 +584,9 @@ interface Props {
   onMoveBlock: (block: Block) => void
   onDeleteBlock: (blockId: number) => void
   onAddExercise: (blockId: number) => void          // otwiera formularz ćwiczenia w oknie
+  onAddVariant: (blockId: number, base: BlockExercise) => void
+  onAssignVariants: (blockId: number, baseId: number) => void
+  athletes: { id: number; full_name: string }[]
   onEditExercise: (blockId: number, exercise: BlockExercise) => void
   onMoveExercise: (blockId: number, exercise: BlockExercise) => void
   onDeleteExercise: (blockId: number, exerciseId?: number) => void
@@ -752,7 +760,7 @@ export default function PlanTableView(props: Props) {
                               <th style={th({ minWidth: 75, ...serieHeadStyle })}>Ciężar</th>
                               <th style={th({ width: 72, ...serieHeadStyle })}>Tempo</th>
                               <th style={th({ width: 38, ...serieHeadStyle })}>RIR</th>
-                              <th style={th({ width: 78 })}></th>
+                              <th style={th({ width: 130 })}></th>
                             </tr>
                             {warmupCols > 0 && (
                               <tr>
@@ -768,7 +776,10 @@ export default function PlanTableView(props: Props) {
                           </thead>
                           <tbody>
                             {dayBlocks.map((block, bi) => {
-                              const exs = [...(block.workout_block_exercises || [])].sort((a, b) => a.exercise_order - b.exercise_order)
+                              const exs = sortWithVariants(block.workout_block_exercises || [])
+                              const labels = variantLabels(exs)
+                              // kto robi który wariant: baza = wszyscy nieprzypisani do innego wariantu
+                              const assignedIn = (baseId?: number) => new Set(exs.filter(v => v.variant_of === baseId).flatMap(v => v.variant_athlete_ids || []))
 
                               // wiersz bloku: nazwa (edytowalna) + kopiuj / przenieś / usuń
                               const blockHeadRow = (
@@ -809,13 +820,13 @@ export default function PlanTableView(props: Props) {
                                   const name = fmtName(ex.exercise?.name || ex.exercise_code || '')
                                   const isoReps = !!ex.iso
                                   return (
-                                    <tr key={ex.id ?? `${block.id}-${i}`}>
+                                    <tr key={ex.id ?? `${block.id}-${i}`} style={ex.variant_of != null ? { background: '#faf7ff' } : undefined}>
                                       {i === 0 && (
                                         <td rowSpan={exs.length + 1} className="coach-pt-block" style={td()}>
                                           {blockLabel(bi)}
                                         </td>
                                       )}
-                                      <td style={td({ color: 'var(--muted-light)' })}>{i + 1}</td>
+                                      <td style={td({ color: ex.variant_of != null ? '#7c3aed' : 'var(--muted-light)', fontWeight: labels.get(ex)?.match(/[a-z]/) ? 700 : 400, whiteSpace: 'nowrap' })}>{labels.get(ex) ?? i + 1}</td>
                                       <td style={td({ textAlign: 'left', minWidth: 150 })}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                                           <div style={{ flex: 1, minWidth: 0 }}>
@@ -827,6 +838,27 @@ export default function PlanTableView(props: Props) {
                                               {ex.iso_type}
                                             </span>
                                           )}
+                                          {(() => {
+                                            // ćwiczenie z wariantami — ile zawodniczek robi ten wariant (klik: przydział)
+                                            const baseId = ex.variant_of ?? ex.id
+                                            const hasVariants = exs.some(v => v.variant_of != null && v.variant_of === baseId)
+                                            if (!hasVariants || baseId == null) return null
+                                            const count = ex.variant_of != null
+                                              ? (ex.variant_athlete_ids || []).filter(id => props.athletes.some(a => a.id === id)).length
+                                              : props.athletes.filter(a => !assignedIn(ex.id).has(a.id)).length
+                                            const names = ex.variant_of != null
+                                              ? props.athletes.filter(a => (ex.variant_athlete_ids || []).includes(a.id))
+                                              : props.athletes.filter(a => !assignedIn(ex.id).has(a.id))
+                                            return (
+                                              <button
+                                                onClick={() => props.onAssignVariants(block.id, baseId)}
+                                                title={`Kto robi ${labels.get(ex)}: ${names.map(a => a.full_name).join(', ') || 'nikt'} — kliknij, by zmienić przydział`}
+                                                style={{ flexShrink: 0, border: `1px solid ${count ? '#7c3aed' : '#c23b3b'}`, background: count ? '#f3ecfd' : '#FDEDED', color: count ? '#7c3aed' : '#c23b3b', fontFamily: 'var(--font-inter),sans-serif', fontSize: 9, fontWeight: 700, borderRadius: 4, padding: '1px 5px', cursor: 'pointer' }}
+                                              >
+                                                👥 {count}{ex.variant_of == null ? ' (reszta)' : ''}
+                                              </button>
+                                            )
+                                          })()}
                                         </div>
                                       </td>
                                       <td style={td({ width: 20, padding: '2px', textAlign: 'center' })}>
@@ -906,7 +938,13 @@ export default function PlanTableView(props: Props) {
                                       </td>
                                       <td style={td({ padding: '2px', whiteSpace: 'nowrap' })}>
                                         <button onClick={() => props.onEditExercise(block.id, ex)} title="Pełna edycja ćwiczenia" style={iconBtn}>✏️</button>
-                                        <button onClick={() => props.onMoveExercise(block.id, ex)} title="Przenieś do innego bloku" style={iconBtn}>↔</button>
+                                        {ex.variant_of == null && (
+                                          <button onClick={() => props.onAddVariant(block.id, ex)} title="Dodaj wariant tego ćwiczenia (1a → 1b) dla części zawodniczek" style={{ ...iconBtn, color: '#7c3aed', fontWeight: 700 }}>+wariant</button>
+                                        )}
+                                        {/* wariant przenosi się razem ze swoim ćwiczeniem bazowym */}
+                                        {ex.variant_of == null && (
+                                          <button onClick={() => props.onMoveExercise(block.id, ex)} title="Przenieś do innego bloku (z wariantami)" style={iconBtn}>↔</button>
+                                        )}
                                         <button onClick={() => props.onDeleteExercise(block.id, ex.id)} title="Usuń ćwiczenie" style={{ ...iconBtn, color: '#c23b3b' }}>✕</button>
                                       </td>
                                     </tr>

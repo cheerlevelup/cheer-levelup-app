@@ -18,7 +18,7 @@ export default async function GroupPlanEditorPage({ params }: Props) {
   if (user.email !== 'cheerlevelup@gmail.com') redirect('/athlete')
 
   const { id, planId } = await params
-  const data = await loadPlanEditorData(supabase, parseInt(planId))
+  const data = await loadPlanEditorData(supabase, parseInt(planId), parseInt(id))
   if (!data) redirect(`/coach/groups/${id}/plan`)
 
   // Plan bez grupy (np. ogólny przypisany tej grupie) — „wstecz" i tak ma wracać tutaj

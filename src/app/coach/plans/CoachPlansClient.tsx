@@ -7,6 +7,7 @@ import { createClient } from '@/utils/supabase/client'
 import { Plus, ChevronRight, Copy, Trash2 } from 'lucide-react'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { Card, Button, StatCard } from '@/components/coach/ui'
+import { insertExercisesWithVariants } from '@/lib/exerciseVariants'
 
 type Plan = { id: number; name: string; description?: string | null; created_at: string }
 
@@ -116,14 +117,13 @@ export default function CoachPlansClient({ plans: initialPlans }: { plans: Plan[
 
             const { data: exercises } = await supabase
               .from('workout_block_exercises')
-              .select('exercise_id, exercise_code, exercise_order, sets, reps, tempo, weight_kg, rir, is_warmup, warmup_sets, coach_comment, exercise_url')
+              .select('*')
               .eq('block_id', block.id)
               .order('exercise_order')
 
             if (exercises && exercises.length > 0) {
-              await supabase.from('workout_block_exercises').insert(
-                exercises.map((ex: any) => ({ ...ex, block_id: newBlock.id }))
-              )
+              // wszystkie kolumny (serie, ISO, rozgrzewka...), warianty 1b/1c przepięte na nowe ćwiczenia bazowe
+              await insertExercisesWithVariants(supabase, exercises, ({ id, block_id, created_at, variant_of, variant_athlete_ids, ...rest }: any) => ({ ...rest, block_id: newBlock.id }), 'id')
             }
           }
         }

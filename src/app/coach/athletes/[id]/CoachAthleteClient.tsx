@@ -2,6 +2,7 @@
 // src/app/coach/athletes/[id]/CoachAthleteClient.tsx
 
 import { useState, useEffect } from 'react'
+import { applyVariantsToBlocks } from '@/lib/exerciseVariants'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import ModuleConfigPanel from '@/components/ModuleConfigPanel'
@@ -426,8 +427,8 @@ function SessionFeedbackModal({ session, onClose }: { session: any; onClose: () 
       } catch {}
       if (session.workout_day_id) {
         try {
-          const r = await sb.from('workout_day_blocks').select('*, workout_block_exercises(id, exercise_id, exercise_code, sets, reps, weight_kg, exercise:exercises(name))').eq('day_id', session.workout_day_id).order('block_order', { ascending: true })
-          setBlocks(r.data || [])
+          const r = await sb.from('workout_day_blocks').select('*, workout_block_exercises(*, exercise:exercises(name))').eq('day_id', session.workout_day_id).order('block_order', { ascending: true })
+          setBlocks(applyVariantsToBlocks(r.data || [], session.athlete_id))
         } catch {}
       }
       setLoading(false)

@@ -1,5 +1,6 @@
 // src/app/athlete/history/[id]/page.tsx
 import { redirect } from 'next/navigation'
+import { applyVariantsToSession } from '@/lib/exerciseVariants'
 import { createClient } from '@/utils/supabase/server'
 import { getAthleteByUserId } from '@/lib/training'
 import HistoryDetailClient from './HistoryDetailClient'
@@ -76,7 +77,7 @@ export default async function HistoryDetailPage({ params }: Props) {
   return (
     <HistoryDetailClient
       athlete={athlete}
-      session={session}
+      session={applyVariantsToSession(session, athlete.id)}
       setLogs={setLogs || []}
       wellness={wellness || null}
       feedback={feedback || null}

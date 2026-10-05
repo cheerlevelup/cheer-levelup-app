@@ -1,5 +1,6 @@
 // src/app/athlete/training/finish/page.tsx
 import { redirect } from 'next/navigation'
+import { applyVariantsToSession } from '@/lib/exerciseVariants'
 import { createClient } from '@/utils/supabase/server'
 import { getAthleteByUserId } from '@/lib/training'
 import FinishClient from './FinishClient'
@@ -64,7 +65,7 @@ export default async function FinishPage({ searchParams }: Props) {
   return (
     <FinishClient
       athlete={athlete}
-      session={session}
+      session={applyVariantsToSession(session, athlete.id)}
       setLogs={setLogs || []}
       wellness={wellness || null}
       painLogs={painLogs || []}

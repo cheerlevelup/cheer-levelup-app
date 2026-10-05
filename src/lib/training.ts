@@ -1,5 +1,6 @@
 // src/lib/training.ts
 import { createClient } from '@/utils/supabase/server'
+import { pickVariantsForAthlete, sortWithVariants } from '@/lib/exerciseVariants'
 import type {
   Athlete,
   WorkoutSession,
@@ -207,8 +208,8 @@ export async function getWorkoutDayWithBlocks(
   const blocks: WorkoutDayBlock[] = (day.workout_day_blocks || [])
     .sort((a: any, b: any) => a.block_order - b.block_order)
     .map((block: any) => {
-      const planExercises = (block.workout_block_exercises || [])
-        .sort((a: any, b: any) => a.exercise_order - b.exercise_order)
+      // warianty (1a/1b...) — zawodniczka widzi tylko swój wariant danego ćwiczenia
+      const planExercises = pickVariantsForAthlete(sortWithVariants(block.workout_block_exercises || []), athleteId)
         .map((ex: any) => ({
           ...ex,
           override: overrideMap.get(ex.id) || null,

@@ -13,6 +13,7 @@ import { createClient } from '@/utils/supabase/client'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { Button } from '@/components/coach/ui'
 import { AlertTriangle, MessageCircle, Check, X, RefreshCw } from 'lucide-react'
+import { sortWithVariants } from '@/lib/exerciseVariants'
 
 type Athlete = { id: number; full_name: string }
 type BlockEx = {
@@ -20,6 +21,8 @@ type BlockEx = {
   weight_kg?: number | null; rir?: number | null; coach_comment?: string | null; exercise_code?: string | null
   exercise?: { id: number; name: string } | null
   warmup_sets?: WarmupSet[] | null; warmup_reps?: string | null; warmup_weight?: number | null
+  // wariant ćwiczenia (1b, 1c...) — baza (1a) i zawodniczki, które go robią
+  variant_of?: number | null; variant_athlete_ids?: number[] | null
 }
 type WarmupSet = { reps?: string | null; weight_kg?: string | number | null; note?: string | null }
 // Dodatkowe ćwiczenie trenera dla jednej zawodniczki (athlete_extra_exercises)
@@ -119,10 +122,12 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
   // Kolumny: ćwiczenia wszystkich bloków dnia (A1, A2, B1...)
   // + kolumna „Dodatkowe" na końcu bloku, jeśli któraś zawodniczka ma w nim własne ćwiczenia
   type Column =
-    | { kind: 'ex'; ex: BlockEx; block: Block; label: string; blockStart: boolean }
+    | { kind: 'ex'; ex: BlockEx; variants: BlockEx[]; block: Block; label: string; blockStart: boolean }
     | { kind: 'extra'; block: Block; label: string; blockStart: boolean; extras: Extra[] }
   const columns = useMemo(() => blocks.flatMap((b, bi): Column[] => {
-    const cols: Column[] = b.workout_block_exercises.map((ex, i) => ({ kind: 'ex', ex, block: b, label: `${blockLetter(bi)}${i + 1}`, blockStart: i === 0 }))
+    // jedna kolumna na ćwiczenie; jego warianty (1b, 1c...) w tej samej kolumnie — każda zawodniczka widzi swój
+    const sorted = sortWithVariants(b.workout_block_exercises)
+    const cols: Column[] = sorted.filter(ex => ex.variant_of == null).map((ex, i) => ({ kind: 'ex', ex, variants: sorted.filter(v => v.variant_of === ex.id), block: b, label: `${blockLetter(bi)}${i + 1}`, blockStart: i === 0 }))
     const blockExtras = extras.filter(e => e.block_id === b.id)
     if (blockExtras.length) cols.push({ kind: 'extra', block: b, label: `${blockLetter(bi)}+`, blockStart: cols.length === 0, extras: blockExtras })
     return cols
@@ -491,6 +496,11 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                         {presc && <div style={{ marginTop: 4, fontFamily: INTER, fontSize: '0.66rem', fontWeight: 700, color: 'var(--muted)' }}>{presc}</div>}
                         {warmups.length > 0 && <div style={{ marginTop: 2, fontFamily: INTER, fontSize: '0.6rem', fontWeight: 700, color: '#c07f1e' }}>+ rozgrzewka: {warmups.length} {warmups.length === 1 ? 'seria' : 'serie'}</div>}
                         {ex.coach_comment && <div style={{ marginTop: 2, fontFamily: INTER, fontSize: '0.6rem', color: 'var(--muted-light)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={ex.coach_comment}>{ex.coach_comment}</div>}
+                        {col.variants.length > 0 && (
+                          <div style={{ marginTop: 3, fontFamily: INTER, fontSize: '0.6rem', fontWeight: 700, color: '#7c3aed' }}>
+                            {[ex, ...col.variants].map((v, vi) => `${String.fromCharCode(97 + vi)}: ${exName(v)}`).join(' · ')}
+                          </div>
+                        )}
                       </th>
                     )
                   })}
@@ -538,16 +548,23 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                             </td>
                           )
                         }
-                        const ex = col.ex
+                        // wariant tej zawodniczki (nieprzypisana = ćwiczenie bazowe 1a)
+                        const variantIdx = col.variants.findIndex(v => (v.variant_athlete_ids || []).includes(athlete.id))
+                        const ex = variantIdx >= 0 ? col.variants[variantIdx] : col.ex
                         const o = ovrMap.get(ovrKey(athlete.id, ex.id))
                         if (o?.skip) {
-                          return <td key={ex.id} className={tdClass} style={{ padding: '0.45rem 0.55rem', fontFamily: INTER, fontSize: '0.66rem', color: 'var(--muted-light)', fontStyle: 'italic' }}>pominięte dla tej zawodniczki</td>
+                          return <td key={col.ex.id} className={tdClass} style={{ padding: '0.45rem 0.55rem', fontFamily: INTER, fontSize: '0.66rem', color: 'var(--muted-light)', fontStyle: 'italic' }}>pominięte dla tej zawodniczki</td>
                         }
                         const planned = o?.sets_override || ex.sets || 1
                         const reps = o?.reps_override || ex.reps || ''
                         const changed = o && (o.sets_override || o.reps_override || o.weight_override != null || o.exercise_code_override)
                         return (
-                          <td key={ex.id} className={tdClass} style={tdStyle}>
+                          <td key={col.ex.id} className={tdClass} style={tdStyle}>
+                            {col.variants.length > 0 && (
+                              <div style={{ fontFamily: INTER, fontSize: '0.62rem', fontWeight: 800, color: '#7c3aed', marginBottom: 3 }}>
+                                {col.label}{String.fromCharCode(97 + variantIdx + 1)} · {exName(ex, o)}
+                              </div>
+                            )}
                             {changed && (
                               <div style={{ fontFamily: INTER, fontSize: '0.6rem', fontWeight: 700, color: '#7c3aed', marginBottom: 3 }}>
                                 ✎ {o?.exercise_code_override ? `${o.exercise_code_override} · ` : ''}{planned}×{reps || '?'}{o?.weight_override != null ? ` · ${o.weight_override} kg` : ''}

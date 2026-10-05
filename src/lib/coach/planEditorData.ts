@@ -5,13 +5,30 @@
 type WeekRow = { id: number; plan_id: number; week_number: number; name?: string | null }
 type DayRow = { id: number; week_id: number; day_name: string; day_order: number }
 
-export async function loadPlanEditorData(supabase: any, planId: number) {
+export async function loadPlanEditorData(supabase: any, planId: number, groupId?: number) {
   const { data: plan } = await supabase
     .from('workout_plans')
     .select('*')
     .eq('id', planId)
     .single()
   if (!plan) return null
+
+  // Zawodniczki planu — do przydziału wariantów ćwiczeń (1a/1b): grupa planu,
+  // a dla planu ogólnego — zawodniczki z aktywnym przypisaniem tego planu
+  const ownerGroupId = groupId ?? plan.group_id ?? null
+  let athletes: { id: number; full_name: string }[] = []
+  if (ownerGroupId) {
+    const { data } = await supabase.from('athletes').select('id, full_name, archived').eq('group_id', ownerGroupId).order('full_name', { ascending: true })
+    athletes = (data || []).filter((a: any) => !a.archived).map((a: any) => ({ id: a.id, full_name: a.full_name }))
+  } else {
+    const { data } = await supabase.from('athlete_workout_assignments').select('athlete:athletes(id, full_name, archived)').eq('plan_id', planId).eq('is_active', true)
+    const seen = new Set<number>()
+    for (const row of (data || []) as any[]) {
+      const a = row.athlete
+      if (a && !a.archived && !seen.has(a.id)) { seen.add(a.id); athletes.push({ id: a.id, full_name: a.full_name }) }
+    }
+    athletes.sort((a, b) => a.full_name.localeCompare(b.full_name, 'pl'))
+  }
 
   // Pełna struktura planu
   const { data: weeks } = await supabase
@@ -86,6 +103,7 @@ export async function loadPlanEditorData(supabase: any, planId: number) {
 
   return {
     plan,
+    athletes,
     weeks: weeksList,
     days,
     blocks,

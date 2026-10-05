@@ -9,6 +9,7 @@ import PlanTableView, { type ExercisePatch } from './PlanTableView'
 import PlanWellnessConfig from '@/components/PlanWellnessConfig'
 import { SetPageMeta, usePageMeta } from '@/components/coach/PageMetaContext'
 import { Modal, Button, Field } from '@/components/coach/ui'
+import { insertExercisesWithVariants, sortWithVariants, variantLabels } from '@/lib/exerciseVariants'
 
 type Plan = {
   id: number
@@ -80,6 +81,9 @@ type BlockExercise = {
   coach_comment?: string | null
   exercise_url?: string | null
   exercise?: ExerciseLibraryItem | null
+  // wariant ćwiczenia (1b, 1c...): id ćwiczenia bazowego (1a) i zawodniczki, które go robią
+  variant_of?: number | null
+  variant_athlete_ids?: number[] | null
 }
 
 type Block = {
@@ -93,6 +97,8 @@ type Block = {
 
 interface Props {
   plan: Plan
+  // zawodniczki planu — do przydziału wariantów ćwiczeń
+  athletes?: { id: number; full_name: string }[]
   weeks: Week[]
   days: Day[]
   blocks: Block[]
@@ -291,6 +297,8 @@ function ExerciseEditForm({
       is_warmup: isWarmup,
       warmup_sets: isWarmup ? cleanWarmupSets(warmupSets) : [],
       exercise_url: exerciseUrl.trim() || null,
+      // wariant (1b, 1c...) — wysyłane tylko dla wariantów, żeby zwykłe ćwiczenia działały bez migracji
+      ...(exercise.variant_of != null ? { variant_of: exercise.variant_of, variant_athlete_ids: exercise.variant_athlete_ids ?? [] } : {}),
     }
 
     let result = isNew
@@ -324,7 +332,9 @@ function ExerciseEditForm({
     }
     setSaving(false)
     if (error) {
-      setSaveError(isIsoColumnError(error)
+      setSaveError(/variant_of|variant_athlete_ids/.test(error.message || '')
+        ? 'Aby dodawać warianty ćwiczeń, uruchom migrację 202610050003.'
+        : isIsoColumnError(error)
         ? 'Brakuje pól na ćwiczenia ISO w bazie. Dodaj kolumny iso/iso_type w Supabase.'
         : isWorkSetsColumnError(error)
         ? 'Brakuje pola na serie w bazie. Dodaj kolumnę work_sets w Supabase.'
@@ -571,6 +581,103 @@ function ExerciseEditForm({
   )
 }
 
+// Przydział zawodniczek do wariantów ćwiczenia (1a / 1b / 1c...). Każda
+// zawodniczka ma dokładnie jeden wybór (radio), więc nikt nie zostaje bez
+// wariantu i nikt nie robi dwóch. 1a (bazowe) = wszyscy nieprzypisani gdzie indziej.
+function VariantAssignModal({ options, athletes, onSave, onClose }: {
+  options: { exercise: BlockExercise; label: string; name: string }[]  // [0] = ćwiczenie bazowe
+  athletes: { id: number; full_name: string }[]
+  onSave: (assignment: Map<number, number[]>) => Promise<void>       // id wariantu → zawodniczki
+  onClose: () => void
+}) {
+  const base = options[0]
+  const [choice, setChoice] = useState<Record<number, number>>(() => {
+    const init: Record<number, number> = {}
+    for (const a of athletes) {
+      const v = options.slice(1).find(o => (o.exercise.variant_athlete_ids || []).includes(a.id))
+      init[a.id] = (v ?? base).exercise.id as number
+    }
+    return init
+  })
+  const [saving, setSaving] = useState(false)
+  const countFor = (id: number) => athletes.filter(a => choice[a.id] === id).length
+
+  async function handleSave() {
+    setSaving(true)
+    const assignment = new Map<number, number[]>()
+    for (const o of options.slice(1)) assignment.set(o.exercise.id as number, athletes.filter(a => choice[a.id] === o.exercise.id).map(a => a.id))
+    await onSave(assignment)
+    setSaving(false)
+    onClose()
+  }
+
+  return (
+    <Modal
+      open
+      wide
+      onClose={onClose}
+      eyebrow="Warianty ćwiczenia"
+      title="Kto robi który wariant?"
+      sub="Każda zawodniczka robi dokładnie jeden wariant."
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Anuluj</Button>
+          <Button variant="dark" onClick={handleSave} disabled={saving}>{saving ? 'Zapisuję...' : 'Zapisz przydział'}</Button>
+        </>
+      }
+    >
+      {athletes.length === 0 ? (
+        <div style={{ color: 'var(--muted)', fontSize: 13, fontFamily: 'var(--font-inter),sans-serif' }}>
+          Plan nie ma jeszcze przypisanych zawodniczek — przypisz plan grupie albo zawodniczkom, a potem wybierz warianty.
+        </div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--font-inter),sans-serif', fontSize: 12 }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid var(--border)', color: 'var(--muted)', fontSize: 10, textTransform: 'uppercase' }}>Zawodniczka</th>
+                {options.map(o => (
+                  <th key={o.exercise.id} style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)', minWidth: 110 }}>
+                    <div style={{ fontWeight: 800, color: o.exercise.variant_of != null ? '#7c3aed' : 'var(--navy-900)' }}>{o.label}</div>
+                    <div style={{ fontWeight: 600, color: 'var(--muted)', fontSize: 11 }}>{o.name}</div>
+                    <div style={{ fontWeight: 600, color: 'var(--muted-light)', fontSize: 10 }}>{countFor(o.exercise.id as number)} os.</div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {athletes.map(a => (
+                <tr key={a.id}>
+                  <td style={{ padding: '5px 8px', borderBottom: '1px solid var(--border)', fontWeight: 600, color: 'var(--ink)' }}>{a.full_name}</td>
+                  {options.map(o => (
+                    <td key={o.exercise.id} style={{ textAlign: 'center', padding: '5px 8px', borderBottom: '1px solid var(--border)' }}>
+                      <input
+                        type="radio"
+                        name={`variant-${a.id}`}
+                        checked={choice[a.id] === o.exercise.id}
+                        onChange={() => setChoice(prev => ({ ...prev, [a.id]: o.exercise.id as number }))}
+                        style={{ width: 16, height: 16, accentColor: '#7c3aed', cursor: 'pointer' }}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+            {options.map(o => (
+              <button key={o.exercise.id} type="button" className="coach-btn coach-btn-ghost coach-btn-small"
+                onClick={() => setChoice(Object.fromEntries(athletes.map(a => [a.id, o.exercise.id as number])))}>
+                Wszystkie → {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </Modal>
+  )
+}
+
 function MoveModal({
   item,
   plans,
@@ -666,7 +773,7 @@ function MoveModal({
   )
 }
 
-export default function PlanEditorClient({ plan, weeks, days, blocks, exercises, allPlans, allWeeks, allDays, allBlocks }: Props) {
+export default function PlanEditorClient({ plan, athletes = [], weeks, days, blocks, exercises, allPlans, allWeeks, allDays, allBlocks }: Props) {
   const router = useRouter()
   const supabase = createClient()
   // Plan grupy samodzielnej wraca do zakładki Plan tej grupy, ogólny — do listy planów
@@ -916,7 +1023,7 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
       const exercises = block.workout_block_exercises || []
       let copiedExercises: BlockExercise[] = []
       if (exercises.length > 0) {
-        const rows = exercises.map(ex => ({
+        const rowFor = (ex: BlockExercise) => ({
           block_id: (blockData as Block).id,
           exercise_id: ex.exercise_id || null,
           exercise_code: ex.exercise_code || null,
@@ -934,13 +1041,13 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
           work_sets: ex.work_sets || [],
           iso: !!ex.iso,
           iso_type: ex.iso ? (ex.iso_type || null) : null,
-        }))
-        let { data: exData, error: exErr } = await supabase.from('workout_block_exercises').insert(rows).select('*, exercise:exercises(*)')
+        })
+        // warianty (1b, 1c...) kopiujemy z przepiętym variant_of na nowe ćwiczenia bazowe
+        let { data: exData, error: exErr } = await insertExercisesWithVariants(supabase, exercises, rowFor)
         if (exErr && (isWorkSetsColumnError(exErr) || isIsoColumnError(exErr))) {
-          // brak kolumn work_sets / iso w bazie — skopiuj bez nich
-          ;({ data: exData, error: exErr } = await supabase.from('workout_block_exercises')
-            .insert(rows.map(r => exercisePayloadWithoutIso(exercisePayloadWithoutWorkSets(r))))
-            .select('*, exercise:exercises(*)'))
+          // brak kolumn work_sets / iso w bazie — skopiuj bez nich (usuń to, co już weszło)
+          if (exData.length) await supabase.from('workout_block_exercises').delete().in('id', exData.map((e: any) => e.id))
+          ;({ data: exData, error: exErr } = await insertExercisesWithVariants(supabase, exercises, ex => exercisePayloadWithoutIso(exercisePayloadWithoutWorkSets(rowFor(ex)))))
         }
         if (exErr) showError(`Nie udało się skopiować ćwiczeń bloku: ${exErr.message}`)
         copiedExercises = (exData as BlockExercise[]) || []
@@ -1027,18 +1134,53 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
   function handleExerciseDelete(blockId: number, exerciseId?: number) {
     if (!exerciseId) return
     setLocalBlocks(prev => prev.map(block => block.id === blockId
-      ? { ...block, workout_block_exercises: (block.workout_block_exercises || []).filter(exercise => exercise.id !== exerciseId) }
+      ? { ...block, workout_block_exercises: (block.workout_block_exercises || []).filter(exercise => exercise.id !== exerciseId && exercise.variant_of !== exerciseId) }
       : block
     ))
     setTargetBlocks(prev => prev.map(block => block.id === blockId
-      ? { ...block, workout_block_exercises: (block.workout_block_exercises || []).filter(exercise => exercise.id !== exerciseId) }
+      ? { ...block, workout_block_exercises: (block.workout_block_exercises || []).filter(exercise => exercise.id !== exerciseId && exercise.variant_of !== exerciseId) }
       : block
     ))
   }
 
+  // ── Warianty ćwiczenia (1a/1b/1c) ──
+  const [assignSlot, setAssignSlot] = useState<{ blockId: number; baseId: number } | null>(null)
+
+  // Nowy wariant: formularz ćwiczenia z variant_of → baza; po zapisie od razu przydział zawodniczek
+  function addVariant(blockId: number, base: BlockExercise) {
+    if (!base.id) return
+    setEditingExercise({ block_id: blockId, exercise_order: base.exercise_order, sets: base.sets || 3, is_warmup: false, variant_of: base.id, variant_athlete_ids: [] })
+  }
+
+  function slotOptions(blockId: number, baseId: number) {
+    const exs = sortWithVariants((localBlocks.find(b => b.id === blockId)?.workout_block_exercises || []).filter(e => e.id === baseId || e.variant_of === baseId))
+    const labels = variantLabels(sortWithVariants(localBlocks.find(b => b.id === blockId)?.workout_block_exercises || []))
+    const labelOf = (e: BlockExercise) => [...labels.entries()].find(([k]) => k.id === e.id)?.[1] ?? ''
+    return exs.map(e => ({ exercise: e, label: labelOf(e), name: formatExerciseName(e.exercise?.name || e.exercise_code || 'Ćwiczenie') }))
+  }
+
+  async function saveVariantAssignment(blockId: number, assignment: Map<number, number[]>) {
+    for (const [variantId, ids] of assignment) {
+      const { error } = await supabase.from('workout_block_exercises').update({ variant_athlete_ids: ids }).eq('id', variantId)
+      if (error) {
+        showError(/variant_athlete_ids/.test(error.message) ? 'Aby dodawać warianty ćwiczeń, uruchom migrację 202610050003.' : `Nie udało się zapisać przydziału: ${error.message}`)
+        return
+      }
+    }
+    const apply = (list: Block[]) => list.map(block => block.id !== blockId ? block : {
+      ...block,
+      workout_block_exercises: (block.workout_block_exercises || []).map(e => e.id != null && assignment.has(e.id) ? { ...e, variant_athlete_ids: assignment.get(e.id) } : e),
+    })
+    setLocalBlocks(apply)
+    setTargetBlocks(apply)
+  }
+
   async function deleteExercise(blockId: number, exerciseId?: number) {
     if (!exerciseId) return
-    if (!confirm('Usunac to cwiczenie z bloku?')) return
+    const variantCount = (localBlocks.find(b => b.id === blockId)?.workout_block_exercises || []).filter(e => e.variant_of === exerciseId).length
+    if (!confirm(variantCount
+      ? `Usunąć to ćwiczenie razem z jego wariantami (${variantCount})?`
+      : 'Usunąć to ćwiczenie z bloku? (wariant: jego zawodniczki wrócą do ćwiczenia bazowego)')) return
     const { data: deleted, error } = await supabase.from('workout_block_exercises').delete().eq('id', exerciseId).select('id')
     if (error) { showError(`Błąd usuwania ćwiczenia: ${error.message}`); return }
     if (!deleted || deleted.length === 0) {
@@ -1064,29 +1206,28 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
         .from('workout_block_exercises')
         .update({ block_id: targetId, exercise_order: targetOrder })
         .eq('id', movingItem.exercise.id)
+      // warianty idą razem ze swoim ćwiczeniem bazowym
+      const movingIds = new Set<number>([movingItem.exercise.id])
+      const variantsToMove = (localBlocks.find(b => b.id === movingItem.fromBlockId)?.workout_block_exercises || []).filter(e => e.variant_of === movingItem.exercise.id)
+      if (variantsToMove.length) {
+        await supabase.from('workout_block_exercises').update({ block_id: targetId, exercise_order: targetOrder }).eq('variant_of', movingItem.exercise.id)
+        variantsToMove.forEach(v => v.id != null && movingIds.add(v.id))
+      }
+      const movedRows = [{ ...movingItem.exercise, block_id: targetId, exercise_order: targetOrder }, ...variantsToMove.map(v => ({ ...v, block_id: targetId, exercise_order: targetOrder }))]
 
       setLocalBlocks(prev => prev.map(block => {
         if (block.id === movingItem.fromBlockId) {
-          return { ...block, workout_block_exercises: (block.workout_block_exercises || []).filter(exercise => exercise.id !== movingItem.exercise.id) }
+          return { ...block, workout_block_exercises: (block.workout_block_exercises || []).filter(exercise => !movingIds.has(exercise.id as number)) }
         }
         if (block.id === targetId) {
-          return {
-            ...block,
-            workout_block_exercises: [
-              ...(block.workout_block_exercises || []),
-              { ...movingItem.exercise, block_id: targetId, exercise_order: targetOrder },
-            ],
-          }
+          return { ...block, workout_block_exercises: [...(block.workout_block_exercises || []), ...movedRows] }
         }
         return block
       }))
       setTargetBlocks(prev => prev.map(block => block.id === targetId
         ? {
             ...block,
-            workout_block_exercises: [
-              ...(block.workout_block_exercises || []),
-              { ...movingItem.exercise, block_id: targetId, exercise_order: targetOrder },
-            ],
+            workout_block_exercises: [...(block.workout_block_exercises || []), ...movedRows],
           }
         : block
       ))
@@ -1219,13 +1360,18 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
               const day = localDays.find(d => d.id === block?.day_id)
               return [day?.day_name, block?.block_name].filter(Boolean).join(' · ') || 'Ćwiczenie'
             })()}
-            title={editingExercise.id ? 'Edytuj ćwiczenie' : 'Dodaj ćwiczenie'}
+            title={editingExercise.id ? 'Edytuj ćwiczenie' : editingExercise.variant_of != null ? 'Dodaj wariant ćwiczenia' : 'Dodaj ćwiczenie'}
           >
             <ExerciseEditForm
               key={editingExercise.id ?? `new-${editingExercise.block_id}`}
               exercise={editingExercise}
               exercises={exercises}
-              onSave={saved => { handleExerciseSave(editingExercise.block_id, saved); setEditingExercise(null) }}
+              onSave={saved => {
+                handleExerciseSave(editingExercise.block_id, saved)
+                // nowy wariant — od razu wybór, kto go robi
+                if (!editingExercise.id && saved.variant_of != null) setAssignSlot({ blockId: editingExercise.block_id, baseId: saved.variant_of })
+                setEditingExercise(null)
+              }}
               onDelete={() => { handleExerciseDelete(editingExercise.block_id, editingExercise.id); setEditingExercise(null) }}
               onClose={() => setEditingExercise(null)}
             />
@@ -1253,7 +1399,20 @@ export default function PlanEditorClient({ plan, weeks, days, blocks, exercises,
           onEditExercise={(blockId, exercise) => setEditingExercise({ ...exercise, block_id: blockId })}
           onMoveExercise={(blockId, exercise) => setMovingItem({ type: 'exercise', exercise: { ...exercise, block_id: blockId }, fromBlockId: blockId })}
           onDeleteExercise={deleteExercise}
+          athletes={athletes}
+          onAddVariant={addVariant}
+          onAssignVariants={(blockId, baseId) => setAssignSlot({ blockId, baseId })}
         />
+
+        {assignSlot && (
+          <VariantAssignModal
+            key={`${assignSlot.blockId}-${assignSlot.baseId}`}
+            options={slotOptions(assignSlot.blockId, assignSlot.baseId)}
+            athletes={athletes}
+            onSave={assignment => saveVariantAssignment(assignSlot.blockId, assignment)}
+            onClose={() => setAssignSlot(null)}
+          />
+        )}
       </div>
     </>
   )

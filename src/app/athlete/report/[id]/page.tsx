@@ -1,5 +1,6 @@
 // src/app/athlete/report/[id]/page.tsx
 import { redirect } from 'next/navigation'
+import { applyVariantsToSession } from '@/lib/exerciseVariants'
 import { createClient } from '@/utils/supabase/server'
 import { getAthleteByUserId } from '@/lib/training'
 import ReportClient from './ReportClient'
@@ -83,7 +84,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
 
   return (
     <ReportClient
-      session={session}
+      session={applyVariantsToSession(session, athlete.id)}
       athlete={athlete}
       setLogs={setLogs || []}
       wellness={wellness || null}

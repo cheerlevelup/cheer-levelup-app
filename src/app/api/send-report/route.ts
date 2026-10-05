@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { applyVariantsToSession } from '@/lib/exerciseVariants'
 
 function getAdminClient() {
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return null
@@ -383,7 +384,8 @@ export async function POST(req: NextRequest) {
       .select('*')
       .eq('workout_session_id', sessionId)
 
-    const day = session.workout_day
+    // warianty ćwiczeń (1a/1b) — w raporcie tylko wariant tej zawodniczki
+    const day = applyVariantsToSession(session, Number(athleteId)).workout_day
     const plan = day?.week?.plan
     const week = day?.week
 
