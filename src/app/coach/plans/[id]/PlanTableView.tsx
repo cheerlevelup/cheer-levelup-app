@@ -19,25 +19,28 @@ type BlockExercise = {
 }
 
 // Wartość, która może się różnić między seriami: jedna wspólna, albo (jeśli
-// serie faktycznie się różnią) czytelny zakres "90–120" zamiast mylącego
-// pokazywania tylko pierwszej serii.
+// serie się różnią) wartości kolejnych serii po kolei — "90'' / 120''" znaczy
+// seria 1 = 90'', seria 2 = 120'' (zakres "90–120" nie mówił, która jest która).
 function fmtRange(values: (string | undefined)[], suffix = ''): string {
-  const present = values.map(v => v?.trim()).filter((v): v is string => !!v)
-  if (present.length === 0) return '—'
-  const unique = Array.from(new Set(present))
+  const all = values.map(v => v?.trim() || '')
+  if (all.every(v => !v)) return '—'
+  const unique = Array.from(new Set(all))
   if (unique.length === 1) return `${unique[0]}${suffix}`
-  const nums = unique.map(Number)
-  if (nums.every(n => !Number.isNaN(n))) {
-    return `${Math.min(...nums)}–${Math.max(...nums)}${suffix}`
-  }
-  return `${unique.join('/')}${suffix}`
+  return all.map(v => v ? `${v}${suffix}` : '—').join(' / ')
 }
 
+// Wartość do edytowalnej komórki — brak wartości to puste pole, nie „—"
+const orBlank = (v: string) => (v === '—' ? '' : v)
+
+// ISO w kolumnie Powt.: "1× 90''" gdy serie równe, inaczej seria po serii:
+// "1× 90'' / 1× 120''" (albo "90'' / 120''", gdy nie podano powtórzeń)
 function isoPowtSummary(ex: BlockExercise): string {
   const sets = ex.work_sets || []
-  const reps = fmtRange(sets.map(s => s.reps))
-  const secs = fmtRange(sets.map(s => s.seconds), 's')
-  return reps !== '—' ? `${reps}× ${secs}` : secs
+  const reps = sets.map(s => s.reps?.trim() || '')
+  const secs = sets.map(s => s.seconds?.trim() || '')
+  const one = (r: string, t: string) => `${r ? `${r}× ` : ''}${t ? `${t}''` : '—'}`
+  if (new Set(reps).size <= 1 && new Set(secs).size <= 1) return one(reps[0] || '', secs[0] || '')
+  return sets.map((_, i) => one(reps[i], secs[i])).join(' / ')
 }
 type Block = {
   id: number; day_id: number; block_name: string; block_order: number; rounds: number
@@ -901,7 +904,7 @@ export default function PlanTableView(props: Props) {
                                           </div>
                                         ) : (
                                           <EditCell
-                                            value={ex.work_sets?.length ? fmtRange(ex.work_sets.map(s => s.reps)).replace('—', '') : (ex.reps || '')}
+                                            value={ex.work_sets?.length ? orBlank(fmtRange(ex.work_sets.map(s => s.reps))) : (ex.reps || '')}
                                             onCommit={v => onUpdateExercise(block.id, ex, { reps: v.trim() || null, ...(syncWorkSets(ex, 'reps', v.trim()) ? { work_sets: syncWorkSets(ex, 'reps', v.trim()) } : {}) })}
                                             placeholder="powt."
                                           />
@@ -909,7 +912,7 @@ export default function PlanTableView(props: Props) {
                                       </td>
                                       <td style={td({ background: '#eff6ff' })}>
                                         <EditCell
-                                          value={ex.work_sets?.length ? fmtRange(ex.work_sets.map(s => s.weight_kg)).replace('—', '') : (ex.weight_kg?.toString() || '')}
+                                          value={ex.work_sets?.length ? orBlank(fmtRange(ex.work_sets.map(s => s.weight_kg))) : (ex.weight_kg?.toString() || '')}
                                           onCommit={v => {
                                             const num = v.trim() ? parseFloat(v.replace(',', '.')) : null
                                             onUpdateExercise(block.id, ex, { weight_kg: num != null && !isNaN(num) ? num : null, ...(syncWorkSets(ex, 'weight_kg', v.trim()) ? { work_sets: syncWorkSets(ex, 'weight_kg', v.trim()) } : {}) })
@@ -920,7 +923,7 @@ export default function PlanTableView(props: Props) {
                                       <td style={td({ background: '#eff6ff' })}>
                                         {ex.iso ? <span style={{ color: 'var(--muted-light)' }}>—</span> : (
                                           <EditCell
-                                            value={ex.work_sets?.length ? fmtRange(ex.work_sets.map(s => s.tempo)).replace('—', '') : (ex.tempo || '')}
+                                            value={ex.work_sets?.length ? orBlank(fmtRange(ex.work_sets.map(s => s.tempo))) : (ex.tempo || '')}
                                             onCommit={v => onUpdateExercise(block.id, ex, { tempo: v.trim() || null, ...(syncWorkSets(ex, 'tempo', v.trim()) ? { work_sets: syncWorkSets(ex, 'tempo', v.trim()) } : {}) })}
                                             placeholder="—"
                                           />
@@ -928,7 +931,7 @@ export default function PlanTableView(props: Props) {
                                       </td>
                                       <td style={td({ background: '#eff6ff' })}>
                                         <EditCell
-                                          value={ex.work_sets?.length ? fmtRange(ex.work_sets.map(s => s.rir)).replace('—', '') : (ex.rir?.toString() || '')}
+                                          value={ex.work_sets?.length ? orBlank(fmtRange(ex.work_sets.map(s => s.rir))) : (ex.rir?.toString() || '')}
                                           onCommit={v => {
                                             const num = v.trim() ? parseInt(v) : null
                                             onUpdateExercise(block.id, ex, { rir: num != null && !isNaN(num) ? num : null, ...(syncWorkSets(ex, 'rir', v.trim()) ? { work_sets: syncWorkSets(ex, 'rir', v.trim()) } : {}) })
