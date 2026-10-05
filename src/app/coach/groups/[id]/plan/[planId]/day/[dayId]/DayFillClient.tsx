@@ -42,7 +42,7 @@ type Override = { athlete_id: number; block_exercise_id: number; sets_override?:
 interface Props {
   group: { id: number; name: string }
   plan: { id: number; name: string }
-  day: { id: number; day_name: string | null }
+  day: { id: number; day_name: string | null; absent_athlete_ids?: number[] | null }
   dayNav: { id: number; day_name: string | null; week_number: number; day_order: number }[]
   blocks: Block[]
   athletes: Athlete[]
@@ -303,7 +303,26 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
     else if (e.key === 'ArrowLeft' && setIdx > 0) go(row, col, setIdx - 1)
   }
 
-  const doneCount = athletes.filter(a => sessions[a.id]?.completed).length
+  // Nieobecności na tym treningu planu (workout_days.absent_athlete_ids)
+  const [absentIds, setAbsentIds] = useState<Set<number>>(() => new Set((day.absent_athlete_ids || []).map(Number)))
+  // przejście na inny trening planu (ten sam komponent, nowe propsy) — weź jego listę
+  useEffect(() => { setAbsentIds(new Set((day.absent_athlete_ids || []).map(Number))) }, [day.id, day.absent_athlete_ids])
+  async function toggleAbsent(athleteId: number) {
+    setError('')
+    const prev = absentIds
+    const next = new Set(prev)
+    if (next.has(athleteId)) next.delete(athleteId); else next.add(athleteId)
+    setAbsentIds(next)
+    const { error: err } = await supabase.from('workout_days').update({ absent_athlete_ids: Array.from(next) }).eq('id', day.id)
+    if (err) {
+      setAbsentIds(prev)
+      setError(/'absent_athlete_ids'/.test(err.message) ? 'Aby zaznaczać nieobecności, uruchom migrację 202610050005.' : err.message)
+    }
+  }
+  const orderedAthletes = [...athletes.filter(a => !absentIds.has(a.id)), ...athletes.filter(a => absentIds.has(a.id))]
+  const presentCount = athletes.length - athletes.filter(a => absentIds.has(a.id)).length
+
+  const doneCount = athletes.filter(a => !absentIds.has(a.id) && sessions[a.id]?.completed).length
 
   // Pola jednego ćwiczenia w komórce: rozgrzewka (R1…), serie (S1…), ból i notatka
   function renderExercise(athlete: Athlete, session: Session | undefined, item: CellExercise, nav: { row: number; col: number; next: number }) {
@@ -420,7 +439,7 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
             ))}
           </div>
           <span style={{ marginLeft: 'auto', fontFamily: INTER, fontSize: '0.74rem', color: 'var(--muted)' }}>
-            {saving > 0 ? 'Zapisuję…' : 'Zapisano'} · zakończone {doneCount}/{athletes.length}
+            {saving > 0 ? 'Zapisuję…' : 'Zapisano'} · zakończone {doneCount}/{presentCount}{presentCount < athletes.length ? ` · nieobecne ${athletes.length - presentCount}` : ''}
           </span>
           <Button variant="ghost" size="small" onClick={() => router.refresh()} title="Pobierz zmiany wpisane przez zawodniczki">
             <RefreshCw size={13} /> Odśwież
@@ -507,13 +526,26 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                 </tr>
               </thead>
               <tbody>
-                {athletes.map((athlete, rowIdx) => {
+                {orderedAthletes.map((athlete, rowIdx) => {
                   const session = sessions[athlete.id]
                   const done = !!session?.completed
+                  const absent = absentIds.has(athlete.id)
                   return (
                     <tr key={athlete.id} className="df-row">
                       <td className="df-sticky" style={{ padding: '0.45rem 0.5rem' }}>
-                        <div style={{ fontWeight: 700, fontSize: '0.78rem', color: 'var(--navy-900)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 176 }}>{athlete.full_name}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <div style={{ fontWeight: 700, fontSize: '0.78rem', color: absent ? 'var(--muted-light)' : 'var(--navy-900)', textDecoration: absent ? 'line-through' : 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 150 }}>{athlete.full_name}</div>
+                          <button
+                            onClick={() => toggleAbsent(athlete.id)}
+                            title={absent ? 'Przywróć — była na treningu' : 'Zaznacz nieobecność na tym treningu'}
+                            style={{ flexShrink: 0, marginLeft: 'auto', border: 'none', background: 'none', padding: '0 2px', color: absent ? '#92600A' : 'var(--muted-light)', fontSize: '0.7rem', fontWeight: 700, lineHeight: 1, outline: 'none' }}
+                          >
+                            {absent ? '↩' : '✕'}
+                          </button>
+                        </div>
+                        {absent ? (
+                          <span style={{ display: 'inline-block', marginTop: 4, border: '1.5px solid #F4B5B5', background: '#FDEDED', color: '#c23b3b', borderRadius: 6, padding: '2px 7px', fontFamily: INTER, fontSize: '0.6rem', fontWeight: 700 }}>nieobecna</span>
+                        ) : (
                         <button
                           onClick={() => toggleCompleted(athlete.id)}
                           title={done ? 'Kliknij, by cofnąć — zawodniczka znów będzie mogła dokończyć trening' : 'Oznacz trening jako zakończony (wyśle raport mailem)'}
@@ -521,10 +553,11 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                         >
                           {done ? <><Check size={11} /> zakończony</> : session ? 'w trakcie · zakończ' : 'nie rozpoczęty · zakończ'}
                         </button>
+                        )}
                       </td>
                       {columns.map((col, colIdx) => {
                         const tdClass = col.blockStart ? 'df-block-start' : undefined
-                        const tdStyle: React.CSSProperties = { padding: '0.4rem 0.5rem', ...(done ? { background: '#F4FBF6' } : {}) }
+                        const tdStyle: React.CSSProperties = { padding: '0.4rem 0.5rem', ...(done ? { background: '#F4FBF6' } : {}), ...(absent ? { opacity: 0.35, pointerEvents: 'none' as const } : {}) }
                         // numeracja pól w komórce (rozgrzewka + serie, kolejne ćwiczenia) — do nawigacji klawiaturą
                         const nav = { row: rowIdx, col: colIdx, next: 0 }
                         if (col.kind === 'extra') {

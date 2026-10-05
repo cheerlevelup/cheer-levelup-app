@@ -9,7 +9,7 @@ import { createClient } from '@/utils/supabase/client'
 import { Card, Button } from '@/components/coach/ui'
 import { Plus, Pencil, ClipboardEdit, Check } from 'lucide-react'
 
-export type GroupPlanDay = { id: number; day_name: string | null; day_order: number; week_number: number; done: number }
+export type GroupPlanDay = { id: number; day_name: string | null; day_order: number; week_number: number; done: number; absent?: number }
 export type GroupPlanItem = { id: number; name: string; is_archived: boolean; owned: boolean; days: GroupPlanDay[] }
 
 const INTER = 'var(--font-inter), sans-serif'
@@ -162,7 +162,9 @@ export default function GroupPlansPanel({ groupId, athletes, plans, currentPlanI
             {p.days.length > 0 && (
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
                 {p.days.map((d, i) => {
-                  const all = athletes.length > 0 && d.done >= athletes.length
+                  // nieobecne na tym treningu nie liczą się do „zrobiły"
+                  const expected = athletes.length - (d.absent || 0)
+                  const all = expected > 0 && d.done >= expected
                   return (
                     <button
                       key={d.id}
@@ -172,7 +174,7 @@ export default function GroupPlansPanel({ groupId, athletes, plans, currentPlanI
                     >
                       <ClipboardEdit size={13} style={{ color: 'var(--muted-light)' }} />
                       {d.day_name || `Trening ${i + 1}`}
-                      <span style={{ fontWeight: 600, color: all ? '#15803d' : 'var(--muted-light)' }}>{d.done}/{athletes.length}</span>
+                      <span style={{ fontWeight: 600, color: all ? '#15803d' : 'var(--muted-light)' }}>{d.done}/{expected}</span>
                     </button>
                   )
                 })}

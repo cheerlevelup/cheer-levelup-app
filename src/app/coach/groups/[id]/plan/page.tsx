@@ -92,7 +92,7 @@ export default async function GroupPlanPage({ params }: Props) {
     : { data: [] }
   const listWeekIds = (listWeeks || []).map((w: any) => w.id)
   const { data: listDays } = listWeekIds.length > 0
-    ? await supabase.from('workout_days').select('id, week_id, day_name, day_order').in('week_id', listWeekIds)
+    ? await supabase.from('workout_days').select('*').in('week_id', listWeekIds)
     : { data: [] }
   const weekById = new Map((listWeeks || []).map((w: any) => [w.id, w]))
 
@@ -115,7 +115,7 @@ export default async function GroupPlanPage({ params }: Props) {
     owned: p.group_id === groupId,
     days: (listDays || [])
       .filter((d: any) => (weekById.get(d.week_id) as any)?.plan_id === p.id)
-      .map((d: any) => ({ id: d.id, day_name: d.day_name, day_order: d.day_order, week_number: (weekById.get(d.week_id) as any)?.week_number ?? 1, done: doneByDay.get(d.id)?.size ?? 0 }))
+      .map((d: any) => ({ id: d.id, day_name: d.day_name, day_order: d.day_order, week_number: (weekById.get(d.week_id) as any)?.week_number ?? 1, done: doneByDay.get(d.id)?.size ?? 0, absent: (d.absent_athlete_ids || []).filter((id: number) => athleteIds.includes(id)).length }))
       .sort((a: any, b: any) => a.week_number - b.week_number || a.day_order - b.day_order),
   }))
 

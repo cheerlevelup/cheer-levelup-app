@@ -101,7 +101,7 @@ export default async function GroupPlanDayPage({ params }: Props) {
     <DayFillClient
       group={{ id: group.id, name: group.name }}
       plan={plan}
-      day={{ id: day.id, day_name: day.day_name }}
+      day={{ id: day.id, day_name: day.day_name, absent_athlete_ids: (day as any).absent_athlete_ids || [] }}
       dayNav={dayNav}
       blocks={blocks}
       athletes={athletes}
