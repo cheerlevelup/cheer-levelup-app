@@ -228,7 +228,7 @@ async function exportXlsx(plan: Plan, days: Day[], blocks: Block[], wCols: numbe
     sheet.mergeCells(2, C_KOM, 3, C_KOM)
     for (let r = 0; r < wCols; r++) {
       const col = C_WARMUP_START + r * 3
-      applyHdr(sheet.getCell(3, col), GREEN_HDR, 'FFFFFF', `R${r + 1}`, 9, true, 'center')
+      applyHdr(sheet.getCell(3, col), GREEN_HDR, 'FFFFFF', `Warm-up set ${r + 1}`, 9, true, 'center')
       sheet.mergeCells(3, col, 3, col + 2)
     }
     const serieLabels = ['Serie', 'Powt.', 'Ciężar', 'Tempo', 'RIR', 'Kom.']
@@ -413,7 +413,7 @@ async function exportPdf(plan: Plan, days: Day[], blocks: Block[], wCols: number
   const headRow2: any[] = []
   for (let r = 1; r <= wCols; r++) {
     headRow2.push({
-      content: `R${r}`, colSpan: 3,
+      content: `Warm-up set ${r}`, colSpan: 3,
       styles: { halign: 'center', fillColor: [19, 45, 30], textColor: [134, 239, 172], fontStyle: 'bold' },
     })
   }
@@ -805,7 +805,7 @@ export default function PlanTableView(props: Props) {
                               <th style={th({ width: 20, padding: '5px 2px' })}>🔗</th>
                               <th style={th({ minWidth: 130, textAlign: 'left' })}>Komentarz</th>
                               {Array.from({ length: warmupCols }, (_, i) => (
-                                <th key={i} colSpan={3} className="coach-warm-group" style={th({ minWidth: 180, ...warmHeadStyle })}>R{i + 1}</th>
+                                <th key={i} colSpan={3} className="coach-warm-group" style={th({ minWidth: 180, ...warmHeadStyle })} title="Seria rozgrzewkowa">Warm-up set {i + 1}</th>
                               ))}
                               <th style={th({ width: 38, ...serieHeadStyle })}>Serie</th>
                               <th style={th({ width: 52, ...serieHeadStyle })}>Powt.</th>
@@ -847,7 +847,8 @@ export default function PlanTableView(props: Props) {
                                     endDrag()
                                   }}
                                 >
-                                  <td className="coach-pt-block" style={td()}>{blockLabel(bi)}</td>
+                                  {/* jedna komórka z literą na cały blok (nagłówek + ćwiczenia + „dodaj”) */}
+                                  <td rowSpan={exs.length + 2} className="coach-pt-block" style={td()}>{blockLabel(bi)}</td>
                                   <td colSpan={totalCols - 1} style={td({ textAlign: 'left', background: 'var(--bg)', padding: '3px 8px' })}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                       {handle('Przeciągnij, by przenieść cały blok w tym treningu', () => setDrag({ kind: 'block', blockId: block.id, dayId: day.id }))}
@@ -877,7 +878,6 @@ export default function PlanTableView(props: Props) {
                                     endDrag()
                                   }}
                                 >
-                                  {exs.length === 0 && <td className="coach-pt-block" style={td()}></td>}
                                   <td colSpan={totalCols - 1} style={td({ padding: '3px 8px', textAlign: 'left' })}>
                                     <button onClick={() => onAddExercise(block.id)}
                                       style={{ border: '1px dashed var(--border)', background: 'transparent', color: 'var(--muted)', borderRadius: 5, padding: '2px 10px', fontFamily: 'var(--font-inter),sans-serif', fontSize: '10px', cursor: 'pointer' }}>
@@ -909,11 +909,6 @@ export default function PlanTableView(props: Props) {
                                         endDrag()
                                       }}
                                     >
-                                      {i === 0 && (
-                                        <td rowSpan={exs.length + 1} className="coach-pt-block" style={td()}>
-                                          {blockLabel(bi)}
-                                        </td>
-                                      )}
                                       <td style={td({ color: ex.variant_of != null ? '#7c3aed' : 'var(--muted-light)', fontWeight: labels.get(ex)?.match(/[a-z]/) ? 700 : 400, whiteSpace: 'nowrap' })}>
                                         {/* uchwyt tylko przy ćwiczeniu bazowym — warianty jadą razem z nim */}
                                         {ex.variant_of == null && ex.id != null && handle('Przeciągnij, by przenieść ćwiczenie (z wariantami) w tym treningu', () => setDrag({ kind: 'ex', exId: ex.id as number, blockId: block.id, dayId: day.id }))}
