@@ -12,8 +12,9 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { Button } from '@/components/coach/ui'
-import { AlertTriangle, MessageCircle, Check, X, RefreshCw } from 'lucide-react'
+import { AlertTriangle, MessageCircle, Check, X, RefreshCw, FileDown } from 'lucide-react'
 import { sortWithVariants } from '@/lib/exerciseVariants'
+import type { SheetBox, SheetCell, SheetColumn, SheetItem, SheetRow } from '@/lib/coach/dayFillPdf'
 
 type Athlete = { id: number; full_name: string }
 type BlockEx = {
@@ -324,6 +325,95 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
 
   const doneCount = athletes.filter(a => !absentIds.has(a.id) && sessions[a.id]?.completed).length
 
+  // ── Karta treningu do PDF: te same komórki co w tabeli (wariant, zmiany, kratki serii z wpisami)
+  const [exporting, setExporting] = useState(false)
+  function sheetItem(session: Session | undefined, item: CellExercise, title?: string, changed?: string): SheetItem {
+    const amrap = isAmrap(item.reps)
+    const exLogs = session ? Object.values(logs).filter(l => l.workout_session_id === session.id && l.block_exercise_id === item.id) : []
+    const workLogs = exLogs.filter(l => !l.is_warmup)
+    const nSets = Math.max(item.sets, 0, ...workLogs.map(l => l.set_number))
+    const nWarm = Math.max(item.warmups.length, 0, ...exLogs.filter(l => l.is_warmup).map(l => l.set_number))
+    const val = (setNum: number, warm: boolean) => {
+      const log = session ? logs[logKey(session.id, item.id, setNum, warm)] : undefined
+      const v = log?.[warm || !amrap ? 'weight' : 'reps_completed']
+      return v != null ? String(v) : ''
+    }
+    const boxes: SheetBox[] = [
+      ...Array.from({ length: nWarm }, (_, i) => {
+        const w = item.warmups[i]
+        return { label: `R${i + 1}`, value: val(i + 1, true), hint: w?.weight_kg != null && w.weight_kg !== '' ? String(w.weight_kg) : '', warm: true }
+      }),
+      ...Array.from({ length: nSets }, (_, i) => ({ label: `S${i + 1}`, value: val(i + 1, false), hint: amrap ? 'powt.' : item.weight != null ? String(item.weight) : '', warm: false })),
+    ]
+    const note = [...workLogs].sort((a, b) => a.set_number - b.set_number)[0]?.athlete_note || ''
+    const pain = painFor(session?.id, item.name)
+    return {
+      title, changed, boxes,
+      note: note ? `Notatka: ${note}` : undefined,
+      pain: pain ? `Ból${pain.vas_score != null ? ` ${pain.vas_score}/10` : ''}${pain.pain_comment ? `: ${pain.pain_comment}` : ''}` : undefined,
+    }
+  }
+
+  async function exportPdf() {
+    setExporting(true); setError('')
+    try {
+      const [{ buildDayFillPdf }, { loadPdfFonts }] = await Promise.all([import('@/lib/coach/dayFillPdf'), import('@/lib/coach/planPdf')])
+      const sheetColumns: SheetColumn[] = columns.map(col => {
+        const bi = blocks.findIndex(b => b.id === col.block.id)
+        const blockTitle = `Blok ${blockLetter(bi)}${col.block.block_name && col.block.block_name.trim() !== `Blok ${blockLetter(bi)}` ? ` · ${col.block.block_name}` : ''}${col.block.rounds && col.block.rounds > 1 ? ` · ${col.block.rounds} rundy` : ''}`
+        if (col.kind === 'extra') return { blockIndex: bi, blockTitle, label: col.label, name: 'Dodatkowe', extra: true, details: ['ćwiczenia dodane pojedynczym zawodniczkom'] }
+        const ex = col.ex
+        const warmups = planWarmups(ex)
+        return {
+          blockIndex: bi, blockTitle, label: col.label, name: exName(ex),
+          details: [
+            [ex.sets ? `${ex.sets}×${ex.reps || '?'}` : ex.reps, ex.tempo ? `tempo ${ex.tempo}` : '', ex.weight_kg != null ? `${ex.weight_kg} kg` : '', ex.rir != null ? `RIR ${ex.rir}` : ''].filter(Boolean).join(' · '),
+            warmups.length ? `+ rozgrzewka: ${warmups.length} ${warmups.length === 1 ? 'seria' : 'serie'}` : '',
+            ex.coach_comment || '',
+            col.variants.length ? [ex, ...col.variants].map((v, vi) => `${String.fromCharCode(97 + vi)}: ${exName(v)}`).join(' · ') : '',
+          ].filter(Boolean),
+        }
+      })
+      const sheetRows: SheetRow[] = orderedAthletes.map(athlete => {
+        const session = sessions[athlete.id]
+        const cells: SheetCell[] = columns.map(col => {
+          if (col.kind === 'extra') {
+            const own = col.extras.filter(e => e.athlete_id === athlete.id)
+            if (!own.length) return { text: '—' }
+            return { items: own.map(e => {
+              const name = fmtName(e.exercise?.name || e.exercise_code || 'Ćwiczenie')
+              return sheetItem(session, { id: e.id, name, sets: e.sets || 1, reps: e.reps || '', weight: e.weight_kg ?? null, warmups: [] },
+                `${name} · ${e.sets || 1}×${e.reps || '?'}${e.weight_kg != null ? ` · ${e.weight_kg} kg` : ''}`)
+            }) }
+          }
+          const variantIdx = col.variants.findIndex(v => (v.variant_athlete_ids || []).includes(athlete.id))
+          const ex = variantIdx >= 0 ? col.variants[variantIdx] : col.ex
+          const o = ovrMap.get(ovrKey(athlete.id, ex.id))
+          if (o?.skip) return { text: 'pominięte dla tej zawodniczki' }
+          const planned = o?.sets_override || ex.sets || 1
+          const reps = o?.reps_override || ex.reps || ''
+          const changed = o && (o.sets_override || o.reps_override || o.weight_override != null || o.exercise_code_override)
+          return { items: [sheetItem(session,
+            { id: ex.id, name: exName(ex, o), sets: planned, reps, weight: o?.weight_override ?? ex.weight_kg ?? null, warmups: o?.warmup_sets_override ?? planWarmups(ex) },
+            col.variants.length ? `${col.label}${String.fromCharCode(97 + variantIdx + 1)} · ${exName(ex, o)}` : undefined,
+            changed ? `zmiana: ${o?.exercise_code_override ? `${o.exercise_code_override} · ` : ''}${planned}×${reps || '?'}${o?.weight_override != null ? ` · ${o.weight_override} kg` : ''}` : undefined,
+          )] }
+        })
+        const status: SheetRow['status'] = absentIds.has(athlete.id) ? 'absent' : session?.completed ? 'done' : session ? 'started' : 'new'
+        return { name: athlete.full_name, status, cells }
+      })
+      const doc = await buildDayFillPdf({
+        title: day.day_name || 'Trening', subtitle: `${plan.name} · ${group.name}`,
+        columns: sheetColumns, rows: sheetRows, fonts: await loadPdfFonts(),
+      })
+      doc.save(`${group.name} - ${day.day_name || 'Trening'}.pdf`)
+    } catch (e) {
+      console.error(e)
+      setError('Nie udało się wygenerować PDF.')
+    }
+    setExporting(false)
+  }
+
   // Pola jednego ćwiczenia w komórce: rozgrzewka (R1…), serie (S1…), ból i notatka
   function renderExercise(athlete: Athlete, session: Session | undefined, item: CellExercise, nav: { row: number; col: number; next: number }) {
     const cellKey = ovrKey(athlete.id, item.id)
@@ -441,6 +531,9 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
           <span style={{ marginLeft: 'auto', fontFamily: INTER, fontSize: '0.74rem', color: 'var(--muted)' }}>
             {saving > 0 ? 'Zapisuję…' : 'Zapisano'} · zakończone {doneCount}/{presentCount}{presentCount < athletes.length ? ` · nieobecne ${athletes.length - presentCount}` : ''}
           </span>
+          <Button variant="ghost" size="small" onClick={exportPdf} disabled={exporting || columns.length === 0} title="Karta treningu do druku — wpisane serie i puste kratki do uzupełnienia">
+            <FileDown size={13} /> {exporting ? 'Generuję…' : 'PDF'}
+          </Button>
           <Button variant="ghost" size="small" onClick={() => router.refresh()} title="Pobierz zmiany wpisane przez zawodniczki">
             <RefreshCw size={13} /> Odśwież
           </Button>

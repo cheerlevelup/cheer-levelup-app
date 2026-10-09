@@ -68,19 +68,7 @@ export async function buildPlanPdf(opts: {
   const format = printable.some(d => warmCount(d.id) > 1) ? 'a3' : 'a4'
 
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format })
-  let font = 'helvetica'
-  if (fonts) {
-    doc.addFileToVFS('Roboto-Regular.ttf', fonts.regular)
-    doc.addFont('Roboto-Regular.ttf', 'Roboto', 'normal')
-    doc.addFileToVFS('Roboto-Bold.ttf', fonts.bold)
-    doc.addFont('Roboto-Bold.ttf', 'Roboto', 'bold')
-    font = 'Roboto'
-  }
-  // Helvetica nie ma polskich znaków — bez własnej czcionki zamieniamy je na ASCII
-  const t = (s: string | number | null | undefined): string => {
-    const v = s == null ? '' : String(s)
-    return fonts ? v : v.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ł/g, 'l').replace(/Ł/g, 'L')
-  }
+  const { font, t } = registerPdfFonts(doc, fonts)
 
   const pageW = doc.internal.pageSize.getWidth()
   const pageH = doc.internal.pageSize.getHeight()
@@ -312,6 +300,22 @@ export async function buildPlanPdf(opts: {
     doc.text(`${p} / ${pages}`, pageW - m, pageH - 4, { align: 'right' })
   }
   return doc
+}
+
+// Rejestruje Roboto w dokumencie; zwraca nazwę czcionki i funkcję tekstu —
+// Helvetica nie ma polskich znaków, więc bez własnej czcionki zamienia je na ASCII
+export function registerPdfFonts(doc: JsPDF, fonts?: PdfFonts | null) {
+  if (fonts) {
+    doc.addFileToVFS('Roboto-Regular.ttf', fonts.regular)
+    doc.addFont('Roboto-Regular.ttf', 'Roboto', 'normal')
+    doc.addFileToVFS('Roboto-Bold.ttf', fonts.bold)
+    doc.addFont('Roboto-Bold.ttf', 'Roboto', 'bold')
+  }
+  const t = (s: string | number | null | undefined): string => {
+    const v = s == null ? '' : String(s)
+    return fonts ? v : v.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ł/g, 'l').replace(/Ł/g, 'L')
+  }
+  return { font: fonts ? 'Roboto' : 'helvetica', t }
 }
 
 // Czcionki z /public/fonts (pobierane tylko przy eksporcie); błąd → PDF bez ogonków
