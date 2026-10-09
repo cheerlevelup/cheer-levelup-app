@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import type { CSSProperties } from 'react'
 import { sortWithVariants, variantLabels } from '@/lib/exerciseVariants'
+import { fmtRange, isoPowtLines, repsLines, eccTempoLines } from '@/lib/coach/planFormat'
+import { buildPlanPdf, loadPdfFonts } from '@/lib/coach/planPdf'
 
 type WarmupSet = { reps?: string; weight_kg?: string; note?: string }
 type WorkSet = { reps?: string; weight_kg?: string; tempo?: string; rir?: string; seconds?: string; intensity?: string; rest?: string; ecc?: string; hold?: string }
@@ -20,48 +22,8 @@ type BlockExercise = {
   variant_of?: number | null; variant_athlete_ids?: number[] | null
 }
 
-// Wartość, która może się różnić między seriami: jedna wspólna, albo (jeśli
-// serie się różnią) wartości kolejnych serii po kolei — "90'' / 120''" znaczy
-// seria 1 = 90'', seria 2 = 120'' (zakres "90–120" nie mówił, która jest która).
-function fmtRange(values: (string | undefined)[], suffix = ''): string {
-  const all = values.map(v => v?.trim() || '')
-  if (all.every(v => !v)) return '—'
-  const unique = Array.from(new Set(all))
-  if (unique.length === 1) return `${unique[0]}${suffix}`
-  return all.map(v => v ? `${v}${suffix}` : '—').join(' / ')
-}
-
 // Wartość do edytowalnej komórki — brak wartości to puste pole, nie „—"
 const orBlank = (v: string) => (v === '—' ? '' : v)
-
-// ISO w kolumnie Powt.: jedna linia, gdy serie są równe ("1× 90''"), inaczej
-// linia na serię: "S1 90''", "S2 120''" (powtórzenia tylko, gdy któraś seria ma ich więcej niż 1)
-function isoPowtLines(ex: BlockExercise): string[] {
-  const sets = ex.work_sets || []
-  const reps = sets.map(s => s.reps?.trim() || '')
-  const secs = sets.map(s => s.seconds?.trim() || '')
-  const one = (r: string, t: string) => `${r ? `${r}× ` : ''}${t ? `${t}''` : '—'}`
-  if (new Set(reps).size <= 1 && new Set(secs).size <= 1) return [one(reps[0] || '', secs[0] || '')]
-  const showReps = reps.some(r => r && r !== '1')
-  return sets.map((_, i) => `S${i + 1} ${one(showReps ? reps[i] : '', secs[i])}`)
-}
-
-// Powtórzenia zwykłego ćwiczenia: linia na serię ("S1 8", "S2 6"), gdy serie się różnią
-function repsLines(ex: BlockExercise): string[] | null {
-  const reps = (ex.work_sets || []).map(s => s.reps?.trim() || '')
-  if (new Set(reps).size <= 1) return null
-  return reps.map((r, i) => `S${i + 1} ${r || '—'}`)
-}
-
-// Ekscentryczne w kolumnie Tempo: "ECC 5'' · hold 3''" — jedna linia, gdy serie równe,
-// inaczej linia na serię ("S1 ECC 5''", "S2 ECC 6'' · hold 2''")
-function eccTempoLines(ex: BlockExercise): string[] {
-  const sets = ex.work_sets || []
-  const one = (s?: WorkSet) => [s?.ecc ? `ECC ${s.ecc}''` : '', s?.hold ? `hold ${s.hold}''` : ''].filter(Boolean).join(' · ') || '—'
-  const all = sets.map(one)
-  if (new Set(all).size <= 1) return [all[0] || (ex.tempo || '—')]
-  return all.map((l, i) => `S${i + 1} ${l}`)
-}
 
 // Wartości serii jedna pod drugą (kolumna Powt.)
 function SeriesLines({ lines }: { lines: string[] }) {
@@ -328,268 +290,10 @@ async function exportXlsx(plan: Plan, days: Day[], blocks: Block[], wCols: numbe
   URL.revokeObjectURL(url)
 }
 
-// Polish diacritics → ASCII for PDF (jsPDF default fonts don't support Unicode)
-function pl(s: string | null | undefined): string {
-  if (!s) return ''
-  return s
-    .replace(/ą/g, 'a').replace(/Ą/g, 'A')
-    .replace(/ć/g, 'c').replace(/Ć/g, 'C')
-    .replace(/ę/g, 'e').replace(/Ę/g, 'E')
-    .replace(/ł/g, 'l').replace(/Ł/g, 'L')
-    .replace(/ń/g, 'n').replace(/Ń/g, 'N')
-    .replace(/ó/g, 'o').replace(/Ó/g, 'O')
-    .replace(/ś/g, 's').replace(/Ś/g, 'S')
-    .replace(/ź/g, 'z').replace(/Ź/g, 'Z')
-    .replace(/ż/g, 'z').replace(/Ż/g, 'Z')
-}
-
-async function exportPdf(plan: Plan, days: Day[], blocks: Block[], wCols: number) {
-  const { default: jsPDF } = await import('jspdf')
-  const { default: autoTable } = await import('jspdf-autotable')
-
-  const format = wCols > 1 ? 'a3' : 'a4'
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format })
-  const pageW = doc.internal.pageSize.getWidth()
-  const pageH = doc.internal.pageSize.getHeight()
-  const mL = 5, mR = 5   // tiny side margins — full-width table
-  const headerH = 10
-  const available = pageW - mL - mR
-
-  // Column widths (mm) — distribute to fill full page width
-  const wBlok = 11, wNr = 5, wNazwa = 38
-  const wRPowt = 14, wRCiezar = 14, wRKom = 20
-  const wSerie = 11, wPowt = 13, wCiezar = 14, wTempo = 14, wRir = 9, wKomW = 22
-  const warmupTotal = wCols * (wRPowt + wRCiezar + wRKom)
-  const serieTotal  = wSerie + wPowt + wCiezar + wTempo + wRir + wKomW
-  const wKom = Math.max(22, available - wBlok - wNr - wNazwa - warmupTotal - serieTotal)
-
-  // col indices: 0=Blok 1=# 2=Nazwa 3=Kom 4..4+wCols*3-1=warmup 4+wCols*3..=serie
-  const firstWarmupCol = 4
-  const firstSerieCol  = 4 + wCols * 3   // ← FIX: was 3 + wCols * 3
-  const totalCols = firstSerieCol + 6
-
-  const colStyles: Record<number, any> = {
-    0: { cellWidth: wBlok,  halign: 'center' },
-    1: { cellWidth: wNr,    halign: 'center' },
-    2: { cellWidth: wNazwa, halign: 'left'   },
-    3: { cellWidth: wKom,   halign: 'left'   },
-  }
-  let ci = 4
-  for (let r = 0; r < wCols; r++) {
-    colStyles[ci++] = { cellWidth: wRPowt,  halign: 'center' }
-    colStyles[ci++] = { cellWidth: wRCiezar, halign: 'center' }
-    colStyles[ci++] = { cellWidth: wRKom,   halign: 'left'   }
-  }
-  colStyles[ci++] = { cellWidth: wSerie,  halign: 'center' }
-  colStyles[ci++] = { cellWidth: wPowt,   halign: 'center' }
-  colStyles[ci++] = { cellWidth: wCiezar, halign: 'center' }
-  colStyles[ci++] = { cellWidth: wTempo,  halign: 'center' }
-  colStyles[ci++] = { cellWidth: wRir,    halign: 'center' }
-  colStyles[ci++] = { cellWidth: wKomW,   halign: 'left'   }
-
-  // Two-row header: row 1 = section labels (merged), row 2 = column labels
-  // jspdf-autotable supports multi-row head via array of arrays
-  // Row 1: section labels
-  const headRow1: any[] = [
-    { content: 'Blok',      rowSpan: 3, styles: { valign: 'middle', halign: 'center', fontSize: 6.5, fontStyle: 'bold' } },
-    { content: '#',         rowSpan: 3, styles: { valign: 'middle', halign: 'center' } },
-    { content: 'Nazwa',     rowSpan: 3, styles: { valign: 'middle', halign: 'left'   } },
-    { content: 'Komentarz', rowSpan: 3, styles: { valign: 'middle', halign: 'left'   } },
-  ]
-  if (wCols > 0) {
-    headRow1.push({
-      content: 'SERIE ROZGRZEWKOWE',
-      colSpan: wCols * 3,
-      styles: { halign: 'center', fillColor: [19, 45, 30], textColor: [134, 239, 172] },
-    })
-  }
-  headRow1.push({
-    content: 'SERIE WLASCIWE',
-    colSpan: 6,
-    styles: { halign: 'center', fillColor: [30, 58, 95], textColor: [147, 197, 253] },
-  })
-
-  // Row 2: R1 / R2 / ... labels + serie właściwe col names
-  const headRow2: any[] = []
-  for (let r = 1; r <= wCols; r++) {
-    headRow2.push({
-      content: `Warm-up set ${r}`, colSpan: 3,
-      styles: { halign: 'center', fillColor: [19, 45, 30], textColor: [134, 239, 172], fontStyle: 'bold' },
-    })
-  }
-  headRow2.push(
-    { content: 'Ser.', rowSpan: 2, styles: { valign: 'middle', halign: 'center', fillColor: [30, 58, 95], textColor: [147, 197, 253] } },
-    { content: 'Powt.', rowSpan: 2, styles: { valign: 'middle', halign: 'center', fillColor: [30, 58, 95], textColor: [147, 197, 253] } },
-    { content: 'Ciezar', rowSpan: 2, styles: { valign: 'middle', halign: 'center', fillColor: [30, 58, 95], textColor: [147, 197, 253] } },
-    { content: 'Tempo', rowSpan: 2, styles: { valign: 'middle', halign: 'center', fillColor: [30, 58, 95], textColor: [147, 197, 253] } },
-    { content: 'RIR',  rowSpan: 2, styles: { valign: 'middle', halign: 'center', fillColor: [30, 58, 95], textColor: [147, 197, 253] } },
-    { content: 'Kom.',  rowSpan: 2, styles: { valign: 'middle', halign: 'left',   fillColor: [30, 58, 95], textColor: [147, 197, 253] } },
-  )
-
-  // Row 3: powt / ciezar / kom per warmup set
-  const headRow3: any[] = []
-  for (let r = 0; r < wCols; r++) {
-    headRow3.push(
-      { content: 'powt',  styles: { halign: 'center', fillColor: [19, 45, 30], textColor: [134, 239, 172], fontSize: 6 } },
-      { content: 'ciezar', styles: { halign: 'center', fillColor: [19, 45, 30], textColor: [134, 239, 172], fontSize: 6 } },
-      { content: 'kom',   styles: { halign: 'left',   fillColor: [19, 45, 30], textColor: [134, 239, 172], fontSize: 6 } },
-    )
-  }
-
-  // per-row metadata for links
-  type RowMeta = { url?: string; isBlockStart?: boolean; isSep?: boolean }
-  const rowMeta: RowMeta[] = []
-
-  days.forEach((day, di) => {
-    if (di > 0) doc.addPage()
-
-    // ── Full-width header bar (edge to edge) ─────────────────────────────────
-    doc.setFillColor(13, 27, 42)
-    doc.rect(0, 0, pageW, headerH, 'F')
-    // gold left accent
-    doc.setFillColor(245, 200, 66)
-    doc.rect(0, 0, 4, headerH, 'F')
-    doc.setFontSize(11); doc.setFont('helvetica', 'bold'); doc.setTextColor(245, 200, 66)
-    doc.text(pl(plan.name), 7, 6.5)
-    const planNameW = doc.getTextWidth(pl(plan.name))
-    doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(160, 185, 215)
-    doc.text(`  —  ${pl(day.day_name)}`, 7 + planNameW, 6.5)
-    doc.setTextColor(13, 27, 42)
-
-    const dayBlocks = blocks.filter(b => b.day_id === day.id).sort((a, b) => a.block_order - b.block_order)
-    const body: any[][] = []
-    rowMeta.length = 0
-
-    dayBlocks.forEach((block, bi) => {
-      const exs = sortWithVariants(block.workout_block_exercises || [])
-      const labels = variantLabels(exs)
-      if (exs.length === 0) return
-
-      exs.forEach((ex, i) => {
-        const wd = Array.from({ length: wCols }, (_, r) => {
-          const ws = ex.warmup_sets?.[r]
-          return [pl(ws?.reps), pl(ws?.weight_kg), pl(ws?.note)]
-        }).flat()
-        body.push([
-          i === 0 ? blockLabel(bi) : '',  // 0: blok
-          labels.get(ex) ?? String(i + 1), // 1: # (1, 2a, 2b...)
-          pl(fmtName(ex.exercise?.name || ex.exercise_code || '')),  // 2: nazwa (clickable)
-          pl(ex.coach_comment),            // 3: komentarz
-          ...wd,                           // 4..: warmup
-          ex.sets ?? '',                   // serie właściwe
-          pl(ex.reps),
-          ex.weight_kg ?? '',
-          pl(ex.tempo),
-          ex.rir ?? '',
-          '',
-        ])
-        rowMeta.push({ url: ex.exercise_url || undefined, isBlockStart: i === 0 })
-      })
-
-      // Separator row between blocks — styled distinctly
-      body.push(Array(totalCols).fill(''))
-      rowMeta.push({ isSep: true })
-    })
-
-    autoTable(doc, {
-      head: wCols > 0 ? [headRow1, headRow2, headRow3] : [[
-        { content: 'Blok', styles: { valign: 'middle', halign: 'center', fontSize: 6.5, fontStyle: 'bold' } },
-        { content: '#', styles: { halign: 'center' } },
-        { content: 'Nazwa', styles: { halign: 'left' } },
-        { content: 'Komentarz', styles: { halign: 'left' } },
-        { content: 'Ser.', styles: { halign: 'center', fillColor: [30, 58, 95], textColor: [147, 197, 253] } },
-        { content: 'Powt.', styles: { halign: 'center', fillColor: [30, 58, 95], textColor: [147, 197, 253] } },
-        { content: 'Ciezar', styles: { halign: 'center', fillColor: [30, 58, 95], textColor: [147, 197, 253] } },
-        { content: 'Tempo', styles: { halign: 'center', fillColor: [30, 58, 95], textColor: [147, 197, 253] } },
-        { content: 'RIR', styles: { halign: 'center', fillColor: [30, 58, 95], textColor: [147, 197, 253] } },
-        { content: 'Kom.', styles: { halign: 'left', fillColor: [30, 58, 95], textColor: [147, 197, 253] } },
-      ]],
-      body,
-      startY: headerH,
-      margin: { left: mL, right: mR, bottom: 6 },
-      tableWidth: available,
-      styles: {
-        fontSize: 7,
-        cellPadding: { top: 2.2, bottom: 2.2, left: 2.5, right: 2.5 },
-        overflow: 'linebreak',
-        lineColor: [220, 228, 238],
-        lineWidth: 0.2,
-        textColor: [20, 35, 55],
-        font: 'helvetica',
-      },
-      headStyles: {
-        fillColor: [20, 40, 65],
-        textColor: [245, 200, 66],
-        fontStyle: 'bold',
-        fontSize: 6,
-        cellPadding: { top: 2, bottom: 2, left: 2.5, right: 2.5 },
-        lineColor: [30, 55, 90],
-        lineWidth: 0.3,
-      },
-      alternateRowStyles: { fillColor: [244, 247, 252] },
-      columnStyles: colStyles,
-      didParseCell: (data) => {
-        if (data.section !== 'body') return
-        const meta = rowMeta[data.row.index]
-
-        if (meta?.isSep) {
-          data.cell.styles.fillColor = [232, 238, 248]
-          data.cell.styles.minCellHeight = 2.5
-          data.cell.styles.fontSize = 1
-          return
-        }
-
-        // Block label
-        if (data.column.index === 0 && data.cell.raw) {
-          data.cell.styles.fillColor = [13, 27, 42]
-          data.cell.styles.textColor = [245, 200, 66]
-          data.cell.styles.fontStyle = 'bold'
-          data.cell.styles.fontSize = 9
-          data.cell.styles.valign = 'middle'
-          data.cell.styles.halign = 'center'
-        }
-
-        // Linked exercise name
-        if (data.column.index === 2 && meta?.url) {
-          data.cell.styles.textColor = [30, 80, 200]
-        }
-
-        // Green — warmup cols (firstWarmupCol..firstSerieCol-1)
-        if (data.column.index >= firstWarmupCol && data.column.index < firstSerieCol) {
-          data.cell.styles.fillColor = data.row.index % 2 === 0 ? [237, 253, 243] : [224, 248, 233]
-        }
-        // Blue — serie właściwe (firstSerieCol+)
-        if (data.column.index >= firstSerieCol) {
-          data.cell.styles.fillColor = data.row.index % 2 === 0 ? [235, 245, 255] : [222, 236, 252]
-        }
-      },
-      didDrawCell: (data) => {
-        if (data.section !== 'body') return
-        const meta = rowMeta[data.row.index]
-
-        // Clickable link
-        if (data.column.index === 2 && meta?.url) {
-          doc.link(data.cell.x, data.cell.y, data.cell.width, data.cell.height, { url: meta.url })
-        }
-
-        // Block separator line
-        if (meta?.isBlockStart) {
-          doc.setDrawColor(100, 130, 170)
-          doc.setLineWidth(0.5)
-          doc.line(data.cell.x, data.cell.y, data.cell.x + data.cell.width, data.cell.y)
-          doc.setLineWidth(0.2)
-          doc.setDrawColor(220, 228, 238)
-        }
-      },
-      didDrawPage: () => {
-        // Footer: page number
-        doc.setFontSize(6.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(170, 185, 205)
-        doc.text(pl(plan.name), mL, pageH - 3)
-        doc.text(`${di + 1}`, pageW - mR, pageH - 3, { align: 'right' })
-      },
-    })
-  })
-  doc.save(`${pl(plan.name)}.pdf`)
+// ─── Export PDF ───────────────────────────────────────────────────────────────
+async function exportPdf(plan: Plan, days: Day[], blocks: Block[], athletes: { id: number; full_name: string }[]) {
+  const doc = await buildPlanPdf({ plan, days, blocks, athletes, fonts: await loadPdfFonts() })
+  doc.save(`${plan.name}.pdf`)
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -713,7 +417,7 @@ export default function PlanTableView(props: Props) {
     setExporting(type)
     try {
       if (type === 'xlsx') await exportXlsx(plan, allDays, blocks, warmupCols)
-      else await exportPdf(plan, allDays, blocks, warmupCols)
+      else await exportPdf(plan, allDays, blocks, props.athletes)
     } catch (e) { console.error(e) }
     setExporting(null)
   }
