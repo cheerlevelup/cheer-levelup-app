@@ -3,12 +3,13 @@
 // "Testy" — trzy podzakładki: Wyniki (tabela z filtrami, trendem i sortowaniem),
 // Katalog testów (definicje testów, edytowalne przez trenera) i Edytor wyników
 // (masowe wpisywanie wyników dla wybranej grupy/testu/daty).
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { ChevronDown, ArrowUp, ArrowDown, Pencil, Trash2 } from 'lucide-react'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { Field, Button } from '@/components/coach/ui'
+import TestImportModal, { parseNum } from './TestImportModal'
 
 type Group = { id: number; name: string }
 type Athlete = { id: number; full_name: string; birth_year: number | null; group_id: number }
@@ -397,20 +398,33 @@ function KatalogTab({ catalog }: { catalog: CatalogTest[] }) {
 }
 
 // ── Edytor wyników ──────────────────────────────────────────────────────────
+// Wiele testów naraz (kolumna na test). Enter / ↓ przechodzi do kolejnej
+// zawodniczki w tej samej kolumnie, Shift+Enter / ↑ do poprzedniej — strzałki
+// nie zmieniają wartości (pole tekstowe zamiast number).
 function EdytorTab({ groups, athletes, catalog, results }: Props) {
   const router = useRouter()
   const [editorGroups, setEditorGroups] = useState<Set<number>>(new Set(groups.map(g => g.id)))
-  const [testId, setTestId] = useState<number | null>(catalog[0]?.id ?? null)
+  const [testIds, setTestIds] = useState<Set<number>>(new Set(catalog[0] ? [catalog[0].id] : []))
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
-  const [values, setValues] = useState<Record<number, string>>({})
+  // klucz: `${athleteId}:${testId}`
+  const [values, setValues] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [savedMsg, setSavedMsg] = useState('')
+  const [importOpen, setImportOpen] = useState(false)
+  const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map())
 
   function toggleGroup(id: number) {
     const next = new Set(editorGroups)
     if (next.has(id)) next.delete(id); else next.add(id)
     setEditorGroups(next)
   }
+  function toggleTest(id: number) {
+    const next = new Set(testIds)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    setTestIds(next)
+  }
+
+  const tests = catalog.filter(t => testIds.has(t.id))
 
   const rosterByGroup = groups
     .filter(g => editorGroups.has(g.id))
@@ -418,40 +432,67 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
       group: g,
       people: athletes.filter(a => a.group_id === g.id).slice().sort((a, b) => a.full_name.localeCompare(b.full_name, 'pl')),
     }))
+  const flatPeople = rosterByGroup.flatMap(r => r.people)
 
-  function valueFor(athleteId: number): string {
-    if (athleteId in values) return values[athleteId]
-    if (testId == null) return ''
+  function existingValue(athleteId: number, testId: number): string {
     const existing = valueOn(results, athleteId, testId, date)
     return existing !== null ? String(existing) : ''
   }
+  function valueFor(athleteId: number, testId: number): string {
+    const k = `${athleteId}:${testId}`
+    return k in values ? values[k] : existingValue(athleteId, testId)
+  }
+
+  function focusCell(row: number, testId: number) {
+    const p = flatPeople[row]
+    if (!p) return
+    const el = inputRefs.current.get(`${p.id}:${testId}`)
+    if (el) { el.focus(); el.select() }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>, row: number, testId: number) {
+    if (e.key === 'Enter' || e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      const up = e.key === 'ArrowUp' || (e.key === 'Enter' && e.shiftKey)
+      focusCell(up ? row - 1 : row + 1, testId)
+    }
+  }
+
+  const invalidCount = flatPeople.reduce((n, p) => n + tests.filter(t => parseNum(valueFor(p.id, t.id)) === null).length, 0)
 
   async function handleSaveAll() {
-    if (testId == null) return
+    if (tests.length === 0) return
+    if (invalidCount > 0 && !confirm(`${invalidCount} pól ma niepoprawną wartość (zaznaczone na czerwono) i zostanie pominiętych. Zapisać resztę?`)) return
     setSaving(true)
     const supabase = createClient()
+    const inserts: { athlete_id: number; test_catalog_id: number; value: number; test_date: string }[] = []
+    const ops: PromiseLike<unknown>[] = []
     let count = 0
-    for (const { people } of rosterByGroup) {
-      for (const p of people) {
-        const raw = valueFor(p.id).trim()
-        const existing = results.find(r => r.athlete_id === p.id && r.test_catalog_id === testId && r.test_date === date)
-        if (raw === '') {
-          if (existing) await supabase.from('benchmark_tests').delete().eq('id', existing.id)
+    for (const p of flatPeople) {
+      for (const t of tests) {
+        const k = `${p.id}:${t.id}`
+        if (!(k in values)) continue
+        const parsed = parseNum(values[k])
+        if (parsed === null) continue
+        const existing = results.find(r => r.athlete_id === p.id && r.test_catalog_id === t.id && r.test_date === date)
+        if (parsed === '') {
+          if (existing) { ops.push(supabase.from('benchmark_tests').delete().eq('id', existing.id)); count++ }
           continue
         }
-        const num = Number(raw)
-        if (Number.isNaN(num)) continue
         if (existing) {
-          await supabase.from('benchmark_tests').update({ value: num }).eq('id', existing.id)
+          if (existing.value === parsed) continue
+          ops.push(supabase.from('benchmark_tests').update({ value: parsed }).eq('id', existing.id))
         } else {
-          await supabase.from('benchmark_tests').insert({ athlete_id: p.id, test_catalog_id: testId, value: num, test_date: date })
+          inserts.push({ athlete_id: p.id, test_catalog_id: t.id, value: parsed, test_date: date })
         }
         count++
       }
     }
+    if (inserts.length) ops.push(supabase.from('benchmark_tests').insert(inserts))
+    await Promise.all(ops)
     setSaving(false)
-    setSavedMsg(`Zapisano ${count} wyników ✓`)
-    setValues({})
+    setSavedMsg(`Zapisano ${count} zmian ✓`)
+    setValues(v => Object.fromEntries(Object.entries(v).filter(([, raw]) => parseNum(raw) === null)))
     router.refresh()
     setTimeout(() => setSavedMsg(''), 2000)
   }
@@ -475,48 +516,92 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
           </FilterDropdown>
         </div>
         <div className="coach-tf-group">
-          <span className="coach-tf-group-label">Test</span>
-          <select className="coach-sort-select" value={testId ?? ''} onChange={e => { setTestId(Number(e.target.value)); setValues({}) }}>
-            {catalog.map(t => <option key={t.id} value={t.id}>{t.name} ({t.unit})</option>)}
-          </select>
+          <span className="coach-tf-group-label">Testy</span>
+          <FilterDropdown summary={multiSummary(testIds, catalog.map(t => t.id), id => catalog.find(t => t.id === id)?.name ?? '')}>
+            <div className="coach-tfd-list">
+              <div className={`coach-tfd-item coach-tfd-all ${testIds.size === catalog.length ? 'coach-active' : ''}`} onClick={() => setTestIds(new Set(catalog.map(t => t.id)))}>Wszystkie</div>
+              {catalog.map(t => (
+                <div key={t.id} className={`coach-tfd-item ${testIds.has(t.id) ? 'coach-active' : ''}`} onClick={() => toggleTest(t.id)}>{t.name} ({t.unit})</div>
+              ))}
+            </div>
+          </FilterDropdown>
         </div>
         <div className="coach-tf-group">
           <span className="coach-tf-group-label">Data pomiaru</span>
           <input type="date" value={date} onChange={e => { setDate(e.target.value); setValues({}) }} />
         </div>
-        <div className="coach-tf-group" style={{ justifyContent: 'flex-end' }}>
-          <Button variant="gold" onClick={handleSaveAll} disabled={saving}>
+        <div className="coach-tf-group" style={{ justifyContent: 'flex-end', flexDirection: 'row', gap: 8 }}>
+          <Button variant="gold" onClick={handleSaveAll} disabled={saving || tests.length === 0}>
             {saving ? 'Zapisuję...' : savedMsg || 'Zapisz wyniki'}
           </Button>
+          <Button onClick={() => setImportOpen(true)}>⬆ Import z pliku</Button>
         </div>
       </div>
 
-      <div className="coach-editor-bulk-table-wrap">
-        <table className="coach-editor-bulk-table">
-          <thead>
-            <tr><th>Zawodniczka</th><th>Wynik ({catalog.find(t => t.id === testId)?.unit || ''})</th></tr>
-          </thead>
-          <tbody>
-            {rosterByGroup.map(({ group, people }) => (
-              <Fragment key={group.id}>
-                <tr className="coach-eb-group-row"><td colSpan={2}>{group.name}</td></tr>
-                {people.map(p => (
-                  <tr key={p.id}>
-                    <td className="coach-eb-name">{p.full_name}</td>
-                    <td>
-                      <input
-                        type="number" step="0.1" className="coach-eb-input"
-                        value={valueFor(p.id)}
-                        onChange={e => setValues(v => ({ ...v, [p.id]: e.target.value }))}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <div className="coach-eb-hint">Enter / ↓ — następna zawodniczka · Shift+Enter / ↑ — poprzednia · Tab — następny test</div>
+
+      {tests.length === 0 ? (
+        <div className="coach-empty-list">Wybierz co najmniej jeden test.</div>
+      ) : (
+        <div className="coach-editor-bulk-table-wrap">
+          <table className="coach-editor-bulk-table">
+            <thead>
+              <tr>
+                <th>Zawodniczka</th>
+                {tests.map(t => <th key={t.id}>{t.name} ({t.unit})</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {rosterByGroup.map(({ group, people }) => (
+                <Fragment key={group.id}>
+                  <tr className="coach-eb-group-row"><td colSpan={tests.length + 1}>{group.name}</td></tr>
+                  {people.map(p => {
+                    const row = flatPeople.indexOf(p)
+                    return (
+                      <tr key={p.id}>
+                        <td className="coach-eb-name">{p.full_name}</td>
+                        {tests.map(t => {
+                          const k = `${p.id}:${t.id}`
+                          const val = valueFor(p.id, t.id)
+                          const invalid = parseNum(val) === null
+                          const dirty = k in values && values[k] !== existingValue(p.id, t.id)
+                          return (
+                            <td key={t.id}>
+                              <input
+                                ref={el => { if (el) inputRefs.current.set(k, el); else inputRefs.current.delete(k) }}
+                                type="text" inputMode="decimal" autoComplete="off"
+                                className={`coach-eb-input${invalid ? ' coach-invalid' : dirty ? ' coach-dirty' : ''}`}
+                                title={invalid ? 'Niepoprawna liczba' : undefined}
+                                value={val}
+                                onChange={e => setValues(v => ({ ...v, [k]: e.target.value }))}
+                                onKeyDown={e => handleKeyDown(e, row, t.id)}
+                                onFocus={e => e.target.select()}
+                              />
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    )
+                  })}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {importOpen && (
+        <TestImportModal
+          groups={groups}
+          athletes={athletes}
+          catalog={catalog}
+          results={results}
+          defaultDate={date}
+          templateTestIds={tests.map(t => t.id)}
+          templateGroupIds={[...editorGroups]}
+          onClose={() => setImportOpen(false)}
+        />
+      )}
     </>
   )
 }
