@@ -1429,6 +1429,16 @@
   .coach-eb-input.coach-flagged{border-color:#c23b3b;background:#FEE2E2;color:#991B1B;font-weight:700;}
   .coach-eb-cell{display:flex;align-items:center;gap:4px;}
 
+  /* wariant wykonania testu (np. chwyt w pull up) */
+  .coach-eb-variant{font-family:var(--font-inter),sans-serif;font-size:11.5px;border:1px solid var(--border);border-radius:7px;padding:5px 4px;max-width:110px;background:#fff;color:var(--ink);outline:none;}
+  .coach-eb-variant:focus{border-color:var(--gold);}
+  .coach-eb-variant.coach-dirty{background:#fffbf0;}
+  .coach-eb-variant.coach-missing{border-color:#F59E0B;color:var(--muted);}
+  .coach-eb-variant-all{display:block;margin-top:4px;font-size:10.5px;font-weight:600;border:1px solid #2a3350;border-radius:6px;padding:2px 4px;background:var(--navy-800);color:#fff;max-width:200px;}
+  .coach-rt-variant{font-size:10px;font-weight:600;color:var(--navy-800);background:var(--bg);border-radius:100px;padding:1px 7px;font-family:var(--font-inter),sans-serif;}
+  .coach-ti-variant{display:block;font-size:10.5px;font-weight:600;color:var(--navy-800);}
+  .coach-ti-variant.coach-err{color:#c23b3b;}
+
   /* oznaczenie wyniku „do sprawdzenia” */
   .coach-rt-flag-btn{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;padding:0;border:none;border-radius:5px;background:none;color:var(--muted-light);cursor:pointer;opacity:0;transition:opacity .12s;}
   .coach-rt-flag-btn:hover{background:var(--bg);color:#c23b3b;}

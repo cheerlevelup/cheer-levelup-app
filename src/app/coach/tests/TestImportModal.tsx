@@ -10,8 +10,10 @@ import { Modal, Button, Field } from '@/components/coach/ui'
 
 type Group = { id: number; name: string }
 type Athlete = { id: number; full_name: string; birth_year: number | null; group_id: number }
-type CatalogTest = { id: number; name: string; unit: string }
-type Result = { id: number; athlete_id: number; test_catalog_id: number | null; value: number | null; test_date: string | null }
+type CatalogTest = { id: number; name: string; unit: string; variant_label?: string | null; variant_options?: string[] | null }
+type Result = { id: number; athlete_id: number; test_catalog_id: number | null; value: number | null; test_date: string | null; variant?: string | null }
+
+const hasVariants = (t?: CatalogTest) => (t?.variant_options?.length ?? 0) > 0
 
 interface Props {
   groups: Group[]
@@ -94,9 +96,31 @@ function cellText(v: unknown): string {
   return String(v).trim()
 }
 
+// angielskie / potoczne nazwy chwytów → opcje z katalogu
+const VARIANT_SYNONYMS: Record<string, string[]> = {
+  podchwyt: ['underhand', 'supinated', 'supine', 'chin', 'chin up', 'chinup', 'pod'],
+  nachwyt: ['overhand', 'pronated', 'prone', 'pull up', 'nach'],
+  neutralny: ['neutral', 'hammer', 'neutr', 'mlotkowy'],
+  mieszany: ['mixed', 'alternate', 'alternating', 'mix'],
+}
+
+// tekst z pliku → jedna z opcji wariantu testu (lub null)
+function matchVariant(raw: string, options: string[]): string | null {
+  const n = norm(raw)
+  if (!n) return null
+  for (const o of options) if (norm(o) === n) return o
+  for (const o of options) {
+    const syn = VARIANT_SYNONYMS[norm(o)] || []
+    if (syn.includes(n)) return o
+  }
+  const pref = options.filter(o => n.length >= 3 && (norm(o).startsWith(n) || n.startsWith(norm(o))))
+  return pref.length === 1 ? pref[0] : null
+}
+
 // ── Model odczytanego pliku ──────────────────────────────────────────────────
 type ColRole = 'name' | 'first' | 'last' | 'group' | 'date' | 'ignore'
-type FileCol = { index: number; header: string; role: ColRole; testId: number | null }
+// variantFor: kolumna z wariantem (np. chwytem) dla testu o tym id
+type FileCol = { index: number; header: string; role: ColRole; testId: number | null; variantFor: number | null }
 type FileRow = { rowNo: number; cells: unknown[] }
 
 const NAME_RE = /^(zawodnicz|imie i nazwisko|nazwisko i imie|imie nazwisko|nazwisko imie|osoba|name|athlete)/
@@ -105,6 +129,24 @@ const LAST_RE = /^(nazwisko|last|surname)/
 const GROUP_RE = /^(grupa|group|druzyna|team)/
 const DATE_RE = /^(data|date)/
 const IGNORE_RE = /^(lp|nr|no|rocznik|rok urodzenia|uwagi|komentarz)$/
+const VARIANT_HEADER_RE = /(chwyt|grip|wariant|variant)/
+
+// kolumna wariantu: „Pull up – chwyt”, „Chwyt”, „Grip type” (gdy tylko jeden test ma warianty)
+function matchVariantCol(header: string, catalog: CatalogTest[]): number | null {
+  const h = norm(header)
+  if (!h) return null
+  const withVariants = catalog.filter(hasVariants)
+  const isVariantWord = (t: CatalogTest) => VARIANT_HEADER_RE.test(h) || (!!t.variant_label && h.includes(norm(t.variant_label)))
+  const named = withVariants.filter(t => h.includes(norm(t.name)) && h !== norm(t.name) && isVariantWord(t))
+  if (named.length === 1) return named[0].id
+  const generic = withVariants.filter(t => isVariantWord(t))
+  if (generic.length === 1 && !catalog.some(t => h.includes(norm(t.name)))) {
+    // sam nagłówek „Chwyt” / „Grip type” / „Rodzaj chwytu” — bez nazwy testu
+    const stripped = h.replace(/(chwytu|chwyt|grip|wariant|variant|type|rodzaj|typ)/g, '').trim()
+    if (!stripped) return generic[0].id
+  }
+  return null
+}
 
 function matchTest(header: string, catalog: CatalogTest[]): number | null {
   const h = norm(header)
@@ -128,7 +170,7 @@ function detectHeaderRow(rows: unknown[][], catalog: CatalogTest[]) {
     for (const c of r) {
       const n = norm(cellText(c))
       if (!n) continue
-      if (NAME_RE.test(n) || FIRST_RE.test(n) || LAST_RE.test(n) || DATE_RE.test(n) || GROUP_RE.test(n)) score += 2
+      if (NAME_RE.test(n) || FIRST_RE.test(n) || LAST_RE.test(n) || DATE_RE.test(n) || GROUP_RE.test(n) || matchVariantCol(cellText(c), catalog) != null) score += 2
       else if (matchTest(cellText(c), catalog) != null) score += 3
     }
     if (score > bestScore) { bestScore = score; best = i }
@@ -142,6 +184,7 @@ function buildColumns(header: unknown[], catalog: CatalogTest[]): FileCol[] {
     const n = norm(text)
     let role: ColRole = 'ignore'
     let testId: number | null = null
+    let variantFor: number | null = null
     if (!n) role = 'ignore'
     else if (NAME_RE.test(n)) role = 'name'
     else if (FIRST_RE.test(n)) role = 'first'
@@ -149,14 +192,25 @@ function buildColumns(header: unknown[], catalog: CatalogTest[]): FileCol[] {
     else if (GROUP_RE.test(n)) role = 'group'
     else if (DATE_RE.test(n)) role = 'date'
     else if (IGNORE_RE.test(n)) role = 'ignore'
+    else if ((variantFor = matchVariantCol(text, catalog)) != null) role = 'ignore'
     else testId = matchTest(text, catalog)
-    return { index, header: text, role, testId }
+    return { index, header: text, role, testId, variantFor }
   })
   // brak kolumny z nazwiskiem → pierwsza kolumna
   if (!cols.some(c => c.role === 'name' || c.role === 'first' || c.role === 'last') && cols.length > 0) {
-    cols[0] = { ...cols[0], role: 'name', testId: null }
+    cols[0] = { ...cols[0], role: 'name', testId: null, variantFor: null }
   }
   return cols
+}
+
+// z komunikatu „Chwyt „xyz” nieznany …” wyciąga xyz do podglądu
+function rawVariantOf(msg: string) {
+  return msg.match(/„([^”]*)”/)?.[1] ?? ''
+}
+
+// wynik z pliku niczego nie zmienia (ta sama wartość, a wariant pusty albo taki sam)
+function sameAsExisting(s: { value: number; variant: string; existing?: Result }) {
+  return !!s.existing && s.existing.value === s.value && (!s.variant || (s.existing.variant || '') === s.variant)
 }
 
 // ── Komponent ────────────────────────────────────────────────────────────────
@@ -192,15 +246,19 @@ export default function TestImportModal({ groups, athletes, catalog, results, de
   async function downloadTemplate() {
     const XLSX = await import('xlsx')
     const tests = catalog.filter(t => templateTestIds.includes(t.id))
-    const header = ['Zawodniczka', 'Grupa', ...tests.map(t => `${t.name} (${t.unit})`)]
+    // test z wariantami dostaje obok kolumnę „<test> – <wariant>” (np. chwyt)
+    const testHeaders = tests.flatMap(t => hasVariants(t)
+      ? [`${t.name} (${t.unit})`, `${t.name} – ${(t.variant_label || 'wariant').toLowerCase()}`]
+      : [`${t.name} (${t.unit})`])
+    const header = ['Zawodniczka', 'Grupa', ...testHeaders]
     const data: (string | number)[][] = [header]
     for (const g of groups.filter(g => templateGroupIds.includes(g.id))) {
       for (const a of athletes.filter(a => a.group_id === g.id).sort((a, b) => a.full_name.localeCompare(b.full_name, 'pl'))) {
-        data.push([a.full_name, g.name, ...tests.map(() => '')])
+        data.push([a.full_name, g.name, ...testHeaders.map(() => '')])
       }
     }
     const ws = XLSX.utils.aoa_to_sheet(data)
-    ws['!cols'] = [{ wch: 28 }, { wch: 14 }, ...tests.map(t => ({ wch: Math.max(14, t.name.length + t.unit.length + 4) }))]
+    ws['!cols'] = [{ wch: 28 }, { wch: 14 }, ...testHeaders.map(h => ({ wch: Math.max(14, h.length + 2) }))]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Wyniki')
     XLSX.writeFile(wb, `wzor-wyniki-testow-${date}.xlsx`)
@@ -238,8 +296,9 @@ export default function TestImportModal({ groups, athletes, catalog, results, de
   function setColTarget(index: number, value: string) {
     setCols(prev => prev.map(c => {
       if (c.index !== index) return c
-      if (value.startsWith('t:')) return { ...c, role: 'ignore', testId: Number(value.slice(2)) }
-      return { ...c, role: value as ColRole, testId: null }
+      if (value.startsWith('t:')) return { ...c, role: 'ignore', testId: Number(value.slice(2)), variantFor: null }
+      if (value.startsWith('v:')) return { ...c, role: 'ignore', testId: null, variantFor: Number(value.slice(2)) }
+      return { ...c, role: value as ColRole, testId: null, variantFor: null }
     }))
   }
 
@@ -310,15 +369,38 @@ export default function TestImportModal({ groups, athletes, catalog, results, de
         }
       }
 
-      // wartości
+      // wartości (+ wariant z osobnej kolumny albo dopisany do wyniku, np. „8 nachwyt”)
       const values = testCols.map(c => {
+        const test = testById(c.testId!)
+        const options = test?.variant_options || []
         const raw = cellText(get(c))
-        const parsed = raw === '' ? '' : (typeof get(c) === 'number' ? (get(c) as number) : parseNum(raw))
+        let parsed: number | '' | null = raw === '' ? '' : (typeof get(c) === 'number' ? (get(c) as number) : parseNum(raw))
+        let variant = ''
+        let variantError = ''
+        if (parsed === null && options.length) {
+          const m = raw.match(/^\s*(-?\d+(?:[.,]\d+)?)\s*[-–(,;/]?\s*([^)]*?)\)?\s*$/)
+          const v = m ? matchVariant(m[2], options) : null
+          if (m && v) { parsed = parseNum(m[1]); variant = v }
+        }
+        const vCol = cols.find(x => x.variantFor === c.testId)
+        const rawVariant = vCol ? cellText(get(vCol)) : ''
+        if (rawVariant && options.length) {
+          const v = matchVariant(rawVariant, options)
+          if (v) variant = v
+          else variantError = `${test?.variant_label || 'Wariant'} „${rawVariant}” nieznany (dozwolone: ${options.join(', ')})`
+        }
         const existing = athlete ? results.find(r => r.athlete_id === athlete!.id && r.test_catalog_id === c.testId && r.test_date === rowDate) : undefined
-        return { col: c, raw, parsed, existing }
+        return { col: c, raw, parsed, variant, variantError, needsVariant: options.length > 0, existing }
       })
       const bad = values.filter(v => v.parsed === null)
       for (const v of bad) issues.push(`${testById(v.col.testId!)?.name}: „${v.raw}” to nie liczba`)
+      for (const v of values) if (v.variantError && typeof v.parsed === 'number') issues.push(`${testById(v.col.testId!)?.name}: ${v.variantError}`)
+      for (const v of values) {
+        if (v.needsVariant && typeof v.parsed === 'number' && !v.variant && !v.variantError && !v.existing?.variant) {
+          const t = testById(v.col.testId!)
+          warnings.push(`${t?.name}: brak informacji „${(t?.variant_label || 'wariant').toLowerCase()}”`)
+        }
+      }
       const filled = values.filter(v => typeof v.parsed === 'number')
       if (filled.length === 0 && bad.length === 0) warnings.push('Brak wyników w wierszu')
 
@@ -336,35 +418,41 @@ export default function TestImportModal({ groups, athletes, catalog, results, de
 
     const toSave = out.filter(r => r.included).flatMap(r =>
       r.values.filter(v => typeof v.parsed === 'number').map(v => ({
-        athlete_id: r.athlete!.id, test_catalog_id: v.col.testId!, value: v.parsed as number, test_date: r.rowDate, existing: v.existing,
+        athlete_id: r.athlete!.id, test_catalog_id: v.col.testId!, value: v.parsed as number, test_date: r.rowDate, variant: v.variant, existing: v.existing,
       })),
     )
     return {
       rows: out, testCols, dupTestCols, toSave,
       unknownNames: out.filter(r => r.status === 'unknown' && r.rawName).map(r => r.rawName),
       errorRows: out.filter(r => r.hasError && r.status !== 'skip').length,
-      overwrites: toSave.filter(s => s.existing && s.existing.value !== s.value).length,
-      unchanged: toSave.filter(s => s.existing && s.existing.value === s.value).length,
+      overwrites: toSave.filter(s => s.existing && !sameAsExisting(s)).length,
+      unchanged: toSave.filter(s => s.existing && sameAsExisting(s)).length,
       hasNameCol: !!(nameCol || firstCol || lastCol),
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cols, rows, assign, excluded, date, athletes, results, byKey])
 
-  const unmappedCols = cols.filter(c => c.role === 'ignore' && c.testId == null && c.header && !IGNORE_RE.test(norm(c.header)))
-  const writes = analysis.toSave.filter(s => !(s.existing && s.existing.value === s.value))
+  const unmappedCols = cols.filter(c => c.role === 'ignore' && c.testId == null && c.variantFor == null && c.header && !IGNORE_RE.test(norm(c.header)))
+  const writes = analysis.toSave.filter(s => !(s.existing && sameAsExisting(s)))
 
   async function handleSave() {
     if (writes.length === 0) return
     if (analysis.overwrites > 0 && !confirm(`${analysis.overwrites} istniejących wyników zostanie nadpisanych nowymi wartościami. Kontynuować?`)) return
     setSaving(true); setError('')
     const supabase = createClient()
-    const inserts = writes.filter(w => !w.existing).map(w => ({ athlete_id: w.athlete_id, test_catalog_id: w.test_catalog_id, value: w.value, test_date: w.test_date }))
+    const inserts = writes.filter(w => !w.existing).map(w => ({
+      athlete_id: w.athlete_id, test_catalog_id: w.test_catalog_id, value: w.value, test_date: w.test_date,
+      ...(w.variant ? { variant: w.variant } : {}),
+    }))
     const updates = writes.filter(w => w.existing)
     if (inserts.length) {
       const { error: e1 } = await supabase.from('benchmark_tests').insert(inserts)
       if (e1) { setSaving(false); setError(`Błąd zapisu: ${e1.message}`); return }
     }
-    const res = await Promise.all(updates.map(u => supabase.from('benchmark_tests').update({ value: u.value }).eq('id', u.existing!.id)))
+    // pusty wariant w pliku nie kasuje zapisanego wcześniej
+    const res = await Promise.all(updates.map(u => supabase.from('benchmark_tests')
+      .update({ value: u.value, ...(u.variant ? { variant: u.variant } : {}) })
+      .eq('id', u.existing!.id)))
     const failed = res.filter(r => r.error)
     setSaving(false)
     if (failed.length) { setError(`Nie udało się zaktualizować ${failed.length} wyników: ${failed[0].error!.message}`); return }
@@ -402,6 +490,7 @@ export default function TestImportModal({ groups, athletes, catalog, results, de
             <ul>
               <li>Pierwszy wiersz to nagłówki: <b>Zawodniczka</b> (imię i nazwisko, kolejność dowolna) lub osobno <b>Imię</b> i <b>Nazwisko</b>, opcjonalnie <b>Grupa</b> i <b>Data</b>.</li>
               <li>Pozostałe kolumny to testy — nazwa jak w katalogu (jednostka w nawiasie nie jest wymagana). Liczby z przecinkiem lub kropką.</li>
+              <li>Test z wariantem (np. <b>Pull up</b> → chwyt): wpisz chwyt w kolumnie obok, np. „Pull up – chwyt”, albo razem z wynikiem: „8 nachwyt”. Rozpoznaje też angielskie nazwy (underhand, overhand, neutral, mixed).</li>
               <li>Brak kolumny <b>Data</b> → użyta zostanie data pomiaru wybrana poniżej. Puste komórki są pomijane.</li>
             </ul>
             <div style={{ marginTop: 8 }}>
@@ -430,7 +519,7 @@ export default function TestImportModal({ groups, athletes, catalog, results, de
                   {cols.filter(c => c.header).map(c => (
                     <div key={c.index} className={`coach-ti-colmap-item ${unmappedCols.includes(c) ? 'coach-warn' : ''}`}>
                       <b>{c.header}</b>
-                      <select value={c.testId != null ? `t:${c.testId}` : c.role} onChange={e => setColTarget(c.index, e.target.value)}>
+                      <select value={c.testId != null ? `t:${c.testId}` : c.variantFor != null ? `v:${c.variantFor}` : c.role} onChange={e => setColTarget(c.index, e.target.value)}>
                         <option value="ignore">— pomiń —</option>
                         <option value="name">Imię i nazwisko</option>
                         <option value="first">Imię</option>
@@ -440,6 +529,11 @@ export default function TestImportModal({ groups, athletes, catalog, results, de
                         <optgroup label="Test">
                           {catalog.map(t => <option key={t.id} value={`t:${t.id}`}>{t.name} ({t.unit})</option>)}
                         </optgroup>
+                        {catalog.some(hasVariants) && (
+                          <optgroup label="Wariant testu (np. chwyt)">
+                            {catalog.filter(hasVariants).map(t => <option key={t.id} value={`v:${t.id}`}>{t.name} – {(t.variant_label || 'wariant').toLowerCase()}</option>)}
+                          </optgroup>
+                        )}
                       </select>
                     </div>
                   ))}
@@ -529,10 +623,12 @@ export default function TestImportModal({ groups, athletes, catalog, results, de
                                 ? <span className="coach-ti-val coach-err">{v.raw}</span>
                                 : v.parsed === '' ? <span className="coach-ti-src">–</span>
                                 : <span className="coach-ti-val">{v.parsed}</span>}
+                              {typeof v.parsed === 'number' && v.variant && <span className="coach-ti-variant">{v.variant}</span>}
+                              {typeof v.parsed === 'number' && v.variantError && <span className="coach-ti-variant coach-err">? {rawVariantOf(v.variantError)}</span>}
                               {typeof v.parsed === 'number' && v.existing && (
-                                v.existing.value === v.parsed
+                                sameAsExisting({ value: v.parsed, variant: v.variant, existing: v.existing })
                                   ? <span className="coach-ti-same">bez zmian</span>
-                                  : <span className="coach-ti-old">było: {v.existing.value ?? '–'}</span>
+                                  : <span className="coach-ti-old">było: {v.existing.value ?? '–'}{v.existing.variant ? ` · ${v.existing.variant}` : ''}</span>
                               )}
                             </td>
                           ))}

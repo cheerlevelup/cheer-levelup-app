@@ -35,18 +35,19 @@ export default async function CoachTestsPage() {
   const athleteIds = athletes.map((a: any) => a.id)
   let results: any[] = []
   if (athleteIds.length > 0) {
-    const { data: resultsData, error: resultsError } = await supabase
-      .from('benchmark_tests')
-      .select('id, athlete_id, test_catalog_id, value, test_date, flagged')
-      .in('athlete_id', athleteIds)
-    results = resultsData || []
-    // kolumna `flagged` mogła jeszcze nie zostać dodana migracją — wtedy bez niej
-    if (resultsError) {
-      const { data: fallback } = await supabase
+    // kolumny `variant` / `flagged` mogły jeszcze nie zostać dodane migracją —
+    // wtedy próbujemy z mniejszym zestawem kolumn
+    const selects = [
+      'id, athlete_id, test_catalog_id, value, test_date, flagged, variant',
+      'id, athlete_id, test_catalog_id, value, test_date, flagged',
+      'id, athlete_id, test_catalog_id, value, test_date',
+    ]
+    for (const cols of selects) {
+      const { data: resultsData, error: resultsError } = await supabase
         .from('benchmark_tests')
-        .select('id, athlete_id, test_catalog_id, value, test_date')
+        .select(cols)
         .in('athlete_id', athleteIds)
-      results = fallback || []
+      if (!resultsError) { results = resultsData || []; break }
     }
   }
 

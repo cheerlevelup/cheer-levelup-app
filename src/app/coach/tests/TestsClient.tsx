@@ -18,8 +18,14 @@ type CatalogTest = {
   general_desc: string | null; starting_position: string | null; execution: string | null
   end_position: string | null; measurement: string | null; goal: string | null
   sort_order: number
+  // warianty wykonania (np. Chwyt: podchwyt / nachwyt / …) — puste = brak
+  variant_label?: string | null; variant_options?: string[] | null
 }
-type Result = { id: number; athlete_id: number; test_catalog_id: number | null; value: number | null; test_date: string | null; flagged?: boolean }
+type Result = { id: number; athlete_id: number; test_catalog_id: number | null; value: number | null; test_date: string | null; flagged?: boolean; variant?: string | null }
+
+function hasVariants(t: CatalogTest) {
+  return (t.variant_options?.length ?? 0) > 0
+}
 
 interface Props {
   groups: Group[]
@@ -300,6 +306,7 @@ function WynikiTab({ groups, athletes, catalog, results }: Props) {
                           <div className="coach-rt-value-cell">
                             {arrow}
                             {val !== null ? val : <span className="coach-rt-empty-val">–</span>}
+                            {rec?.variant && <span className="coach-rt-variant" title={t.variant_label || 'Wariant'}>{rec.variant}</span>}
                             {rec && (
                               <button
                                 type="button"
@@ -329,8 +336,9 @@ function WynikiTab({ groups, athletes, catalog, results }: Props) {
 type CatalogFormData = {
   name: string; unit: string; general_desc: string; starting_position: string
   execution: string; end_position: string; measurement: string; goal: string
+  variant_label: string; variant_options: string
 }
-const EMPTY_FORM: CatalogFormData = { name: '', unit: '', general_desc: '', starting_position: '', execution: '', end_position: '', measurement: '', goal: '' }
+const EMPTY_FORM: CatalogFormData = { name: '', unit: '', general_desc: '', starting_position: '', execution: '', end_position: '', measurement: '', goal: '', variant_label: '', variant_options: '' }
 
 function KatalogTab({ catalog }: { catalog: CatalogTest[] }) {
   const router = useRouter()
@@ -348,6 +356,7 @@ function KatalogTab({ catalog }: { catalog: CatalogTest[] }) {
       general_desc: t.general_desc || '', starting_position: t.starting_position || '',
       execution: t.execution || '', end_position: t.end_position || '',
       measurement: t.measurement || '', goal: t.goal || '',
+      variant_label: t.variant_label || '', variant_options: (t.variant_options || []).join(', '),
     })
     setFormMode({ editId: t.id })
   }
@@ -361,14 +370,17 @@ function KatalogTab({ catalog }: { catalog: CatalogTest[] }) {
       general_desc: form.general_desc.trim() || null, starting_position: form.starting_position.trim() || null,
       execution: form.execution.trim() || null, end_position: form.end_position.trim() || null,
       measurement: form.measurement.trim() || null, goal: form.goal.trim() || null,
+      variant_label: form.variant_label.trim() || null,
+      variant_options: [...new Set(form.variant_options.split(/[,;\n]/).map(s => s.trim()).filter(Boolean))],
     }
-    if (formMode && typeof formMode === 'object') {
-      await supabase.from('test_catalog').update(payload).eq('id', formMode.editId)
-    } else {
-      const maxSort = Math.max(0, ...catalog.map(t => t.sort_order ?? 0))
-      await supabase.from('test_catalog').insert({ ...payload, sort_order: maxSort + 1 })
-    }
+    const { error } = formMode && typeof formMode === 'object'
+      ? await supabase.from('test_catalog').update(payload).eq('id', formMode.editId)
+      : await supabase.from('test_catalog').insert({ ...payload, sort_order: Math.max(0, ...catalog.map(t => t.sort_order ?? 0)) + 1 })
     setSaving(false)
+    if (error) {
+      alert(`Nie udało się zapisać testu: ${error.message}\n\nCzy migracja 202611020002_test_variants.sql została uruchomiona w Supabase?`)
+      return
+    }
     setFormMode(null)
     router.refresh()
   }
@@ -414,6 +426,14 @@ function KatalogTab({ catalog }: { catalog: CatalogTest[] }) {
           <Field label="Cel testu">
             <textarea value={form.goal} onChange={e => setForm(f => ({ ...f, goal: e.target.value }))} style={{ minHeight: 44 }} />
           </Field>
+          <div className="coach-field-grid-2">
+            <Field label="Wariant wykonania (opcjonalnie)">
+              <input value={form.variant_label} onChange={e => setForm(f => ({ ...f, variant_label: e.target.value }))} placeholder="np. Chwyt" />
+            </Field>
+            <Field label="Opcje wariantu (po przecinku)">
+              <input value={form.variant_options} onChange={e => setForm(f => ({ ...f, variant_options: e.target.value }))} placeholder="np. podchwyt, nachwyt, neutralny, mieszany" />
+            </Field>
+          </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             <Button variant="ghost" onClick={() => setFormMode(null)}>Anuluj</Button>
             <Button variant="gold" onClick={handleSave} disabled={saving || !form.name.trim()}>{saving ? 'Zapisuję...' : 'Zapisz'}</Button>
@@ -442,6 +462,9 @@ function KatalogTab({ catalog }: { catalog: CatalogTest[] }) {
               <div><div className="coach-cd-label">Pozycja końcowa</div><div className="coach-cd-val">{t.end_position || '–'}</div></div>
               <div><div className="coach-cd-label">Sposób pomiaru</div><div className="coach-cd-val">{t.measurement || '–'}</div></div>
               <div><div className="coach-cd-label">Cel testu</div><div className="coach-cd-val">{t.goal || '–'}</div></div>
+              {hasVariants(t) && (
+                <div><div className="coach-cd-label">{t.variant_label || 'Wariant'}</div><div className="coach-cd-val">{t.variant_options!.join(', ')}</div></div>
+              )}
             </div>
           </div>
         ))}
@@ -463,6 +486,8 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
   const [values, setValues] = useState<Record<string, string>>({})
   // zmienione oznaczenia „do sprawdzenia” (ten sam klucz), zapisywane razem z wynikami
   const [flags, setFlags] = useState<Record<string, boolean>>({})
+  // zmienione warianty wykonania (np. chwyt w pull up), ten sam klucz
+  const [variants, setVariants] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [savedMsg, setSavedMsg] = useState('')
   const [importOpen, setImportOpen] = useState(false)
@@ -501,6 +526,21 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
     const k = `${athleteId}:${testId}`
     return k in flags ? flags[k] : !!resultOn(results, athleteId, testId, date)?.flagged
   }
+  function existingVariant(athleteId: number, testId: number): string {
+    return resultOn(results, athleteId, testId, date)?.variant || ''
+  }
+  function variantFor(athleteId: number, testId: number): string {
+    const k = `${athleteId}:${testId}`
+    return k in variants ? variants[k] : existingVariant(athleteId, testId)
+  }
+  function setVariant(athleteId: number, testId: number, v: string) {
+    const k = `${athleteId}:${testId}`
+    setVariants(prev => {
+      const n = { ...prev }
+      if (v === existingVariant(athleteId, testId)) delete n[k]; else n[k] = v
+      return n
+    })
+  }
   function toggleFlag(athleteId: number, testId: number) {
     const k = `${athleteId}:${testId}`
     const next = !flagFor(athleteId, testId)
@@ -518,7 +558,7 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
     if (el) { el.focus(); el.select() }
   }
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>, row: number, testId: number) {
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement | HTMLSelectElement>, row: number, testId: number) {
     if (e.key === 'Enter' || e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault()
       const up = e.key === 'ArrowUp' || (e.key === 'Enter' && e.shiftKey)
@@ -533,29 +573,31 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
     if (invalidCount > 0 && !confirm(`${invalidCount} pól ma niepoprawną wartość (zaznaczone na czerwono) i zostanie pominiętych. Zapisać resztę?`)) return
     setSaving(true)
     const supabase = createClient()
-    const inserts: { athlete_id: number; test_catalog_id: number; value: number; test_date: string; flagged?: boolean }[] = []
+    const inserts: { athlete_id: number; test_catalog_id: number; value: number; test_date: string; flagged?: boolean; variant?: string }[] = []
     const ops: PromiseLike<{ error: { message: string } | null }>[] = []
     let count = 0
     for (const p of flatPeople) {
       for (const t of tests) {
         const k = `${p.id}:${t.id}`
-        if (!(k in values) && !(k in flags)) continue
+        if (!(k in values) && !(k in flags) && !(k in variants)) continue
         const parsed = parseNum(valueFor(p.id, t.id))
         if (parsed === null) continue
         const existing = resultOn(results, p.id, t.id, date)
         const flagged = flagFor(p.id, t.id)
+        const variant = hasVariants(t) ? variantFor(p.id, t.id) : ''
         if (parsed === '') {
           if (existing) { ops.push(supabase.from('benchmark_tests').delete().eq('id', existing.id)); count++ }
           continue
         }
         if (existing) {
-          const patch: { value?: number; flagged?: boolean } = {}
+          const patch: { value?: number; flagged?: boolean; variant?: string | null } = {}
           if (existing.value !== parsed) patch.value = parsed
           if (!!existing.flagged !== flagged) patch.flagged = flagged
+          if ((existing.variant || '') !== variant) patch.variant = variant || null
           if (Object.keys(patch).length === 0) continue
           ops.push(supabase.from('benchmark_tests').update(patch).eq('id', existing.id))
         } else {
-          inserts.push({ athlete_id: p.id, test_catalog_id: t.id, value: parsed, test_date: date, ...(flagged ? { flagged: true } : {}) })
+          inserts.push({ athlete_id: p.id, test_catalog_id: t.id, value: parsed, test_date: date, ...(flagged ? { flagged: true } : {}), ...(variant ? { variant } : {}) })
         }
         count++
       }
@@ -572,6 +614,7 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
     }
     setValues(v => Object.fromEntries(Object.entries(v).filter(([, raw]) => parseNum(raw) === null)))
     setFlags({})
+    setVariants({})
     router.refresh()
   }
 
@@ -606,7 +649,7 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
         </div>
         <div className="coach-tf-group">
           <span className="coach-tf-group-label">Data pomiaru</span>
-          <input type="date" value={date} onChange={e => { setDate(e.target.value); setValues({}) }} />
+          <input type="date" value={date} onChange={e => { setDate(e.target.value); setValues({}); setFlags({}); setVariants({}) }} />
         </div>
         <div className="coach-tf-group" style={{ justifyContent: 'flex-end', flexDirection: 'row', gap: 8 }}>
           <Button variant="gold" onClick={handleSaveAll} disabled={saving || tests.length === 0}>
@@ -616,7 +659,7 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
         </div>
       </div>
 
-      <div className="coach-eb-hint">Enter / ↓ — następna zawodniczka · Shift+Enter / ↑ — poprzednia · Tab — następny test · flaga — oznacz wynik do sprawdzenia (zapisuje się przyciskiem „Zapisz wyniki”)</div>
+      <div className="coach-eb-hint">Enter / ↓ — następna zawodniczka · Shift+Enter / ↑ — poprzednia · Tab — następny test · flaga — oznacz wynik do sprawdzenia · chwyt/wariant wybierz z listy obok wyniku (zapisuje się przyciskiem „Zapisz wyniki”)</div>
 
       {tests.length === 0 ? (
         <div className="coach-empty-list">Wybierz co najmniej jeden test.</div>
@@ -626,7 +669,23 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
             <thead>
               <tr>
                 <th>Zawodniczka</th>
-                {tests.map(t => <th key={t.id}>{t.name} ({t.unit})</th>)}
+                {tests.map(t => (
+                  <th key={t.id}>
+                    {t.name} ({t.unit})
+                    {hasVariants(t) && (
+                      <select
+                        className="coach-eb-variant-all"
+                        value=""
+                        title={`Ustaw ${(t.variant_label || 'wariant').toLowerCase()} wszystkim widocznym zawodniczkom`}
+                        onChange={e => { const v = e.target.value; if (v) flatPeople.forEach(p => setVariant(p.id, t.id, v === '-' ? '' : v)) }}
+                      >
+                        <option value="">{t.variant_label || 'Wariant'}: ustaw wszystkim…</option>
+                        {t.variant_options!.map(o => <option key={o} value={o}>{o}</option>)}
+                        <option value="-">— wyczyść —</option>
+                      </select>
+                    )}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -642,7 +701,7 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
                           const k = `${p.id}:${t.id}`
                           const val = valueFor(p.id, t.id)
                           const invalid = parseNum(val) === null
-                          const dirty = (k in values && values[k] !== existingValue(p.id, t.id)) || k in flags
+                          const dirty = (k in values && values[k] !== existingValue(p.id, t.id)) || k in flags || k in variants
                           const flagged = flagFor(p.id, t.id)
                           return (
                             <td key={t.id}>
@@ -657,6 +716,21 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
                                 onKeyDown={e => handleKeyDown(e, row, t.id)}
                                 onFocus={e => e.target.select()}
                               />
+                              {hasVariants(t) && (
+                                <select
+                                  className={`coach-eb-variant${k in variants ? ' coach-dirty' : ''}${!variantFor(p.id, t.id) && val.trim() !== '' ? ' coach-missing' : ''}`}
+                                  value={variantFor(p.id, t.id)}
+                                  title={t.variant_label || 'Wariant'}
+                                  onChange={e => setVariant(p.id, t.id, e.target.value)}
+                                  onKeyDown={e => { if (e.key === 'Enter') handleKeyDown(e, row, t.id) }}
+                                >
+                                  <option value="">{(t.variant_label || 'wariant').toLowerCase()}…</option>
+                                  {t.variant_options!.map(o => <option key={o} value={o}>{o}</option>)}
+                                  {variantFor(p.id, t.id) && !t.variant_options!.includes(variantFor(p.id, t.id)) && (
+                                    <option value={variantFor(p.id, t.id)}>{variantFor(p.id, t.id)}</option>
+                                  )}
+                                </select>
+                              )}
                               <button
                                 type="button" tabIndex={-1}
                                 className={`coach-rt-flag-btn coach-eb-flag${flagged ? ' coach-on' : ''}`}
