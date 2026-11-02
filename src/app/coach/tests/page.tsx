@@ -35,11 +35,19 @@ export default async function CoachTestsPage() {
   const athleteIds = athletes.map((a: any) => a.id)
   let results: any[] = []
   if (athleteIds.length > 0) {
-    const { data: resultsData } = await supabase
+    const { data: resultsData, error: resultsError } = await supabase
       .from('benchmark_tests')
-      .select('id, athlete_id, test_catalog_id, value, test_date')
+      .select('id, athlete_id, test_catalog_id, value, test_date, flagged')
       .in('athlete_id', athleteIds)
     results = resultsData || []
+    // kolumna `flagged` mogła jeszcze nie zostać dodana migracją — wtedy bez niej
+    if (resultsError) {
+      const { data: fallback } = await supabase
+        .from('benchmark_tests')
+        .select('id, athlete_id, test_catalog_id, value, test_date')
+        .in('athlete_id', athleteIds)
+      results = fallback || []
+    }
   }
 
   return (

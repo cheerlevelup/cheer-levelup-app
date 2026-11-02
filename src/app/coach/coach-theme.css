@@ -1426,6 +1426,20 @@
   .coach-eb-input:focus{border-color:var(--gold);}
   .coach-eb-input.coach-invalid{border-color:#c23b3b;background:#FEF2F2;}
   .coach-eb-input.coach-dirty{background:#fffbf0;}
+  .coach-eb-input.coach-flagged{border-color:#c23b3b;background:#FEE2E2;color:#991B1B;font-weight:700;}
+  .coach-eb-cell{display:flex;align-items:center;gap:4px;}
+
+  /* oznaczenie wyniku „do sprawdzenia” */
+  .coach-rt-flag-btn{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;padding:0;border:none;border-radius:5px;background:none;color:var(--muted-light);cursor:pointer;opacity:0;transition:opacity .12s;}
+  .coach-rt-flag-btn:hover{background:var(--bg);color:#c23b3b;}
+  .coach-rt-flag-btn.coach-on{opacity:1;color:#c23b3b;}
+  .coach-rt-flag-btn:disabled{cursor:default;opacity:0 !important;}
+  .coach-results-table td:hover .coach-rt-flag-btn,.coach-eb-cell:hover .coach-rt-flag-btn,.coach-eb-cell:focus-within .coach-rt-flag-btn{opacity:1;}
+  .coach-results-table td.coach-rt-flagged,.coach-results-table tr:nth-child(even) td.coach-rt-flagged{background:#FEE2E2;color:#991B1B;font-weight:700;}
+  .coach-rt-flag-filter{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);background:#fff;border-radius:10px;padding:0 12px;min-height:38px;font-family:var(--font-inter),sans-serif;font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer;align-self:flex-end;}
+  .coach-rt-flag-filter:hover{color:#c23b3b;border-color:#FCA5A5;}
+  .coach-rt-flag-filter.coach-active{background:#FEE2E2;border-color:#c23b3b;color:#991B1B;}
+  @media (hover:none){.coach-rt-flag-btn{opacity:1;}}
   .coach-eb-hint{font-size:11px;color:var(--muted);font-family:var(--font-inter),sans-serif;margin:-6px 0 10px;}
 
   /* ===== Import wyników testów ===== */

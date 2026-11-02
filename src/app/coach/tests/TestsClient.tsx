@@ -6,7 +6,7 @@
 import { Fragment, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
-import { ChevronDown, ArrowUp, ArrowDown, Pencil, Trash2 } from 'lucide-react'
+import { ChevronDown, ArrowUp, ArrowDown, Pencil, Trash2, Flag } from 'lucide-react'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { Field, Button } from '@/components/coach/ui'
 import TestImportModal, { parseNum } from './TestImportModal'
@@ -19,7 +19,7 @@ type CatalogTest = {
   end_position: string | null; measurement: string | null; goal: string | null
   sort_order: number
 }
-type Result = { id: number; athlete_id: number; test_catalog_id: number | null; value: number | null; test_date: string | null }
+type Result = { id: number; athlete_id: number; test_catalog_id: number | null; value: number | null; test_date: string | null; flagged?: boolean }
 
 interface Props {
   groups: Group[]
@@ -45,8 +45,12 @@ function datesForTest(results: Result[], testId: number, dateFrom: string, dateT
   return [dates.sort().slice(-1)[0]]
 }
 
+function resultOn(results: Result[], athleteId: number, testId: number, date: string) {
+  return results.find(x => x.athlete_id === athleteId && x.test_catalog_id === testId && x.test_date === date)
+}
+
 function valueOn(results: Result[], athleteId: number, testId: number, date: string) {
-  const r = results.find(x => x.athlete_id === athleteId && x.test_catalog_id === testId && x.test_date === date)
+  const r = resultOn(results, athleteId, testId, date)
   return r ? r.value : null
 }
 
@@ -105,19 +109,46 @@ function WynikiTab({ groups, athletes, catalog, results }: Props) {
   const [dateTo, setDateTo] = useState('')
   const [sortTestId, setSortTestId] = useState<number | null>(null)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [onlyFlagged, setOnlyFlagged] = useState(false)
+  // optymistyczne oznaczenia (id wyniku → flagged) zanim odświeży się strona
+  const [flagOverride, setFlagOverride] = useState<Record<number, boolean>>({})
 
   const groupName = (id: number) => groups.find(g => g.id === id)?.name ?? '—'
+  const isFlagged = (r: Result) => (r.id in flagOverride ? flagOverride[r.id] : !!r.flagged)
+
+  async function toggleFlag(r: Result) {
+    const next = !isFlagged(r)
+    setFlagOverride(f => ({ ...f, [r.id]: next }))
+    const { error } = await createClient().from('benchmark_tests').update({ flagged: next }).eq('id', r.id)
+    if (error) {
+      setFlagOverride(f => ({ ...f, [r.id]: !next }))
+      alert(`Nie udało się zapisać oznaczenia: ${error.message}\n\nCzy migracja 202611020001_benchmark_flagged.sql została uruchomiona w Supabase?`)
+      return
+    }
+    router.refresh()
+  }
 
   const visibleTestList = catalog.filter(t => visibleTests.has(t.id))
+  const flaggedResults = results.filter(r => isFlagged(r) && r.test_catalog_id != null && visibleTests.has(r.test_catalog_id))
+  const flaggedAthleteIds = new Set(flaggedResults.map(r => r.athlete_id))
   const testDates = useMemo(() => {
     const map: Record<number, string[]> = {}
-    for (const t of visibleTestList) map[t.id] = datesForTest(results, t.id, dateFrom, dateTo)
+    for (const t of visibleTestList) {
+      let dates = datesForTest(results, t.id, dateFrom, dateTo)
+      // w trybie „do sprawdzenia” pokaż też daty oznaczonych wyników (mogą być starsze niż najnowszy pomiar)
+      if (onlyFlagged) {
+        const extra = flaggedResults.filter(r => r.test_catalog_id === t.id && r.test_date).map(r => r.test_date!)
+        dates = [...new Set([...dates, ...extra])].sort()
+      }
+      map[t.id] = dates
+    }
     return map
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [results, dateFrom, dateTo, visibleTests, catalog])
+  }, [results, dateFrom, dateTo, visibleTests, catalog, onlyFlagged, flagOverride])
 
   const people = useMemo(() => {
     let list = athletes.filter(a => groupFilter.has(a.group_id) && a.birth_year != null && yearFilter.has(a.birth_year))
+    if (onlyFlagged) list = list.filter(a => flaggedAthleteIds.has(a.id))
     if (sortTestId != null) {
       const dates = testDates[sortTestId] || []
       const lastDate = dates[dates.length - 1]
@@ -133,7 +164,8 @@ function WynikiTab({ groups, athletes, catalog, results }: Props) {
       list = list.slice().sort((a, b) => a.full_name.localeCompare(b.full_name, 'pl'))
     }
     return list
-  }, [athletes, groupFilter, yearFilter, sortTestId, sortDir, testDates, results])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [athletes, groupFilter, yearFilter, sortTestId, sortDir, testDates, results, onlyFlagged, flagOverride])
 
   function toggleSet<T>(set: Set<T>, setSet: (s: Set<T>) => void, value: T) {
     const next = new Set(set)
@@ -189,6 +221,15 @@ function WynikiTab({ groups, athletes, catalog, results }: Props) {
             </span>
           </div>
         </FilterDropdown>
+
+        <button
+          type="button"
+          className={`coach-rt-flag-filter${onlyFlagged ? ' coach-active' : ''}`}
+          onClick={() => setOnlyFlagged(v => !v)}
+          title="Pokaż tylko zawodniczki z wynikami oznaczonymi do sprawdzenia"
+        >
+          <Flag size={12} /> Do sprawdzenia ({flaggedResults.length})
+        </button>
       </div>
 
       {sortTestId != null && (
@@ -229,7 +270,7 @@ function WynikiTab({ groups, athletes, catalog, results }: Props) {
               </tr>
             </thead>
             <tbody>
-              {people.map((p, idx) => (
+              {people.map(p => (
                 <tr key={p.id}>
                   <td className="coach-rt-name">
                     {p.full_name}
@@ -252,11 +293,23 @@ function WynikiTab({ groups, athletes, catalog, results }: Props) {
                           )
                         }
                       }
+                      const rec = resultOn(results, p.id, t.id, d)
+                      const flagged = rec ? isFlagged(rec) : false
                       return (
-                        <td key={t.id + d}>
+                        <td key={t.id + d} className={flagged ? 'coach-rt-flagged' : undefined}>
                           <div className="coach-rt-value-cell">
                             {arrow}
                             {val !== null ? val : <span className="coach-rt-empty-val">–</span>}
+                            {rec && (
+                              <button
+                                type="button"
+                                className={`coach-rt-flag-btn${flagged ? ' coach-on' : ''}`}
+                                title={flagged ? 'Wynik oznaczony do sprawdzenia — kliknij, by zdjąć oznaczenie' : 'Oznacz wynik do sprawdzenia / powtórzenia'}
+                                onClick={() => toggleFlag(rec)}
+                              >
+                                <Flag size={11} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       )
@@ -408,6 +461,8 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   // klucz: `${athleteId}:${testId}`
   const [values, setValues] = useState<Record<string, string>>({})
+  // zmienione oznaczenia „do sprawdzenia” (ten sam klucz), zapisywane razem z wynikami
+  const [flags, setFlags] = useState<Record<string, boolean>>({})
   const [saving, setSaving] = useState(false)
   const [savedMsg, setSavedMsg] = useState('')
   const [importOpen, setImportOpen] = useState(false)
@@ -442,6 +497,19 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
     const k = `${athleteId}:${testId}`
     return k in values ? values[k] : existingValue(athleteId, testId)
   }
+  function flagFor(athleteId: number, testId: number): boolean {
+    const k = `${athleteId}:${testId}`
+    return k in flags ? flags[k] : !!resultOn(results, athleteId, testId, date)?.flagged
+  }
+  function toggleFlag(athleteId: number, testId: number) {
+    const k = `${athleteId}:${testId}`
+    const next = !flagFor(athleteId, testId)
+    setFlags(f => {
+      const n = { ...f }
+      if (next === !!resultOn(results, athleteId, testId, date)?.flagged) delete n[k]; else n[k] = next
+      return n
+    })
+  }
 
   function focusCell(row: number, testId: number) {
     const p = flatPeople[row]
@@ -465,36 +533,46 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
     if (invalidCount > 0 && !confirm(`${invalidCount} pól ma niepoprawną wartość (zaznaczone na czerwono) i zostanie pominiętych. Zapisać resztę?`)) return
     setSaving(true)
     const supabase = createClient()
-    const inserts: { athlete_id: number; test_catalog_id: number; value: number; test_date: string }[] = []
-    const ops: PromiseLike<unknown>[] = []
+    const inserts: { athlete_id: number; test_catalog_id: number; value: number; test_date: string; flagged?: boolean }[] = []
+    const ops: PromiseLike<{ error: { message: string } | null }>[] = []
     let count = 0
     for (const p of flatPeople) {
       for (const t of tests) {
         const k = `${p.id}:${t.id}`
-        if (!(k in values)) continue
-        const parsed = parseNum(values[k])
+        if (!(k in values) && !(k in flags)) continue
+        const parsed = parseNum(valueFor(p.id, t.id))
         if (parsed === null) continue
-        const existing = results.find(r => r.athlete_id === p.id && r.test_catalog_id === t.id && r.test_date === date)
+        const existing = resultOn(results, p.id, t.id, date)
+        const flagged = flagFor(p.id, t.id)
         if (parsed === '') {
           if (existing) { ops.push(supabase.from('benchmark_tests').delete().eq('id', existing.id)); count++ }
           continue
         }
         if (existing) {
-          if (existing.value === parsed) continue
-          ops.push(supabase.from('benchmark_tests').update({ value: parsed }).eq('id', existing.id))
+          const patch: { value?: number; flagged?: boolean } = {}
+          if (existing.value !== parsed) patch.value = parsed
+          if (!!existing.flagged !== flagged) patch.flagged = flagged
+          if (Object.keys(patch).length === 0) continue
+          ops.push(supabase.from('benchmark_tests').update(patch).eq('id', existing.id))
         } else {
-          inserts.push({ athlete_id: p.id, test_catalog_id: t.id, value: parsed, test_date: date })
+          inserts.push({ athlete_id: p.id, test_catalog_id: t.id, value: parsed, test_date: date, ...(flagged ? { flagged: true } : {}) })
         }
         count++
       }
     }
     if (inserts.length) ops.push(supabase.from('benchmark_tests').insert(inserts))
-    await Promise.all(ops)
+    const res = await Promise.all(ops)
     setSaving(false)
-    setSavedMsg(`Zapisano ${count} zmian ✓`)
+    const failed = res.filter(r => r.error)
+    if (failed.length) {
+      alert(`Nie udało się zapisać ${failed.length} zmian: ${failed[0].error!.message}`)
+    } else {
+      setSavedMsg(`Zapisano ${count} zmian ✓`)
+      setTimeout(() => setSavedMsg(''), 2000)
+    }
     setValues(v => Object.fromEntries(Object.entries(v).filter(([, raw]) => parseNum(raw) === null)))
+    setFlags({})
     router.refresh()
-    setTimeout(() => setSavedMsg(''), 2000)
   }
 
   if (catalog.length === 0) {
@@ -538,7 +616,7 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
         </div>
       </div>
 
-      <div className="coach-eb-hint">Enter / ↓ — następna zawodniczka · Shift+Enter / ↑ — poprzednia · Tab — następny test</div>
+      <div className="coach-eb-hint">Enter / ↓ — następna zawodniczka · Shift+Enter / ↑ — poprzednia · Tab — następny test · flaga — oznacz wynik do sprawdzenia (zapisuje się przyciskiem „Zapisz wyniki”)</div>
 
       {tests.length === 0 ? (
         <div className="coach-empty-list">Wybierz co najmniej jeden test.</div>
@@ -564,19 +642,31 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
                           const k = `${p.id}:${t.id}`
                           const val = valueFor(p.id, t.id)
                           const invalid = parseNum(val) === null
-                          const dirty = k in values && values[k] !== existingValue(p.id, t.id)
+                          const dirty = (k in values && values[k] !== existingValue(p.id, t.id)) || k in flags
+                          const flagged = flagFor(p.id, t.id)
                           return (
                             <td key={t.id}>
+                              <div className="coach-eb-cell">
                               <input
                                 ref={el => { if (el) inputRefs.current.set(k, el); else inputRefs.current.delete(k) }}
                                 type="text" inputMode="decimal" autoComplete="off"
-                                className={`coach-eb-input${invalid ? ' coach-invalid' : dirty ? ' coach-dirty' : ''}`}
+                                className={`coach-eb-input${invalid ? ' coach-invalid' : flagged ? ' coach-flagged' : dirty ? ' coach-dirty' : ''}`}
                                 title={invalid ? 'Niepoprawna liczba' : undefined}
                                 value={val}
                                 onChange={e => setValues(v => ({ ...v, [k]: e.target.value }))}
                                 onKeyDown={e => handleKeyDown(e, row, t.id)}
                                 onFocus={e => e.target.select()}
                               />
+                              <button
+                                type="button" tabIndex={-1}
+                                className={`coach-rt-flag-btn coach-eb-flag${flagged ? ' coach-on' : ''}`}
+                                title={flagged ? 'Oznaczony do sprawdzenia — kliknij, by zdjąć' : 'Oznacz wynik do sprawdzenia / powtórzenia'}
+                                disabled={val.trim() === '' && !flagged}
+                                onClick={() => toggleFlag(p.id, t.id)}
+                              >
+                                <Flag size={11} />
+                              </button>
+                              </div>
                             </td>
                           )
                         })}
