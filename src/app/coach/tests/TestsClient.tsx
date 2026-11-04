@@ -563,6 +563,23 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
       e.preventDefault()
       const up = e.key === 'ArrowUp' || (e.key === 'Enter' && e.shiftKey)
       focusCell(up ? row - 1 : row + 1, testId)
+      return
+    }
+    // ← / → między kolumnami testów — jak w arkuszu: gdy kursor jest na brzegu
+    // tekstu (albo całe pole jest zaznaczone), inaczej strzałka przesuwa kursor
+    if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e.currentTarget instanceof HTMLInputElement) {
+      const el = e.currentTarget
+      const len = el.value.length
+      const start = el.selectionStart ?? 0
+      const end = el.selectionEnd ?? 0
+      const allSelected = start === 0 && end === len
+      const atEdge = e.key === 'ArrowLeft' ? start === 0 && end === 0 : start === len && end === len
+      if (!allSelected && !atEdge) return
+      const idx = tests.findIndex(t => t.id === testId)
+      const next = tests[idx + (e.key === 'ArrowLeft' ? -1 : 1)]
+      if (!next) return
+      e.preventDefault()
+      focusCell(row, next.id)
     }
   }
 
@@ -659,7 +676,7 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
         </div>
       </div>
 
-      <div className="coach-eb-hint">Enter / ↓ — następna zawodniczka · Shift+Enter / ↑ — poprzednia · Tab — następny test · flaga — oznacz wynik do sprawdzenia · chwyt/wariant wybierz z listy obok wyniku (zapisuje się przyciskiem „Zapisz wyniki”)</div>
+      <div className="coach-eb-hint">Enter / ↓ — następna zawodniczka · Shift+Enter / ↑ — poprzednia · ← / → — sąsiedni test · flaga — oznacz wynik do sprawdzenia · chwyt/wariant wybierz z listy obok wyniku (zapisuje się przyciskiem „Zapisz wyniki”)</div>
 
       {tests.length === 0 ? (
         <div className="coach-empty-list">Wybierz co najmniej jeden test.</div>
