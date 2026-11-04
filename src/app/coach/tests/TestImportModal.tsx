@@ -381,8 +381,8 @@ export default function TestImportModal({ groups, athletes, catalog, results, de
         const test = testById(c.testId!)
         const options = test?.variant_options || []
         const raw = cellText(get(c))
-        const missing = raw !== '' && typeof get(c) !== 'number' && MISSING_RE.test(norm(raw))
-        const comment = missing && !MISSING_GENERIC.includes(norm(raw)) ? raw : ''
+        const missing = raw !== '' && typeof get(c) !== 'number' && (/^[-–—]+$/.test(raw) || MISSING_RE.test(norm(raw)))
+        const comment = missing && norm(raw) !== '' && !MISSING_GENERIC.includes(norm(raw)) ? raw : ''
         let parsed: number | '' | null = raw === '' || missing ? '' : (typeof get(c) === 'number' ? (get(c) as number) : parseNum(raw))
         let variant = ''
         let variantError = ''
@@ -508,7 +508,7 @@ export default function TestImportModal({ groups, athletes, catalog, results, de
               <li>Pozostałe kolumny to testy — nazwa jak w katalogu (jednostka w nawiasie nie jest wymagana). Liczby z przecinkiem lub kropką.</li>
               <li>Test z wariantem (np. <b>Pull up</b> → chwyt): wpisz chwyt w kolumnie obok, np. „Pull up – chwyt”, albo razem z wynikiem: „8 nachwyt”. Rozpoznaje też angielskie nazwy (underhand, overhand, neutral, mixed).</li>
               <li>Brak kolumny <b>Data</b> → użyta zostanie data pomiaru wybrana poniżej. Puste komórki są pomijane.</li>
-              <li>Brak testu: wpisz w komórce <b>brak</b> / <b>nb</b> albo powód, np. <b>nieobecna</b>, <b>kontuzja kolana</b>, <b>chora</b> — zapisze się jako „brak testu” z tym komentarzem.</li>
+              <li>Brak testu: wpisz w komórce <b>-</b> albo powód, np. <b>nieobecna</b>, <b>kontuzja kolana</b>, <b>chora</b> — zapisze się jako „brak testu” z tym komentarzem.</li>
             </ul>
             <div style={{ marginTop: 8 }}>
               <Button size="small" onClick={downloadTemplate}>⬇ Pobierz wzór (wybrane grupy i testy)</Button>
@@ -637,7 +637,7 @@ export default function TestImportModal({ groups, athletes, catalog, results, de
                           {r.values.map(v => (
                             <td key={v.col.index}>
                               {v.missing
-                                ? <span className="coach-rt-missing-tag">brak{v.comment ? `: ${v.comment}` : ''}</span>
+                                ? <span className="coach-rt-missing-tag">-{v.comment ? ` ${v.comment}` : ''}</span>
                                 : v.parsed === null
                                 ? <span className="coach-ti-val coach-err">{v.raw}</span>
                                 : v.parsed === '' ? <span className="coach-ti-src">–</span>
@@ -647,7 +647,7 @@ export default function TestImportModal({ groups, athletes, catalog, results, de
                               {(typeof v.parsed === 'number' || v.missing) && v.existing && (
                                 sameAsExisting({ value: v.missing ? null : (v.parsed as number), variant: v.variant, missing: v.missing, comment: v.comment, existing: v.existing })
                                   ? <span className="coach-ti-same">bez zmian</span>
-                                  : <span className="coach-ti-old">było: {v.existing.missing ? 'brak' : v.existing.value ?? '–'}{v.existing.variant ? ` · ${v.existing.variant}` : ''}</span>
+                                  : <span className="coach-ti-old">było: {v.existing.missing ? '-' : v.existing.value ?? '–'}{v.existing.variant ? ` · ${v.existing.variant}` : ''}</span>
                               )}
                             </td>
                           ))}

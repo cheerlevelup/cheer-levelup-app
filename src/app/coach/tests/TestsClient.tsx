@@ -271,7 +271,7 @@ function WynikiTab({ groups, athletes, catalog, results }: Props) {
           type="button"
           className={`coach-rt-flag-filter coach-rt-missing-filter${focus === 'missing' ? ' coach-active' : ''}`}
           onClick={() => setFocus(f => (f === 'missing' ? 'all' : 'missing'))}
-          title="Pokaż tylko zawodniczki, którym brakuje testu (oznaczone „brak testu”)"
+          title="Pokaż tylko zawodniczki, którym brakuje testu (oznaczone „-”)"
         >
           <UserX size={12} /> Braki ({missingResults.length})
         </button>
@@ -346,7 +346,7 @@ function WynikiTab({ groups, athletes, catalog, results }: Props) {
                           <div className="coach-rt-value-cell">
                             {arrow}
                             {missing
-                              ? <span className="coach-rt-missing-tag" title={rec?.comment || 'Brak testu'}>brak{rec?.comment ? `: ${rec.comment}` : ''}</span>
+                              ? <span className="coach-rt-missing-tag" title={rec?.comment ? `Brak testu — ${rec.comment}` : 'Brak testu'}>-{rec?.comment ? ` ${rec.comment}` : ''}</span>
                               : val !== null ? val : <span className="coach-rt-empty-val">–</span>}
                             {!missing && rec?.comment && <span className="coach-rt-comment" title={rec.comment}>💬</span>}
                             {rec?.variant && <span className="coach-rt-variant" title={t.variant_label || 'Wariant'}>{rec.variant}</span>}
@@ -611,7 +611,11 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
     // brak testu = bez wyniku
     if (n.missing) setValues(v => ({ ...v, [k]: '' }))
   }
-  // wpis w polu wyniku: „b” / „nb” / „brak” = brak testu; liczba zdejmuje „brak”
+  // wpis „-” w polu wyniku = brak testu (zamieniane po wyjściu z pola, bo „-”
+  // może być początkiem liczby ujemnej); „b” / „nb” od razu; liczba zdejmuje brak
+  function handleValueBlur(athleteId: number, testId: number, raw: string) {
+    if (/^\s*[-–—]\s*$/.test(raw)) setNote(athleteId, testId, { ...noteFor(athleteId, testId), missing: true })
+  }
   function handleValueChange(athleteId: number, testId: number, raw: string) {
     const k = `${athleteId}:${testId}`
     const note = noteFor(athleteId, testId)
@@ -775,7 +779,7 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
         </div>
       </div>
 
-      <div className="coach-eb-hint">Enter / ↓ — następna zawodniczka · Shift+Enter / ↑ — poprzednia · ← / → — sąsiedni test · „b” w polu — brak testu · 💬 — brak testu / komentarz (np. kontuzja) · flaga — do sprawdzenia · wszystko zapisuje przycisk „Zapisz wyniki”</div>
+      <div className="coach-eb-hint">Enter / ↓ — następna zawodniczka · Shift+Enter / ↑ — poprzednia · ← / → — sąsiedni test · „-” w polu — brak testu · 💬 — brak testu / komentarz (np. kontuzja) · flaga — do sprawdzenia · wszystko zapisuje przycisk „Zapisz wyniki”</div>
 
       {tests.length === 0 ? (
         <div className="coach-empty-list">Wybierz co najmniej jeden test.</div>
@@ -829,9 +833,10 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
                                 type="text" inputMode="decimal" autoComplete="off"
                                 className={`coach-eb-input${invalid ? ' coach-invalid' : flagged ? ' coach-flagged' : isMissing ? ' coach-missing-input' : dirty ? ' coach-dirty' : ''}`}
                                 title={invalid ? 'Niepoprawna liczba' : isMissing ? `Brak testu${note.comment ? ` — ${note.comment}` : ''}` : note.comment || undefined}
-                                placeholder={isMissing ? 'brak' : undefined}
+                                placeholder={isMissing ? '-' : undefined}
                                 value={val}
                                 onChange={e => handleValueChange(p.id, t.id, e.target.value)}
+                                onBlur={e => handleValueBlur(p.id, t.id, e.target.value)}
                                 onKeyDown={e => handleKeyDown(e, row, t.id)}
                                 onFocus={e => e.target.select()}
                               />
