@@ -624,11 +624,17 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
     setSaving(false)
     const failed = res.filter(r => r.error)
     if (failed.length) {
-      alert(`Nie udało się zapisać ${failed.length} zmian: ${failed[0].error!.message}`)
-    } else {
-      setSavedMsg(`Zapisano ${count} zmian ✓`)
-      setTimeout(() => setSavedMsg(''), 2000)
+      // wpisane wartości zostają w polach — po naprawie wystarczy kliknąć „Zapisz” jeszcze raz
+      const msg = failed[0].error!.message
+      const hint = /flagged|variant/.test(msg)
+        ? '\n\nW bazie brakuje kolumny — uruchom w Supabase migracje 202611020001_benchmark_flagged.sql i 202611020002_test_variants.sql, potem zapisz ponownie.'
+        : ''
+      alert(`Nie udało się zapisać ${failed.length} zmian: ${msg}${hint}\n\nWpisane wartości zostały w edytorze.`)
+      router.refresh()
+      return
     }
+    setSavedMsg(`Zapisano ${count} zmian ✓`)
+    setTimeout(() => setSavedMsg(''), 2000)
     setValues(v => Object.fromEntries(Object.entries(v).filter(([, raw]) => parseNum(raw) === null)))
     setFlags({})
     setVariants({})
