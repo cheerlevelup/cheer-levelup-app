@@ -6,10 +6,11 @@
 import { Fragment, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
-import { ChevronDown, ArrowUp, ArrowDown, Pencil, Trash2, Flag } from 'lucide-react'
+import { ChevronDown, ArrowUp, ArrowDown, Pencil, Trash2, Flag, UserX } from 'lucide-react'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { Field, Button } from '@/components/coach/ui'
 import TestImportModal, { parseNum } from './TestImportModal'
+import TestCellNote, { type CellNote } from './TestCellNote'
 
 type Group = { id: number; name: string }
 type Athlete = { id: number; full_name: string; birth_year: number | null; group_id: number }
@@ -21,7 +22,9 @@ type CatalogTest = {
   // warianty wykonania (np. Chwyt: podchwyt / nachwyt / …) — puste = brak
   variant_label?: string | null; variant_options?: string[] | null
 }
-type Result = { id: number; athlete_id: number; test_catalog_id: number | null; value: number | null; test_date: string | null; flagged?: boolean; variant?: string | null }
+type Result = { id: number; athlete_id: number; test_catalog_id: number | null; value: number | null; test_date: string | null; flagged?: boolean; variant?: string | null
+  // „brak testu” (np. nieobecność) — wtedy value = null; komentarz np. „kontuzja”
+  missing?: boolean; comment?: string | null }
 
 function hasVariants(t: CatalogTest) {
   return (t.variant_options?.length ?? 0) > 0
@@ -115,7 +118,9 @@ function WynikiTab({ groups, athletes, catalog, results }: Props) {
   const [dateTo, setDateTo] = useState('')
   const [sortTestId, setSortTestId] = useState<number | null>(null)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
-  const [onlyFlagged, setOnlyFlagged] = useState(false)
+  // filtr: wszyscy / tylko z wynikami do sprawdzenia / tylko z brakami testów
+  const [focus, setFocus] = useState<'all' | 'flagged' | 'missing'>('all')
+  const onlyFlagged = focus === 'flagged'
   // optymistyczne oznaczenia (id wyniku → flagged) zanim odświeży się strona
   const [flagOverride, setFlagOverride] = useState<Record<number, boolean>>({})
 
@@ -134,27 +139,53 @@ function WynikiTab({ groups, athletes, catalog, results }: Props) {
     router.refresh()
   }
 
+  // zapis braku testu / komentarza z tabeli wyników (od razu do bazy)
+  async function saveNote(athleteId: number, testId: number, date: string, rec: Result | undefined, note: CellNote) {
+    const supabase = createClient()
+    let error: { message: string } | null = null
+    if (rec) {
+      if (!note.missing && !note.comment && rec.value == null) {
+        ({ error } = await supabase.from('benchmark_tests').delete().eq('id', rec.id))
+      } else {
+        ({ error } = await supabase.from('benchmark_tests')
+          .update({ missing: note.missing, comment: note.comment || null, ...(note.missing ? { value: null, variant: null } : {}) })
+          .eq('id', rec.id))
+      }
+    } else if (note.missing || note.comment) {
+      ({ error } = await supabase.from('benchmark_tests')
+        .insert({ athlete_id: athleteId, test_catalog_id: testId, test_date: date, value: null, missing: note.missing, comment: note.comment || null }))
+    }
+    if (error) {
+      alert(`Nie udało się zapisać: ${error.message}\n\nCzy migracja 202611040001_benchmark_missing_comment.sql została uruchomiona w Supabase?`)
+      return
+    }
+    router.refresh()
+  }
+
   const visibleTestList = catalog.filter(t => visibleTests.has(t.id))
-  const flaggedResults = results.filter(r => isFlagged(r) && r.test_catalog_id != null && visibleTests.has(r.test_catalog_id))
-  const flaggedAthleteIds = new Set(flaggedResults.map(r => r.athlete_id))
+  const inScope = (r: Result) => r.test_catalog_id != null && visibleTests.has(r.test_catalog_id)
+  const flaggedResults = results.filter(r => isFlagged(r) && inScope(r))
+  const missingResults = results.filter(r => r.missing && inScope(r))
+  const focusResults = focus === 'flagged' ? flaggedResults : focus === 'missing' ? missingResults : []
+  const focusAthleteIds = new Set(focusResults.map(r => r.athlete_id))
   const testDates = useMemo(() => {
     const map: Record<number, string[]> = {}
     for (const t of visibleTestList) {
       let dates = datesForTest(results, t.id, dateFrom, dateTo)
-      // w trybie „do sprawdzenia” pokaż też daty oznaczonych wyników (mogą być starsze niż najnowszy pomiar)
-      if (onlyFlagged) {
-        const extra = flaggedResults.filter(r => r.test_catalog_id === t.id && r.test_date).map(r => r.test_date!)
+      // w trybie „do sprawdzenia” / „braki” pokaż też daty tych wpisów (mogą być starsze niż najnowszy pomiar)
+      if (focus !== 'all') {
+        const extra = focusResults.filter(r => r.test_catalog_id === t.id && r.test_date).map(r => r.test_date!)
         dates = [...new Set([...dates, ...extra])].sort()
       }
       map[t.id] = dates
     }
     return map
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [results, dateFrom, dateTo, visibleTests, catalog, onlyFlagged, flagOverride])
+  }, [results, dateFrom, dateTo, visibleTests, catalog, focus, flagOverride])
 
   const people = useMemo(() => {
     let list = athletes.filter(a => groupFilter.has(a.group_id) && a.birth_year != null && yearFilter.has(a.birth_year))
-    if (onlyFlagged) list = list.filter(a => flaggedAthleteIds.has(a.id))
+    if (focus !== 'all') list = list.filter(a => focusAthleteIds.has(a.id))
     if (sortTestId != null) {
       const dates = testDates[sortTestId] || []
       const lastDate = dates[dates.length - 1]
@@ -171,7 +202,7 @@ function WynikiTab({ groups, athletes, catalog, results }: Props) {
     }
     return list
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [athletes, groupFilter, yearFilter, sortTestId, sortDir, testDates, results, onlyFlagged, flagOverride])
+  }, [athletes, groupFilter, yearFilter, sortTestId, sortDir, testDates, results, focus, flagOverride])
 
   function toggleSet<T>(set: Set<T>, setSet: (s: Set<T>) => void, value: T) {
     const next = new Set(set)
@@ -231,10 +262,18 @@ function WynikiTab({ groups, athletes, catalog, results }: Props) {
         <button
           type="button"
           className={`coach-rt-flag-filter${onlyFlagged ? ' coach-active' : ''}`}
-          onClick={() => setOnlyFlagged(v => !v)}
+          onClick={() => setFocus(f => (f === 'flagged' ? 'all' : 'flagged'))}
           title="Pokaż tylko zawodniczki z wynikami oznaczonymi do sprawdzenia"
         >
           <Flag size={12} /> Do sprawdzenia ({flaggedResults.length})
+        </button>
+        <button
+          type="button"
+          className={`coach-rt-flag-filter coach-rt-missing-filter${focus === 'missing' ? ' coach-active' : ''}`}
+          onClick={() => setFocus(f => (f === 'missing' ? 'all' : 'missing'))}
+          title="Pokaż tylko zawodniczki, którym brakuje testu (oznaczone „brak testu”)"
+        >
+          <UserX size={12} /> Braki ({missingResults.length})
         </button>
       </div>
 
@@ -301,13 +340,23 @@ function WynikiTab({ groups, athletes, catalog, results }: Props) {
                       }
                       const rec = resultOn(results, p.id, t.id, d)
                       const flagged = rec ? isFlagged(rec) : false
+                      const missing = !!rec?.missing
                       return (
-                        <td key={t.id + d} className={flagged ? 'coach-rt-flagged' : undefined}>
+                        <td key={t.id + d} className={flagged ? 'coach-rt-flagged' : missing ? 'coach-rt-missing' : undefined}>
                           <div className="coach-rt-value-cell">
                             {arrow}
-                            {val !== null ? val : <span className="coach-rt-empty-val">–</span>}
+                            {missing
+                              ? <span className="coach-rt-missing-tag" title={rec?.comment || 'Brak testu'}>brak{rec?.comment ? `: ${rec.comment}` : ''}</span>
+                              : val !== null ? val : <span className="coach-rt-empty-val">–</span>}
+                            {!missing && rec?.comment && <span className="coach-rt-comment" title={rec.comment}>💬</span>}
                             {rec?.variant && <span className="coach-rt-variant" title={t.variant_label || 'Wariant'}>{rec.variant}</span>}
-                            {rec && (
+                            <TestCellNote
+                              note={{ missing, comment: rec?.comment || '' }}
+                              hasValue={val !== null}
+                              title={`${p.full_name} · ${t.name} · ${formatShort(d)}`}
+                              onSave={n => saveNote(p.id, t.id, d, rec, n)}
+                            />
+                            {rec && !missing && (
                               <button
                                 type="button"
                                 className={`coach-rt-flag-btn${flagged ? ' coach-on' : ''}`}
@@ -488,6 +537,8 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
   const [flags, setFlags] = useState<Record<string, boolean>>({})
   // zmienione warianty wykonania (np. chwyt w pull up), ten sam klucz
   const [variants, setVariants] = useState<Record<string, string>>({})
+  // zmienione „brak testu” / komentarze, ten sam klucz
+  const [notes, setNotes] = useState<Record<string, CellNote>>({})
   const [saving, setSaving] = useState(false)
   const [savedMsg, setSavedMsg] = useState('')
   const [importOpen, setImportOpen] = useState(false)
@@ -541,6 +592,36 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
       return n
     })
   }
+  function existingNote(athleteId: number, testId: number): CellNote {
+    const r = resultOn(results, athleteId, testId, date)
+    return { missing: !!r?.missing, comment: r?.comment || '' }
+  }
+  function noteFor(athleteId: number, testId: number): CellNote {
+    const k = `${athleteId}:${testId}`
+    return k in notes ? notes[k] : existingNote(athleteId, testId)
+  }
+  function setNote(athleteId: number, testId: number, n: CellNote) {
+    const k = `${athleteId}:${testId}`
+    const ex = existingNote(athleteId, testId)
+    setNotes(prev => {
+      const next = { ...prev }
+      if (n.missing === ex.missing && n.comment === ex.comment) delete next[k]; else next[k] = n
+      return next
+    })
+    // brak testu = bez wyniku
+    if (n.missing) setValues(v => ({ ...v, [k]: '' }))
+  }
+  // wpis w polu wyniku: „b” / „nb” / „brak” = brak testu; liczba zdejmuje „brak”
+  function handleValueChange(athleteId: number, testId: number, raw: string) {
+    const k = `${athleteId}:${testId}`
+    const note = noteFor(athleteId, testId)
+    if (/^\s*(b|nb|brak)\s*$/i.test(raw)) {
+      setNote(athleteId, testId, { ...note, missing: true })
+      return
+    }
+    setValues(v => ({ ...v, [k]: raw }))
+    if (raw.trim() !== '' && note.missing) setNote(athleteId, testId, { ...note, missing: false })
+  }
   function toggleFlag(athleteId: number, testId: number) {
     const k = `${athleteId}:${testId}`
     const next = !flagFor(athleteId, testId)
@@ -590,31 +671,42 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
     if (invalidCount > 0 && !confirm(`${invalidCount} pól ma niepoprawną wartość (zaznaczone na czerwono) i zostanie pominiętych. Zapisać resztę?`)) return
     setSaving(true)
     const supabase = createClient()
-    const inserts: { athlete_id: number; test_catalog_id: number; value: number; test_date: string; flagged?: boolean; variant?: string }[] = []
+    const inserts: { athlete_id: number; test_catalog_id: number; value: number | null; test_date: string; flagged?: boolean; variant?: string; missing?: boolean; comment?: string }[] = []
     const ops: PromiseLike<{ error: { message: string } | null }>[] = []
     let count = 0
     for (const p of flatPeople) {
       for (const t of tests) {
         const k = `${p.id}:${t.id}`
-        if (!(k in values) && !(k in flags) && !(k in variants)) continue
+        if (!(k in values) && !(k in flags) && !(k in variants) && !(k in notes)) continue
         const parsed = parseNum(valueFor(p.id, t.id))
         if (parsed === null) continue
         const existing = resultOn(results, p.id, t.id, date)
-        const flagged = flagFor(p.id, t.id)
-        const variant = hasVariants(t) ? variantFor(p.id, t.id) : ''
-        if (parsed === '') {
+        const note = noteFor(p.id, t.id)
+        const missing = parsed === '' && note.missing
+        const comment = note.comment
+        const flagged = parsed !== '' && flagFor(p.id, t.id)
+        const variant = parsed !== '' && hasVariants(t) ? variantFor(p.id, t.id) : ''
+        // puste pole bez „brak testu” i bez komentarza = usuń wpis
+        if (parsed === '' && !missing && !comment) {
           if (existing) { ops.push(supabase.from('benchmark_tests').delete().eq('id', existing.id)); count++ }
           continue
         }
+        const value = parsed === '' ? null : parsed
         if (existing) {
-          const patch: { value?: number; flagged?: boolean; variant?: string | null } = {}
-          if (existing.value !== parsed) patch.value = parsed
+          const patch: { value?: number | null; flagged?: boolean; variant?: string | null; missing?: boolean; comment?: string | null } = {}
+          if (existing.value !== value) patch.value = value
           if (!!existing.flagged !== flagged) patch.flagged = flagged
           if ((existing.variant || '') !== variant) patch.variant = variant || null
+          if (!!existing.missing !== missing) patch.missing = missing
+          if ((existing.comment || '') !== comment) patch.comment = comment || null
           if (Object.keys(patch).length === 0) continue
           ops.push(supabase.from('benchmark_tests').update(patch).eq('id', existing.id))
         } else {
-          inserts.push({ athlete_id: p.id, test_catalog_id: t.id, value: parsed, test_date: date, ...(flagged ? { flagged: true } : {}), ...(variant ? { variant } : {}) })
+          inserts.push({
+            athlete_id: p.id, test_catalog_id: t.id, value, test_date: date,
+            ...(flagged ? { flagged: true } : {}), ...(variant ? { variant } : {}),
+            ...(missing ? { missing: true } : {}), ...(comment ? { comment } : {}),
+          })
         }
         count++
       }
@@ -626,8 +718,8 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
     if (failed.length) {
       // wpisane wartości zostają w polach — po naprawie wystarczy kliknąć „Zapisz” jeszcze raz
       const msg = failed[0].error!.message
-      const hint = /flagged|variant/.test(msg)
-        ? '\n\nW bazie brakuje kolumny — uruchom w Supabase migracje 202611020001_benchmark_flagged.sql i 202611020002_test_variants.sql, potem zapisz ponownie.'
+      const hint = /flagged|variant|missing|comment|null value/.test(msg)
+        ? '\n\nW bazie brakuje kolumny — uruchom w Supabase migracje z folderu supabase/migrations (202611020001, 202611020002, 202611040001), potem zapisz ponownie.'
         : ''
       alert(`Nie udało się zapisać ${failed.length} zmian: ${msg}${hint}\n\nWpisane wartości zostały w edytorze.`)
       router.refresh()
@@ -638,6 +730,7 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
     setValues(v => Object.fromEntries(Object.entries(v).filter(([, raw]) => parseNum(raw) === null)))
     setFlags({})
     setVariants({})
+    setNotes({})
     router.refresh()
   }
 
@@ -672,7 +765,7 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
         </div>
         <div className="coach-tf-group">
           <span className="coach-tf-group-label">Data pomiaru</span>
-          <input type="date" value={date} onChange={e => { setDate(e.target.value); setValues({}); setFlags({}); setVariants({}) }} />
+          <input type="date" value={date} onChange={e => { setDate(e.target.value); setValues({}); setFlags({}); setVariants({}); setNotes({}) }} />
         </div>
         <div className="coach-tf-group" style={{ justifyContent: 'flex-end', flexDirection: 'row', gap: 8 }}>
           <Button variant="gold" onClick={handleSaveAll} disabled={saving || tests.length === 0}>
@@ -682,7 +775,7 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
         </div>
       </div>
 
-      <div className="coach-eb-hint">Enter / ↓ — następna zawodniczka · Shift+Enter / ↑ — poprzednia · ← / → — sąsiedni test · flaga — oznacz wynik do sprawdzenia · chwyt/wariant wybierz z listy obok wyniku (zapisuje się przyciskiem „Zapisz wyniki”)</div>
+      <div className="coach-eb-hint">Enter / ↓ — następna zawodniczka · Shift+Enter / ↑ — poprzednia · ← / → — sąsiedni test · „b” w polu — brak testu · 💬 — brak testu / komentarz (np. kontuzja) · flaga — do sprawdzenia · wszystko zapisuje przycisk „Zapisz wyniki”</div>
 
       {tests.length === 0 ? (
         <div className="coach-empty-list">Wybierz co najmniej jeden test.</div>
@@ -724,18 +817,21 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
                           const k = `${p.id}:${t.id}`
                           const val = valueFor(p.id, t.id)
                           const invalid = parseNum(val) === null
-                          const dirty = (k in values && values[k] !== existingValue(p.id, t.id)) || k in flags || k in variants
+                          const dirty = (k in values && values[k] !== existingValue(p.id, t.id)) || k in flags || k in variants || k in notes
                           const flagged = flagFor(p.id, t.id)
+                          const note = noteFor(p.id, t.id)
+                          const isMissing = note.missing && val.trim() === ''
                           return (
                             <td key={t.id}>
                               <div className="coach-eb-cell">
                               <input
                                 ref={el => { if (el) inputRefs.current.set(k, el); else inputRefs.current.delete(k) }}
                                 type="text" inputMode="decimal" autoComplete="off"
-                                className={`coach-eb-input${invalid ? ' coach-invalid' : flagged ? ' coach-flagged' : dirty ? ' coach-dirty' : ''}`}
-                                title={invalid ? 'Niepoprawna liczba' : undefined}
+                                className={`coach-eb-input${invalid ? ' coach-invalid' : flagged ? ' coach-flagged' : isMissing ? ' coach-missing-input' : dirty ? ' coach-dirty' : ''}`}
+                                title={invalid ? 'Niepoprawna liczba' : isMissing ? `Brak testu${note.comment ? ` — ${note.comment}` : ''}` : note.comment || undefined}
+                                placeholder={isMissing ? 'brak' : undefined}
                                 value={val}
-                                onChange={e => setValues(v => ({ ...v, [k]: e.target.value }))}
+                                onChange={e => handleValueChange(p.id, t.id, e.target.value)}
                                 onKeyDown={e => handleKeyDown(e, row, t.id)}
                                 onFocus={e => e.target.select()}
                               />
@@ -763,6 +859,12 @@ function EdytorTab({ groups, athletes, catalog, results }: Props) {
                               >
                                 <Flag size={11} />
                               </button>
+                              <TestCellNote
+                                note={note}
+                                hasValue={val.trim() !== ''}
+                                title={`${p.full_name} · ${t.name}`}
+                                onSave={n => setNote(p.id, t.id, n)}
+                              />
                               </div>
                             </td>
                           )

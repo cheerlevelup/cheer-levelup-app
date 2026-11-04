@@ -11,7 +11,7 @@ import { Modal, Button, Field } from '@/components/coach/ui'
 type Group = { id: number; name: string }
 type Athlete = { id: number; full_name: string; birth_year: number | null; group_id: number }
 type CatalogTest = { id: number; name: string; unit: string; variant_label?: string | null; variant_options?: string[] | null }
-type Result = { id: number; athlete_id: number; test_catalog_id: number | null; value: number | null; test_date: string | null; variant?: string | null }
+type Result = { id: number; athlete_id: number; test_catalog_id: number | null; value: number | null; test_date: string | null; variant?: string | null; missing?: boolean; comment?: string | null }
 
 const hasVariants = (t?: CatalogTest) => (t?.variant_options?.length ?? 0) > 0
 
@@ -208,9 +208,16 @@ function rawVariantOf(msg: string) {
   return msg.match(/„([^”]*)”/)?.[1] ?? ''
 }
 
-// wynik z pliku niczego nie zmienia (ta sama wartość, a wariant pusty albo taki sam)
-function sameAsExisting(s: { value: number; variant: string; existing?: Result }) {
-  return !!s.existing && s.existing.value === s.value && (!s.variant || (s.existing.variant || '') === s.variant)
+// komórka zamiast wyniku: „brak”, „nb”, „nieobecna”, „kontuzja”… → brak testu
+const MISSING_RE = /^(b$|nb$|brak\b|x$|nieob|nie bylo|kontuz|chor|zwoln|l4\b|absent|injur|sick|dns\b)/
+const MISSING_GENERIC = ['b', 'nb', 'brak', 'x', 'brak testu']
+
+// wynik z pliku niczego nie zmienia (ta sama wartość / brak, a wariant i komentarz puste albo takie same)
+function sameAsExisting(s: { value: number | null; variant: string; missing: boolean; comment: string; existing?: Result }) {
+  const e = s.existing
+  return !!e && e.value === s.value && !!e.missing === s.missing
+    && (!s.variant || (e.variant || '') === s.variant)
+    && (!s.comment || (e.comment || '') === s.comment)
 }
 
 // ── Komponent ────────────────────────────────────────────────────────────────
@@ -374,7 +381,9 @@ export default function TestImportModal({ groups, athletes, catalog, results, de
         const test = testById(c.testId!)
         const options = test?.variant_options || []
         const raw = cellText(get(c))
-        let parsed: number | '' | null = raw === '' ? '' : (typeof get(c) === 'number' ? (get(c) as number) : parseNum(raw))
+        const missing = raw !== '' && typeof get(c) !== 'number' && MISSING_RE.test(norm(raw))
+        const comment = missing && !MISSING_GENERIC.includes(norm(raw)) ? raw : ''
+        let parsed: number | '' | null = raw === '' || missing ? '' : (typeof get(c) === 'number' ? (get(c) as number) : parseNum(raw))
         let variant = ''
         let variantError = ''
         if (parsed === null && options.length) {
@@ -390,7 +399,7 @@ export default function TestImportModal({ groups, athletes, catalog, results, de
           else variantError = `${test?.variant_label || 'Wariant'} „${rawVariant}” nieznany (dozwolone: ${options.join(', ')})`
         }
         const existing = athlete ? results.find(r => r.athlete_id === athlete!.id && r.test_catalog_id === c.testId && r.test_date === rowDate) : undefined
-        return { col: c, raw, parsed, variant, variantError, needsVariant: options.length > 0, existing }
+        return { col: c, raw, parsed, missing, comment, variant, variantError, needsVariant: options.length > 0, existing }
       })
       const bad = values.filter(v => v.parsed === null)
       for (const v of bad) issues.push(`${testById(v.col.testId!)?.name}: „${v.raw}” to nie liczba`)
@@ -401,7 +410,7 @@ export default function TestImportModal({ groups, athletes, catalog, results, de
           warnings.push(`${t?.name}: brak informacji „${(t?.variant_label || 'wariant').toLowerCase()}”`)
         }
       }
-      const filled = values.filter(v => typeof v.parsed === 'number')
+      const filled = values.filter(v => typeof v.parsed === 'number' || v.missing)
       if (filled.length === 0 && bad.length === 0) warnings.push('Brak wyników w wierszu')
 
       // duplikat zawodniczki w pliku
@@ -417,8 +426,9 @@ export default function TestImportModal({ groups, athletes, catalog, results, de
     })
 
     const toSave = out.filter(r => r.included).flatMap(r =>
-      r.values.filter(v => typeof v.parsed === 'number').map(v => ({
-        athlete_id: r.athlete!.id, test_catalog_id: v.col.testId!, value: v.parsed as number, test_date: r.rowDate, variant: v.variant, existing: v.existing,
+      r.values.filter(v => typeof v.parsed === 'number' || v.missing).map(v => ({
+        athlete_id: r.athlete!.id, test_catalog_id: v.col.testId!, value: v.missing ? null : (v.parsed as number), test_date: r.rowDate,
+        variant: v.missing ? '' : v.variant, missing: v.missing, comment: v.comment, existing: v.existing,
       })),
     )
     return {
@@ -443,6 +453,7 @@ export default function TestImportModal({ groups, athletes, catalog, results, de
     const inserts = writes.filter(w => !w.existing).map(w => ({
       athlete_id: w.athlete_id, test_catalog_id: w.test_catalog_id, value: w.value, test_date: w.test_date,
       ...(w.variant ? { variant: w.variant } : {}),
+      ...(w.missing ? { missing: true } : {}), ...(w.comment ? { comment: w.comment } : {}),
     }))
     const updates = writes.filter(w => w.existing)
     if (inserts.length) {
@@ -451,7 +462,12 @@ export default function TestImportModal({ groups, athletes, catalog, results, de
     }
     // pusty wariant w pliku nie kasuje zapisanego wcześniej
     const res = await Promise.all(updates.map(u => supabase.from('benchmark_tests')
-      .update({ value: u.value, ...(u.variant ? { variant: u.variant } : {}) })
+      .update({
+        value: u.value,
+        ...(u.variant ? { variant: u.variant } : {}),
+        ...(u.missing ? { missing: true, variant: null } : u.existing!.missing ? { missing: false } : {}),
+        ...(u.comment ? { comment: u.comment } : {}),
+      })
       .eq('id', u.existing!.id)))
     const failed = res.filter(r => r.error)
     setSaving(false)
@@ -492,6 +508,7 @@ export default function TestImportModal({ groups, athletes, catalog, results, de
               <li>Pozostałe kolumny to testy — nazwa jak w katalogu (jednostka w nawiasie nie jest wymagana). Liczby z przecinkiem lub kropką.</li>
               <li>Test z wariantem (np. <b>Pull up</b> → chwyt): wpisz chwyt w kolumnie obok, np. „Pull up – chwyt”, albo razem z wynikiem: „8 nachwyt”. Rozpoznaje też angielskie nazwy (underhand, overhand, neutral, mixed).</li>
               <li>Brak kolumny <b>Data</b> → użyta zostanie data pomiaru wybrana poniżej. Puste komórki są pomijane.</li>
+              <li>Brak testu: wpisz w komórce <b>brak</b> / <b>nb</b> albo powód, np. <b>nieobecna</b>, <b>kontuzja kolana</b>, <b>chora</b> — zapisze się jako „brak testu” z tym komentarzem.</li>
             </ul>
             <div style={{ marginTop: 8 }}>
               <Button size="small" onClick={downloadTemplate}>⬇ Pobierz wzór (wybrane grupy i testy)</Button>
@@ -619,16 +636,18 @@ export default function TestImportModal({ groups, athletes, catalog, results, de
                           <td className="coach-ti-src">{r.rowDate}</td>
                           {r.values.map(v => (
                             <td key={v.col.index}>
-                              {v.parsed === null
+                              {v.missing
+                                ? <span className="coach-rt-missing-tag">brak{v.comment ? `: ${v.comment}` : ''}</span>
+                                : v.parsed === null
                                 ? <span className="coach-ti-val coach-err">{v.raw}</span>
                                 : v.parsed === '' ? <span className="coach-ti-src">–</span>
                                 : <span className="coach-ti-val">{v.parsed}</span>}
                               {typeof v.parsed === 'number' && v.variant && <span className="coach-ti-variant">{v.variant}</span>}
                               {typeof v.parsed === 'number' && v.variantError && <span className="coach-ti-variant coach-err">? {rawVariantOf(v.variantError)}</span>}
-                              {typeof v.parsed === 'number' && v.existing && (
-                                sameAsExisting({ value: v.parsed, variant: v.variant, existing: v.existing })
+                              {(typeof v.parsed === 'number' || v.missing) && v.existing && (
+                                sameAsExisting({ value: v.missing ? null : (v.parsed as number), variant: v.variant, missing: v.missing, comment: v.comment, existing: v.existing })
                                   ? <span className="coach-ti-same">bez zmian</span>
-                                  : <span className="coach-ti-old">było: {v.existing.value ?? '–'}{v.existing.variant ? ` · ${v.existing.variant}` : ''}</span>
+                                  : <span className="coach-ti-old">było: {v.existing.missing ? 'brak' : v.existing.value ?? '–'}{v.existing.variant ? ` · ${v.existing.variant}` : ''}</span>
                               )}
                             </td>
                           ))}

@@ -1450,6 +1450,34 @@
   .coach-rt-flag-filter:hover{color:#c23b3b;border-color:#FCA5A5;}
   .coach-rt-flag-filter.coach-active{background:#FEE2E2;border-color:#c23b3b;color:#991B1B;}
   @media (hover:none){.coach-rt-flag-btn{opacity:1;}}
+
+  /* „brak testu” + komentarz */
+  .coach-rt-note-btn{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;padding:0;border:none;border-radius:5px;background:none;color:var(--muted-light);cursor:pointer;opacity:0;transition:opacity .12s;}
+  .coach-rt-note-btn:hover{background:var(--bg);color:var(--navy-800);}
+  .coach-rt-note-btn.coach-on{opacity:1;color:#6B7280;}
+  .coach-results-table td:hover .coach-rt-note-btn,.coach-eb-cell:hover .coach-rt-note-btn,.coach-eb-cell:focus-within .coach-rt-note-btn{opacity:1;}
+  @media (hover:none){.coach-rt-note-btn{opacity:1;}}
+  .coach-results-table td.coach-rt-missing,.coach-results-table tr:nth-child(even) td.coach-rt-missing{background:repeating-linear-gradient(135deg,#f3f4f6,#f3f4f6 6px,#e9eaee 6px,#e9eaee 12px);}
+  .coach-rt-missing-tag{font-size:10.5px;font-weight:700;color:#4B5563;background:#E5E7EB;border-radius:100px;padding:2px 8px;font-family:var(--font-inter),sans-serif;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;}
+  .coach-rt-comment{font-size:11px;cursor:help;}
+  .coach-eb-input.coach-missing-input{background:repeating-linear-gradient(135deg,#f3f4f6,#f3f4f6 6px,#e9eaee 6px,#e9eaee 12px);border-color:#9CA3AF;}
+  .coach-eb-input.coach-missing-input::placeholder{color:#4B5563;font-weight:700;}
+  .coach-rt-flag-filter.coach-rt-missing-filter:hover{color:#374151;border-color:#9CA3AF;}
+  .coach-rt-flag-filter.coach-rt-missing-filter.coach-active{background:#E5E7EB;border-color:#4B5563;color:#1F2937;}
+
+  .coach-note-backdrop{position:fixed;inset:0;z-index:70;}
+  .coach-note-panel{position:fixed;z-index:71;width:260px;background:#fff;border:1px solid var(--border);border-radius:12px;box-shadow:0 10px 30px rgba(9,13,24,.18);padding:10px 12px;display:flex;flex-direction:column;gap:8px;font-family:var(--font-inter),sans-serif;white-space:normal;}
+  .coach-note-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;}
+  .coach-note-missing{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:var(--ink);border:1px solid var(--border);border-radius:8px;padding:6px 8px;cursor:pointer;}
+  .coach-note-missing.coach-on{background:#E5E7EB;border-color:#4B5563;}
+  .coach-note-warn{font-size:11px;color:#92600A;margin-top:-4px;}
+  .coach-note-panel textarea{font-family:inherit;font-size:12.5px;border:1px solid var(--border);border-radius:8px;padding:6px 8px;resize:vertical;outline:none;}
+  .coach-note-panel textarea:focus{border-color:var(--gold);}
+  .coach-note-quick{display:flex;flex-wrap:wrap;gap:4px;}
+  .coach-note-quick button{font-size:10.5px;border:1px solid var(--border);background:var(--bg);border-radius:100px;padding:2px 8px;cursor:pointer;color:var(--muted);}
+  .coach-note-quick button:hover{border-color:var(--gold);color:var(--ink);}
+  .coach-note-actions{display:flex;justify-content:flex-end;align-items:center;gap:6px;}
+  .coach-note-clear{margin-right:auto;border:none;background:none;color:#c23b3b;font-size:11.5px;cursor:pointer;padding:0;}
   .coach-eb-hint{font-size:11px;color:var(--muted);font-family:var(--font-inter),sans-serif;margin:-6px 0 10px;}
 
   /* ===== Import wyników testów ===== */

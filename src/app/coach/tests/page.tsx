@@ -38,6 +38,7 @@ export default async function CoachTestsPage() {
     // kolumny `variant` / `flagged` mogły jeszcze nie zostać dodane migracją —
     // wtedy próbujemy z mniejszym zestawem kolumn
     const selects = [
+      'id, athlete_id, test_catalog_id, value, test_date, flagged, variant, missing, comment',
       'id, athlete_id, test_catalog_id, value, test_date, flagged, variant',
       'id, athlete_id, test_catalog_id, value, test_date, flagged',
       'id, athlete_id, test_catalog_id, value, test_date',

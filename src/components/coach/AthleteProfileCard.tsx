@@ -148,6 +148,8 @@ export default function AthleteProfileCard({ athlete, onClose }: { athlete: Athl
     ])
     const m = new Map<number, BenchmarkTest>()
     for (const row of (testsData || []) as BenchmarkTest[]) {
+      // wpisy „brak testu” (bez wartości) nie zasłaniają ostatniego prawdziwego wyniku
+      if (row.value == null && (row as BenchmarkTest & { missing?: boolean }).missing) continue
       if (!m.has(row.test_catalog_id)) m.set(row.test_catalog_id, row) // najnowszy (posortowane malejąco)
     }
     setCatalog((catalogData || []) as CatalogTest[])
