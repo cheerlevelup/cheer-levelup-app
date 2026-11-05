@@ -1531,7 +1531,26 @@ export default function GroupTrainingClient({ group, training, athletes, initial
 
   // Zawartość komórki w PDF — zwięźle, żeby wszystkie zawodniczki zmieściły się
   // na stronie: "40 / 40 / x kg", pod spodem zamiana ćwiczenia, ból, notatka.
-  function pdfCellText(ex: Exercise, entry: Entry | null | undefined, athleteId: number): string {
+  // Okienka serii w PDF (jak w edytorze): podpis „S1" (+ czas przy ISO) i wartość
+  // w ramce; pusta ramka = nic nie wpisano, „x" = seria nie zrobiona.
+  function pdfSetBoxes(ex: Exercise, entry: Entry | null | undefined): { label: string; value: string; skipped: boolean }[] {
+    const repsMode = isMaxReps(resolvePresc(ex, entry).reps) || !!entry?.bodyweight || !!ex.bodyweight
+    const planTimes = isoSetTimes(ex)
+    return effectiveSets(ex, entry, true).map((s, i) => {
+      const t = (s.seconds || '').trim() || (ex.iso && planTimes[i] != null ? String(planTimes[i]) : '')
+      return {
+        label: pl(`S${i + 1}${ex.iso && t ? ` · ${t}s` : ''}`),
+        value: s.skipped ? 'x' : pl(repsMode ? (s.reps && !isMaxReps(s.reps) ? s.reps : '') : (s.weight || '')),
+        skipped: !!s.skipped,
+      }
+    })
+  }
+  const PDF_BOX_MARK = '#BOX'
+  const PDF_BOX_LINES = 3 // wysokość okienek serii w liniach tekstu (podpis + ramka)
+
+  // boxes = true: zamiast linii „40 / 40 kg" rezerwujemy miejsce na okienka serii
+  // (rysowane w didDrawCell); false = tekstowo (plany indywidualne).
+  function pdfCellText(ex: Exercise, entry: Entry | null | undefined, athleteId: number, boxes = false): string {
     if (entry?.excluded) return 'nie robi'
     const test = testForExercise(ex.name || '')
     const testResult = test ? latestTest.get(`${test.id}_${athleteId}`) : undefined
@@ -1541,10 +1560,12 @@ export default function GroupTrainingClient({ group, training, athletes, initial
       : repsMode ? (s.reps && !isMaxReps(s.reps) ? s.reps : '-')
       : (s.weight || '-'))
     const filled = vals.some(v => v !== '-' && v !== 'x')
-    const lines = [vals.join(' / ') + (filled ? (repsMode ? ' powt.' : ' kg') : '')]
-    // Własny czas serii (ISO + Indywidualnie)
+    const lines = boxes
+      ? Array.from({ length: PDF_BOX_LINES }, () => PDF_BOX_MARK)
+      : [vals.join(' / ') + (filled ? (repsMode ? ' powt.' : ' kg') : '')]
+    // Własny czas serii (ISO + Indywidualnie) — w okienkach jest w podpisie serii
     const times = effectiveSets(ex, entry).map(s => (s.seconds || '').trim())
-    if (ex.iso && times.some(Boolean)) lines.push(`czas: ${times.map(t => t || '-').join(' / ')} s`)
+    if (!boxes && ex.iso && times.some(Boolean)) lines.push(`czas: ${times.map(t => t || '-').join(' / ')} s`)
     if (entry?.exercise_override) lines.push(`> ${entry.exercise_override}`)
     if (entry?.pain || entry?.pain_vas != null) lines.push(`(!) bol${entry.pain_vas != null ? ` ${entry.pain_vas}/10` : ''}${entry.pain_comment ? `: ${entry.pain_comment}` : ''}`)
     if (entry?.comment) lines.push(`"${entry.comment}"`)
@@ -1651,7 +1672,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
           startY,
           margin: { left: MARGIN, right: MARGIN, bottom: 10 },
           head: [['Zawodniczka', ...block.exercises.map(() => '')]],
-          body: present.map(a => [pl(a.full_name), ...block.exercises.map(ex => pdfCellText(ex, entryMap.get(entryKey(ex.id, a.id)), a.id))]),
+          body: present.map(a => [pl(a.full_name), ...block.exercises.map(ex => pdfCellText(ex, entryMap.get(entryKey(ex.id, a.id)), a.id, true))]),
           ...TABLE_STYLES,
           styles: { ...TABLE_STYLES.styles, fontSize: fs, cellPadding: Math.max(0.8, fs * 0.2), valign: 'top', overflow: 'linebreak' },
           headStyles: { ...TABLE_STYLES.headStyles, fontSize: fs, minCellHeight: headH, valign: 'middle' },
@@ -1672,6 +1693,11 @@ export default function GroupTrainingClient({ group, training, athletes, initial
             if (cell.marks) return
             const lines: string[] = [...cell.text]
             cell.marks = {}
+            if (lines[0] === PDF_BOX_MARK) {
+              const a = present[data.row.index], ex = block.exercises[data.column.index - 1]
+              if (a && ex) cell.marks.boxes = pdfSetBoxes(ex, entryMap.get(entryKey(ex.id, a.id)))
+              for (let i = 0; i < lines.length && lines[i] === PDF_BOX_MARK; i++) lines[i] = ''
+            }
             const from = lines.findIndex(l => l.startsWith('> '))
             if (from >= 0) {
               let to = from + 1
@@ -1689,11 +1715,36 @@ export default function GroupTrainingClient({ group, training, athletes, initial
           didDrawCell: (data: any) => {
             if (data.section === 'body') {
               const m = data.cell.marks
-              if (!m || (!m.purple && !m.pain)) return
+              if (!m || (!m.purple && !m.pain && !m.boxes)) return
               // ta sama geometria co autoTableText (wyrównanie do góry, interlinia 1.15)
               const fsMm = data.cell.styles.fontSize / doc.internal.scaleFactor
               const pos = data.cell.getTextPos()
               const baseline = (line: number) => pos.y + fsMm * (2 - 1.15) + line * fsMm * 1.15
+              if (m.boxes?.length) {
+                // Okienka serii: podpis nad ramką, wartość pośrodku ramki
+                const lh = fsMm * 1.15
+                const gap = 1.2
+                const avail = data.cell.width - 2 * (data.cell.padding('left') || 1)
+                const n = m.boxes.length
+                const bw = Math.min(fsMm * 4.2, (avail - (n - 1) * gap) / n)
+                const labelH = lh * 0.95
+                const bh = PDF_BOX_LINES * lh - labelH - 0.6
+                const top = pos.y + 0.2
+                m.boxes.forEach((b: { label: string; value: string; skipped: boolean }, k: number) => {
+                  const bx = pos.x + k * (bw + gap)
+                  doc.setFont('helvetica', 'normal'); doc.setFontSize(data.cell.styles.fontSize * 0.72); doc.setTextColor(...(b.skipped ? [194, 59, 59] : [150, 158, 172]) as [number, number, number])
+                  doc.text(b.label, bx + bw / 2, top + labelH * 0.75, { align: 'center' })
+                  doc.setDrawColor(...(b.skipped ? [244, 181, 181] : b.value ? [140, 150, 168] : [200, 208, 220]) as [number, number, number])
+                  doc.setLineWidth(0.25)
+                  doc.setFillColor(...(b.skipped ? [253, 237, 237] : [255, 255, 255]) as [number, number, number])
+                  doc.roundedRect(bx, top + labelH, bw, bh, 0.9, 0.9, 'FD')
+                  if (b.value) {
+                    doc.setFont('helvetica', 'bold'); doc.setFontSize(data.cell.styles.fontSize * 1.05)
+                    doc.setTextColor(...(b.skipped ? [194, 59, 59] : NAVY) as [number, number, number])
+                    doc.text(b.value, bx + bw / 2, top + labelH + bh / 2, { align: 'center', baseline: 'middle', maxWidth: bw - 0.6 })
+                  }
+                })
+              }
               doc.setFont('helvetica', 'normal'); doc.setFontSize(data.cell.styles.fontSize)
               if (m.purple) {
                 const p = m.purple
