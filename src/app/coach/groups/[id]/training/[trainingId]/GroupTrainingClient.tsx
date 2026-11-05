@@ -83,6 +83,7 @@ type TestDef = { id: number; name: string; unit: string }
 type TestResult = { id: number; athlete_id: number; test_catalog_id: number | null; value: number | null; test_date: string | null; missing: boolean }
 
 const entryKey = (exerciseId: number, athleteId: number) => `${exerciseId}_${athleteId}`
+const COMPACT_W = 250 // szerokość kolumny kompaktowego bloku
 
 // Ćwiczenie ↔ test z katalogu po nazwie: „chin-up hold HIMA" zawiera „Chin-up",
 // „push up" to „Push-up" (porównujemy same litery i cyfry). Przy kilku
@@ -835,10 +836,14 @@ export default function GroupTrainingClient({ group, training, athletes, initial
   type BoardColumn =
     | { kind: 'ex'; ex: Exercise; exIdx: number; blockStart: boolean }
     | { kind: 'collapsed'; block: (typeof blocks)[number] }
+    | { kind: 'compact'; block: (typeof blocks)[number] }
+  // Kompaktowy blok = jedna wąska kolumna z listą ćwiczeń bloku (A1, A2...)
   const boardColumns = useMemo(() => blocks.flatMap((b): BoardColumn[] => collapsedBlocks.has(b.index)
     ? [{ kind: 'collapsed', block: b }]
-    : b.exercises.map((ex, i) => ({ kind: 'ex', ex, exIdx: sortedExercises.indexOf(ex), blockStart: i === 0 }))
-  ), [blocks, collapsedBlocks, sortedExercises])
+    : compactBlocks.has(b.index)
+      ? [{ kind: 'compact', block: b }]
+      : b.exercises.map((ex, i) => ({ kind: 'ex', ex, exIdx: sortedExercises.indexOf(ex), blockStart: i === 0 }))
+  ), [blocks, collapsedBlocks, compactBlocks, sortedExercises])
 
   // Zawodniczki "wyciągnięte" do treningu indywidualnego znikają z głównej siatki
   // i dostają własną sekcję niżej — niezależnie od tego, kto jest nieobecny.
@@ -1944,7 +1949,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                           </button>
                         </th>
                       ) : (
-                        <th key={b.index} colSpan={b.exercises.length} className="gt-block-start" style={{ height: 30, padding: '0 0.5rem', background: 'var(--navy-900)', verticalAlign: 'middle' }}>
+                        <th key={b.index} colSpan={compactBlocks.has(b.index) ? 1 : b.exercises.length} className="gt-block-start" style={{ height: 30, padding: '0 0.5rem', background: 'var(--navy-900)', verticalAlign: 'middle' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'sticky', left: 173, width: 'max-content' }}>
                             <button
                               onClick={() => toggleBlockCollapsed(b.index)}
@@ -1963,7 +1968,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                             </button>
                             <button
                               onClick={() => toggleBlockCompact(b.index)}
-                              title={compactBlocks.has(b.index) ? `Pokaż pełne nagłówki bloku ${b.letter}` : `Wersja kompaktowa bloku ${b.letter} — same skróty rozpiski`}
+                              title={compactBlocks.has(b.index) ? `Pokaż pełne nagłówki bloku ${b.letter}` : `Wersja kompaktowa bloku ${b.letter} — lista ćwiczeń w jednej wąskiej kolumnie`}
                               style={{ display: 'inline-flex', alignItems: 'center', gap: 3, border: 'none', borderRadius: 5, background: compactBlocks.has(b.index) ? 'var(--gold)' : 'rgba(255,255,255,0.08)', color: compactBlocks.has(b.index) ? 'var(--navy-900)' : '#ffffff', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.6rem', fontWeight: 700, padding: '3px 7px', outline: 'none' }}
                             >
                               {compactBlocks.has(b.index) ? <Maximize2 size={10} /> : <Minimize2 size={10} />} {compactBlocks.has(b.index) ? 'pełny' : 'kompakt'}
@@ -1996,6 +2001,25 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                     </tr>
                     <tr className="gt-ex-row">
                       {boardColumns.map(col => {
+                        if (col.kind === 'compact') {
+                          return (
+                            <th key={`compact-${col.block.index}`} className="gt-ex-header gt-block-start" style={{ width: COMPACT_W, minWidth: COMPACT_W, maxWidth: COMPACT_W, padding: '0.35rem 0.5rem', background: 'var(--bg)', verticalAlign: 'top', textAlign: 'left' }}>
+                              {col.block.exercises.map(ex => (
+                                <div key={ex.id} style={{ display: 'flex', alignItems: 'baseline', gap: 5, padding: '3px 0', borderBottom: '1px solid var(--border)' }}>
+                                  <span style={{ flexShrink: 0, minWidth: 24, textAlign: 'center', borderRadius: 5, background: 'var(--navy-900)', color: 'var(--gold)', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.6rem', fontWeight: 800, padding: '2px 4px', lineHeight: 1 }}>
+                                    {exerciseLabel.get(ex.id)}
+                                  </span>
+                                  <span style={{ minWidth: 0, fontFamily: 'var(--font-inter), sans-serif', lineHeight: 1.25 }}>
+                                    <span style={{ display: 'block', fontWeight: 800, fontSize: '0.74rem', color: 'var(--navy-900)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={ex.name}>{ex.name || 'bez nazwy'}</span>
+                                    <span style={{ display: 'block', fontWeight: 600, fontSize: '0.62rem', color: 'var(--muted-light)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={ex.coach_comment || undefined}>
+                                      {formatExercisePresc(ex) || 'brak rozpiski'}{ex.bodyweight ? ' · powt.' : ''}{ex.individual ? ' · indyw.' : ''}{ex.coach_comment ? ` · ${ex.coach_comment}` : ''}
+                                    </span>
+                                  </span>
+                                </div>
+                              ))}
+                            </th>
+                          )
+                        }
                         if (col.kind !== 'ex') return null
                         const ex = col.ex
                         return (
@@ -2148,6 +2172,51 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                         {boardColumns.map(col => {
                           if (col.kind === 'collapsed') {
                             return <td key={`block-${col.block.index}`} className="gt-block-start" style={{ background: 'var(--bg)', width: 40, minWidth: 40, maxWidth: 40 }} />
+                          }
+                          if (col.kind === 'compact') {
+                            // Lista ćwiczeń bloku: etykieta + pola serii (ciężar/powt.), znaczniki bólu/notatki
+                            return (
+                              <td key={`compact-${col.block.index}`} className="gt-block-start" style={{ width: COMPACT_W, minWidth: COMPACT_W, maxWidth: COMPACT_W, padding: '0.3rem 0.4rem', verticalAlign: 'top', ...(absent ? { opacity: 0.35, pointerEvents: 'none' as const } : {}) }}>
+                                {col.block.exercises.map(ex => {
+                                  const entry = entryMap.get(entryKey(ex.id, athlete.id)) || null
+                                  const sets = effectiveSets(ex, entry)
+                                  const repsMode = isMaxReps(resolvePresc(ex, entry).reps) || !!entry?.bodyweight || !!ex.bodyweight
+                                  const locked = !!entry?.locked
+                                  const painActive = !!entry?.pain || entry?.pain_vas != null
+                                  return (
+                                    <div key={ex.id} style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '2px 0', flexWrap: 'wrap', ...(entry?.exercise_override ? { background: '#F7F2FE', borderRadius: 5 } : {}) }}>
+                                      <span title={ex.name} style={{ flexShrink: 0, minWidth: 24, textAlign: 'center', borderRadius: 5, background: '#E7EBF2', color: 'var(--navy-900)', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.58rem', fontWeight: 800, padding: '3px 3px', lineHeight: 1 }}>
+                                        {exerciseLabel.get(ex.id)}
+                                      </span>
+                                      {entry?.excluded ? (
+                                        <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.62rem', color: 'var(--muted-light)', fontStyle: 'italic' }}>nie robi</span>
+                                      ) : sets.map((s, i) => {
+                                        const cellVal = repsMode ? (s.reps && !isMaxReps(s.reps) ? s.reps : '') : (s.weight || '')
+                                        return s.skipped ? (
+                                          <span key={i} title={`S${i + 1}: nie zrobiła`} style={{ width: 30, textAlign: 'center', color: '#c23b3b', fontSize: '0.7rem', fontWeight: 700 }}>✕</span>
+                                        ) : (
+                                          <input
+                                            key={`${i}_${cellVal}`}
+                                            defaultValue={cellVal}
+                                            placeholder={repsMode ? 'p' : 'kg'}
+                                            title={`${ex.name || 'Ćwiczenie'} · S${i + 1}`}
+                                            disabled={locked}
+                                            onBlur={e => saveInlineField(athlete, ex, i, repsMode ? 'reps' : 'weight', e.target.value)}
+                                            onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                                            className={`gt-w${cellVal ? ' filled' : ''}`}
+                                            style={{ width: 32, padding: '0.16rem 0.1rem', fontSize: '0.64rem' }}
+                                          />
+                                        )
+                                      })}
+                                      {locked && <Lock size={9} color="var(--muted-light)" />}
+                                      {painActive && <span title={`Ból${entry?.pain_vas != null ? ` ${entry.pain_vas}/10` : ''}${entry?.pain_comment ? `: ${entry.pain_comment}` : ''}`} style={{ fontSize: '0.62rem', color: entry?.pain_vas != null && entry.pain_vas >= 5 ? '#c23b3b' : '#c07f1e' }}>⚠</span>}
+                                      {entry?.comment && <span title={entry.comment} style={{ fontSize: '0.62rem' }}>💬</span>}
+                                      {entry?.exercise_override && <span title={`Zamiast: ${entry.exercise_override}`} style={{ fontSize: '0.62rem', color: '#7c3aed', fontWeight: 700 }}>→</span>}
+                                    </div>
+                                  )
+                                })}
+                              </td>
+                            )
                           }
                           const { ex, exIdx } = col
                           const entry = entryMap.get(entryKey(ex.id, athlete.id)) || null
