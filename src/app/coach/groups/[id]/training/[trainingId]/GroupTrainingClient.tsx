@@ -1531,8 +1531,11 @@ export default function GroupTrainingClient({ group, training, athletes, initial
 
   // Zawartość komórki w PDF — zwięźle, żeby wszystkie zawodniczki zmieściły się
   // na stronie: "40 / 40 / x kg", pod spodem zamiana ćwiczenia, ból, notatka.
-  function pdfCellText(ex: Exercise, entry: Entry | null | undefined): string {
+  function pdfCellText(ex: Exercise, entry: Entry | null | undefined, athleteId: number): string {
     if (entry?.excluded) return 'nie robi'
+    const test = testForExercise(ex.name || '')
+    const testResult = test ? latestTest.get(`${test.id}_${athleteId}`) : undefined
+    const testText = test ? `Test ${test.name}: ${testResult ? `${String(testResult.value).replace('.', ',')} ${test.unit}${testResult.test_date ? ` (${shortDate(testResult.test_date)})` : ''}` : 'brak wyniku'}` : ''
     const repsMode = isMaxReps(resolvePresc(ex, entry).reps) || !!entry?.bodyweight || !!ex.bodyweight
     const vals = effectiveSets(ex, entry).map(s => s.skipped ? 'x'
       : repsMode ? (s.reps && !isMaxReps(s.reps) ? s.reps : '-')
@@ -1545,6 +1548,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     if (entry?.exercise_override) lines.push(`> ${entry.exercise_override}`)
     if (entry?.pain || entry?.pain_vas != null) lines.push(`(!) bol${entry.pain_vas != null ? ` ${entry.pain_vas}/10` : ''}${entry.pain_comment ? `: ${entry.pain_comment}` : ''}`)
     if (entry?.comment) lines.push(`"${entry.comment}"`)
+    if (testText) lines.push(testText)
     return pl(lines.join('\n'))
   }
 
@@ -1647,7 +1651,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
           startY,
           margin: { left: MARGIN, right: MARGIN, bottom: 10 },
           head: [['Zawodniczka', ...block.exercises.map(() => '')]],
-          body: present.map(a => [pl(a.full_name), ...block.exercises.map(ex => pdfCellText(ex, entryMap.get(entryKey(ex.id, a.id))))]),
+          body: present.map(a => [pl(a.full_name), ...block.exercises.map(ex => pdfCellText(ex, entryMap.get(entryKey(ex.id, a.id)), a.id))]),
           ...TABLE_STYLES,
           styles: { ...TABLE_STYLES.styles, fontSize: fs, cellPadding: Math.max(0.8, fs * 0.2), valign: 'top', overflow: 'linebreak' },
           headStyles: { ...TABLE_STYLES.headStyles, fontSize: fs, minCellHeight: headH, valign: 'middle' },
@@ -1671,7 +1675,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
             const from = lines.findIndex(l => l.startsWith('> '))
             if (from >= 0) {
               let to = from + 1
-              while (to < lines.length && !lines[to].startsWith('(!) bol') && !lines[to].startsWith('"')) to++
+              while (to < lines.length && !lines[to].startsWith('(!) bol') && !lines[to].startsWith('"') && !lines[to].startsWith('Test ')) to++
               cell.marks.purple = { from, lines: lines.slice(from, to) }
               for (let i = from; i < to; i++) lines[i] = ''
             }
@@ -1772,7 +1776,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
             margin: { left: MARGIN, right: MARGIN, bottom: 10 },
             head: [[{ content: pl(person.full_name), colSpan: own.length, styles: { halign: 'left', fontSize: 9 } }],
               own.map(ex => pl(`${ex.name || 'Bez nazwy'}\n`) + pdfPrescText(ex) + (ex.coach_comment ? pl(`\n"${ex.coach_comment}"`) : ''))],
-            body: [own.map(ex => pdfCellText(ex, entryMap.get(entryKey(ex.id, person.id))))],
+            body: [own.map(ex => pdfCellText(ex, entryMap.get(entryKey(ex.id, person.id)), person.id))],
             ...TABLE_STYLES,
             styles: { ...TABLE_STYLES.styles, fontSize: 7.5, valign: 'top' },
             didDrawPage: () => drawFooter(doc),
