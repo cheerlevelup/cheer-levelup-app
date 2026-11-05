@@ -12,7 +12,7 @@ import { loadPdf, pl, drawHeaderBar, drawFooter, TABLE_STYLES } from '@/lib/grou
 
 type Group = { id: number; name: string }
 type Training = { id: number; group_id: number; training_date: string; absent_athlete_ids?: number[] | null; individual_athlete_ids?: number[] | null }
-type Athlete = { id: number; full_name: string }
+type Athlete = { id: number; full_name: string; birth_year?: number | null }
 type Exercise = {
   id: number
   training_id: number
@@ -2119,8 +2119,15 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                             <span style={{ flexShrink: 0, width: 20, height: 20, borderRadius: '50%', background: avatarBg(athlete.full_name), color: '#ffffff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.62rem', fontWeight: 700, opacity: absent ? 0.4 : 1 }}>
                               {athlete.full_name.charAt(0).toUpperCase()}
                             </span>
-                            <span style={{ fontWeight: 700, fontSize: '0.76rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 108, textDecoration: absent ? 'line-through' : 'none', color: absent ? 'var(--muted-light)' : 'var(--navy-900)' }}>
-                              {athlete.full_name}
+                            <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, maxWidth: 108 }}>
+                              <span style={{ fontWeight: 700, fontSize: '0.76rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: absent ? 'line-through' : 'none', color: absent ? 'var(--muted-light)' : 'var(--navy-900)' }}>
+                                {athlete.full_name}
+                              </span>
+                              {athlete.birth_year && (
+                                <span title="Rocznik" style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.6rem', fontWeight: 600, color: 'var(--muted-light)', lineHeight: 1.2 }}>
+                                  {athlete.birth_year}
+                                </span>
+                              )}
                             </span>
                             <button
                               onClick={() => toggleIndividualAthlete(athlete.id)}
