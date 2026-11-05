@@ -247,6 +247,24 @@ function planColumns(ex: Exercise): PlanColumn[] {
 
 const planSetCount = (ex: Exercise) => Math.max(ex.sets_planned ?? 0, 1)
 
+// Kolumna POWT. może być przełączona na CZAS — wtedy wartość trzymamy w tym
+// samym polu reps z sufiksem „s" (np. „30s"), więc PDF, podsumowania i komórki
+// zawodniczek pokazują ją bez zmian i nie trzeba migracji.
+const TIME_SUFFIX_RE = /\s*(s|sek\.?|'')\s*$/i
+const isTimeValue = (v: PlanValue) => typeof v === 'string' && /^[\d\s.,\-–/]+\s*(s|sek\.?|'')\s*$/i.test(v.trim())
+const stripTime = (v: PlanValue) => (v == null ? '' : String(v).replace(TIME_SUFFIX_RE, ''))
+function repsIsTime(ex: Exercise): boolean {
+  const filled = planValues(ex, 'reps').filter(v => v != null && String(v).trim() !== '')
+  return filled.length > 0 && filled.every(isTimeValue)
+}
+// Zamiana wartości przy przełączeniu: „30" → „30s" i odwrotnie (tekst typu „max" bez zmian)
+function convertRepsUnit(v: PlanValue, toTime: boolean): PlanValue {
+  if (v == null || String(v).trim() === '') return v
+  const s = String(v).trim()
+  if (toTime) return isTimeValue(s) || !/^[\d\s.,\-–/]+$/.test(s) ? s : `${s}s`
+  return isTimeValue(s) ? stripTime(s) : s
+}
+
 // Wartość danej serii — własna wartość serii albo wspólna z pola bazowego
 // (treningi sprzed rozpiski per seria).
 function planValues(ex: Exercise, field: PlanField): PlanValue[] {
@@ -281,14 +299,21 @@ function formatExercisePresc(ex: Exercise): string {
 
 // Tabelka serii: wiersz = seria, po lewej numer, dalej wartości do edycji.
 // „+ Dodaj serię" dopisuje wiersz z wartościami poprzedniej serii.
-function SetPlanTable({ ex, onChange, onCommit, onAdd, onRemove }: {
+function SetPlanTable({ ex, onChange, onCommit, onAdd, onRemove, onRepsUnit }: {
   ex: Exercise
   onChange: (setIdx: number, field: PlanField, value: string) => void
   onCommit: () => void
   onAdd: () => void
   onRemove: (setIdx: number) => void
+  onRepsUnit: (toTime: boolean) => void
 }) {
-  const cols = planColumns(ex)
+  // Tryb czasu wynika z wartości („30s"); przy pustych polach pamiętamy wybór lokalnie
+  const [timeChoice, setTimeChoice] = useState<boolean>(() => repsIsTime(ex))
+  const hasReps = planValues(ex, 'reps').some(v => v != null && String(v).trim() !== '')
+  const timeMode = hasReps ? repsIsTime(ex) : timeChoice
+  const cols = planColumns(ex).map(c => c.field === 'reps' && timeMode
+    ? { ...c, label: 'Czas', placeholder: '30', suffix: 's' }
+    : c)
   const values = cols.map(c => planValues(ex, c.field))
   const n = planSetCount(ex)
   const grid = `40px repeat(${cols.length}, 1fr) 22px`
@@ -297,7 +322,17 @@ function SetPlanTable({ ex, onChange, onCommit, onAdd, onRemove }: {
     <div style={{ marginTop: 6, background: '#ffffff', border: `1px solid var(--border)`, borderRadius: 8, overflow: 'hidden' }}>
       <div style={{ display: 'grid', gridTemplateColumns: grid, borderBottom: `1px solid var(--border)`, background: 'var(--bg)' }}>
         <span style={headCell}>Seria</span>
-        {cols.map(c => <span key={c.field} style={headCell}>{c.label}</span>)}
+        {cols.map(c => c.field === 'reps' ? (
+          <button
+            key={c.field}
+            type="button"
+            onClick={() => { const next = !timeMode; setTimeChoice(next); onRepsUnit(next) }}
+            title={timeMode ? 'Kliknij, by wpisywać powtórzenia' : 'Kliknij, by wpisywać czas (sekundy)'}
+            style={{ ...headCell, border: 'none', background: 'none', cursor: 'pointer', outline: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 3, width: '100%' }}
+          >
+            {c.label}<span style={{ fontSize: '0.6rem', lineHeight: 1 }}>⇄</span>
+          </button>
+        ) : <span key={c.field} style={headCell}>{c.label}</span>)}
         <span />
       </div>
       {Array.from({ length: n }, (_, i) => (
@@ -308,8 +343,11 @@ function SetPlanTable({ ex, onChange, onCommit, onAdd, onRemove }: {
               <input
                 type={c.numeric ? 'number' : 'text'}
                 {...(c.numeric ? { min: 0, max: c.max } : {})}
-                value={values[ci][i] ?? ''}
-                onChange={e => onChange(i, c.field, e.target.value)}
+                value={c.field === 'reps' && timeMode ? stripTime(values[ci][i]) : (values[ci][i] ?? '')}
+                onChange={e => {
+                  const v = e.target.value
+                  onChange(i, c.field, c.field === 'reps' && timeMode && v.trim() ? `${v.trim()}s` : v)
+                }}
                 onBlur={onCommit}
                 onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
                 placeholder={c.placeholder}
@@ -871,6 +909,9 @@ export default function GroupTrainingClient({ group, training, athletes, initial
 
   const addPlanRow = (exerciseId: number) => changePlanRows(exerciseId, rows => [...rows, { ...rows[rows.length - 1] }])
   const removePlanRow = (exerciseId: number, idx: number) => changePlanRows(exerciseId, rows => rows.filter((_, j) => j !== idx))
+  // Przełącz kolumnę POWT. ⇄ CZAS — przelicza wpisane wartości („30" ⇄ „30s")
+  const setRepsUnit = (exerciseId: number, toTime: boolean) =>
+    changePlanRows(exerciseId, rows => rows.map(r => ({ ...r, reps: convertRepsUnit(r.reps, toTime) })))
 
   async function persistExercise(exerciseId: number, override?: Exercise) {
     const ex = override ?? exercises.find(e => e.id === exerciseId)
@@ -1815,7 +1856,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                             </div>
                             <ExerciseLinkRow ex={ex} editing={linkEditId === ex.id} onSave={url => saveExerciseLink(ex.id, url)} onCancel={() => setLinkEditId(null)} />
                             {/* Rozpiska dla całej grupy — tabelka serii: powt./tempo, dla ISO czas (+ intensywność przy PIMA) */}
-                            <SetPlanTable ex={ex} onChange={(i, field, v) => handlePlanCell(ex.id, i, field, v)} onCommit={() => persistExercise(ex.id)} onAdd={() => addPlanRow(ex.id)} onRemove={i => removePlanRow(ex.id, i)} />
+                            <SetPlanTable ex={ex} onChange={(i, field, v) => handlePlanCell(ex.id, i, field, v)} onCommit={() => persistExercise(ex.id)} onAdd={() => addPlanRow(ex.id)} onRemove={i => removePlanRow(ex.id, i)} onRepsUnit={t => setRepsUnit(ex.id, t)} />
                             <div style={{ display: 'flex', gap: 4, rowGap: 4, marginTop: 6, flexWrap: 'wrap' }}>
                               {!ex.bodyweight && (
                                 <button
@@ -2136,7 +2177,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                   </>
                                 )}
                               </div>
-                              <div style={{ marginTop: -6, marginBottom: 6 }}><SetPlanTable ex={ex} onChange={(i, field, v) => handlePlanCell(ex.id, i, field, v)} onCommit={() => persistExercise(ex.id)} onAdd={() => addPlanRow(ex.id)} onRemove={i => removePlanRow(ex.id, i)} /><ExerciseCommentField ex={ex} onSave={v => saveExerciseComment(ex.id, v)} /></div>
+                              <div style={{ marginTop: -6, marginBottom: 6 }}><SetPlanTable ex={ex} onChange={(i, field, v) => handlePlanCell(ex.id, i, field, v)} onCommit={() => persistExercise(ex.id)} onAdd={() => addPlanRow(ex.id)} onRemove={i => removePlanRow(ex.id, i)} onRepsUnit={t => setRepsUnit(ex.id, t)} /><ExerciseCommentField ex={ex} onSave={v => saveExerciseComment(ex.id, v)} /></div>
                               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, flexWrap: 'wrap', width: 260 }}>
                                 {sets.map((s, i) => {
                                   const repsPerf = s.reps && !isMaxReps(s.reps) ? s.reps : ''
