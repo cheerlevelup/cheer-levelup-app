@@ -98,7 +98,10 @@ const canonName = (s: string) => s.toLowerCase()
   .replace(/ups\b/g, 'up')
 const normName = (s: string) => canonName(s).replace(/[^a-z0-9ąćęłńóśźż]/g, '')
 const TEST_FILLER = new Set(['test', 'max', 'maks', 'maksymalna', 'liczba', 'powt', 'powtorzen', 'powtórzeń', 'sek', 's', 'cm', 'kg', 'amrap', 'na', 'do', 'w', 'z', 'i', 'czas', 'hold'])
-function matchTest(exName: string, catalog: TestDef[]): TestDef | null {
+// Kolejność: cała nazwa testu w nazwie ćwiczenia > wszystkie istotne słowa >
+// samo pierwsze słowo testu („push-up" ↔ „Push up do kostki"). Przy remisie
+// w ostatnim wariancie wygrywa test z największą liczbą wyników tych zawodniczek.
+function matchTest(exName: string, catalog: TestDef[], usage?: Map<number, number>): TestDef | null {
   const n = normName(exName)
   if (!n) return null
   let best: TestDef | null = null
@@ -106,13 +109,11 @@ function matchTest(exName: string, catalog: TestDef[]): TestDef | null {
   for (const t of catalog) {
     const tn = normName(t.name)
     let score = 0
-    if (tn.length >= 4 && n.includes(tn)) score = tn.length + 100
-    else {
-      // Każde istotne słowo nazwy testu musi wystąpić w nazwie ćwiczenia
-      const words = canonName(t.name).split(/[\s/,.]+/).map(w => w.replace(/[^a-z0-9ąćęłńóśźż]/g, ''))
-        .filter(w => w && !TEST_FILLER.has(w) && !/^\d+$/.test(w))
-      if (words.length > 0 && words.some(w => w.length >= 4) && words.every(w => n.includes(w))) score = words.join('').length
-    }
+    const words = canonName(t.name).split(/[\s/,.]+/).map(w => w.replace(/[^a-z0-9ąćęłńóśźż]/g, ''))
+      .filter(w => w && !TEST_FILLER.has(w) && !/^\d+$/.test(w))
+    if (tn.length >= 4 && n.includes(tn)) score = 10000 + tn.length
+    else if (words.length > 0 && words.some(w => w.length >= 4) && words.every(w => n.includes(w))) score = 1000 + words.join('').length
+    else if (words[0] && words[0].length >= 4 && n.includes(words[0])) score = 1 + Math.min(usage?.get(t.id) ?? 0, 900) / 1000
     if (score > bestScore) { best = t; bestScore = score }
   }
   return best
@@ -690,14 +691,20 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     }
     return m
   }, [testResults])
+  // Ile wyników ma każdy test u tych zawodniczek (rozstrzyga remisy w dopasowaniu)
+  const usage = useMemo(() => {
+    const m = new Map<number, number>()
+    for (const r of testResults) if (r.test_catalog_id != null && !r.missing) m.set(r.test_catalog_id, (m.get(r.test_catalog_id) ?? 0) + 1)
+    return m
+  }, [testResults])
   // Test pasujący do ćwiczenia (po nazwie) — liczony raz na nazwę
   const testForExercise = useMemo(() => {
     const cache = new Map<string, TestDef | null>()
     return (name: string) => {
-      if (!cache.has(name)) cache.set(name, matchTest(name, testCatalog))
+      if (!cache.has(name)) cache.set(name, matchTest(name, testCatalog, usage))
       return cache.get(name) ?? null
     }
-  }, [testCatalog])
+  }, [testCatalog, usage])
   // Linijka „🏁 Chin-up: 29 sek. (12.10.26)" pod komórką zawodniczki
   function testLine(ex: Exercise, athleteId: number) {
     const test = testForExercise(ex.name || '')
