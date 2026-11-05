@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { formatDatePl } from '@/lib/groupTraining'
-import { CheckSquare, MessageCircle, Info, AlertTriangle, Pencil, Plus, Check, X, Trash2, PanelLeftClose, PanelLeftOpen, ChevronsLeft, ChevronsRight, Download, Link2 } from 'lucide-react'
+import { CheckSquare, MessageCircle, Info, AlertTriangle, Pencil, Plus, Check, X, Trash2, PanelLeftClose, PanelLeftOpen, ChevronsLeft, ChevronsRight, Download, Link2, Eraser, Lock, Unlock, Minimize2, Maximize2 } from 'lucide-react'
 import { SetPageMeta, usePageMeta } from '@/components/coach/PageMetaContext'
 import { Button } from '@/components/coach/ui'
 import { loadPdf, pl, drawHeaderBar, drawFooter, TABLE_STYLES } from '@/lib/groupPdf'
@@ -65,6 +65,8 @@ type Entry = {
   // ta konkretna zawodniczka nie robi TEGO ćwiczenia (inaczej niż nieobecność
   // na całym treningu — reszty ćwiczeń to nie dotyczy)
   excluded?: boolean | null
+  // wpis zablokowany — nie da się go edytować, operacje zbiorcze go pomijają
+  locked?: boolean | null
 }
 
 interface Props {
@@ -736,6 +738,25 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     })
   }
 
+  // Kompaktowe bloki — nagłówki ćwiczeń bez tabelki serii i przycisków, tylko
+  // skrót rozpiski ("2×20s, tempo 3010"). Też tylko widok, pamiętany per trening.
+  const compactKey = `gt-compact-blocks-${training.id}`
+  const [compactBlocks, setCompactBlocks] = useState<Set<number>>(() => new Set())
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(compactKey) || '[]')
+      if (Array.isArray(saved)) setCompactBlocks(new Set(saved.filter((n: unknown) => typeof n === 'number')))
+    } catch {}
+  }, [compactKey])
+  function toggleBlockCompact(blockIndex: number) {
+    setCompactBlocks(prev => {
+      const next = new Set(prev)
+      if (next.has(blockIndex)) next.delete(blockIndex); else next.add(blockIndex)
+      try { localStorage.setItem(compactKey, JSON.stringify(Array.from(next))) } catch {}
+      return next
+    })
+  }
+
   // Kolumny siatki: ćwiczenia rozwiniętych bloków albo jeden wąski pasek za zwinięty
   // blok. exIdx to pozycja w sortedExercises (nawigacja klawiaturą).
   type BoardColumn =
@@ -899,16 +920,105 @@ export default function GroupTrainingClient({ group, training, athletes, initial
       : withPlanRows(e, rows => rows.map((r, i) => i === setIdx ? { ...r, [field]: parsed } : r))))
   }
 
-  function changePlanRows(exerciseId: number, mutate: (rows: Record<PlanField, PlanValue>[]) => Record<PlanField, PlanValue>[]) {
+  function changePlanRows(exerciseId: number, mutate: (rows: Record<PlanField, PlanValue>[]) => Record<PlanField, PlanValue>[]): Exercise | null {
     const ex = exercises.find(e => e.id === exerciseId)
-    if (!ex) return
+    if (!ex) return null
     const next = withPlanRows(ex, mutate)
     setExercises(prev => prev.map(e => e.id === exerciseId ? next : e))
     persistExercise(exerciseId, next)
+    return next
   }
 
-  const addPlanRow = (exerciseId: number) => changePlanRows(exerciseId, rows => [...rows, { ...rows[rows.length - 1] }])
-  const removePlanRow = (exerciseId: number, idx: number) => changePlanRows(exerciseId, rows => rows.filter((_, j) => j !== idx))
+  // Pełny wiersz wpisu do upsertu (upsert nadpisuje cały wiersz — przepisujemy resztę pól)
+  function entryRow(exId: number, athleteId: number, current: Entry | undefined, sets: SetRow[]) {
+    return {
+      training_id: training.id, exercise_id: exId, athlete_id: athleteId, sets,
+      pain: current?.pain ?? false, pain_vas: current?.pain_vas ?? null, pain_comment: current?.pain_comment ?? null,
+      comment: current?.comment ?? null, exercise_override: current?.exercise_override ?? null,
+      bodyweight: current?.bodyweight ?? false, excluded: current?.excluded ?? false,
+      ...(current?.locked ? { locked: true } : {}),
+      updated_at: new Date().toISOString(),
+    }
+  }
+
+  // Zawodniczki z zapisanymi seriami w tym ćwiczeniu (pomijamy zablokowane wpisy)
+  function storedEntriesOf(exId: number) {
+    const out: { key: string; entry: Entry; sets: SetRow[] }[] = []
+    for (const [key, entry] of Array.from(entryMap.entries())) {
+      if (entry.exercise_id !== exId || entry.locked) continue
+      const sets = latestSetsRef.current.get(key) ?? entry.sets ?? []
+      if (sets.length > 0) out.push({ key, entry, sets: sets.map(s => ({ ...s })) })
+    }
+    return out
+  }
+
+  async function saveEntryRows(rows: ReturnType<typeof entryRow>[]) {
+    if (rows.length === 0) return
+    for (const r of rows) latestSetsRef.current.set(entryKey(r.exercise_id, r.athlete_id), r.sets)
+    const { data, error: err } = await upsertTrainingEntries(rows)
+    if (err || !data) { setError(err?.message || 'Błąd zapisu'); return }
+    setEntryMap(prev => {
+      const next = new Map(prev)
+      for (const d of data as Entry[]) next.set(entryKey(d.exercise_id, d.athlete_id), d)
+      return next
+    })
+  }
+
+  const entryRepsMode = (ex: Exercise, entry: Entry | undefined) =>
+    isMaxReps(resolvePresc(ex, entry).reps) || !!entry?.bodyweight || !!ex.bodyweight
+
+  // Dodanie serii w nagłówku dodaje ją też każdej zawodniczce, która ma już coś
+  // zapisane (te bez wpisu i tak biorą liczbę serii z rozpiski).
+  function addPlanRow(exerciseId: number) {
+    const next = changePlanRows(exerciseId, rows => [...rows, { ...rows[rows.length - 1] }])
+    if (!next) return
+    const rows = storedEntriesOf(exerciseId).map(({ entry, sets }) => {
+      const presc = resolvePresc(next, entry, sets.length)
+      sets.push({ reps: entryRepsMode(next, entry) ? '' : presc.reps, tempo: presc.tempo, weight: '' })
+      return entryRow(exerciseId, entry.athlete_id, entry, sets)
+    })
+    saveEntryRows(rows)
+  }
+
+  // Usunięcie serii w nagłówku usuwa ją zawodniczkom tylko wtedy, gdy nic w niej
+  // nie wpisały (puste albo 0) — wpisanych wyników nie kasujemy.
+  function removePlanRow(exerciseId: number, idx: number) {
+    const ex = exercises.find(e => e.id === exerciseId)
+    const next = changePlanRows(exerciseId, rows => rows.filter((_, j) => j !== idx))
+    if (!ex || !next) return
+    const isEmpty = (s: SetRow, repsMode: boolean) => {
+      if (s.skipped) return false
+      const v = ((repsMode ? s.reps : s.weight) || '').trim()
+      return v === '' || v === '0' || (repsMode && isMaxReps(v))
+    }
+    const rows = storedEntriesOf(exerciseId)
+      .filter(({ entry, sets }) => sets.length > idx && isEmpty(sets[idx], entryRepsMode(ex, entry)))
+      .map(({ entry, sets }) => entryRow(exerciseId, entry.athlete_id, entry, sets.filter((_, j) => j !== idx)))
+    saveEntryRows(rows)
+  }
+
+  // Wyczyść wszystkie zapiski zawodniczek w ćwiczeniu (poza zablokowanymi)
+  async function clearExerciseEntries(ex: Exercise) {
+    const targets = Array.from(entryMap.values()).filter(e => e.exercise_id === ex.id && !e.locked)
+    if (targets.length === 0) { setError('Brak zapisków do wyczyszczenia w tym ćwiczeniu.'); return }
+    const lockedCount = Array.from(entryMap.values()).filter(e => e.exercise_id === ex.id && e.locked).length
+    if (!confirm(`Usunąć wszystkie zapiski (serie, ból, notatki, modyfikacje) w „${ex.name || 'tym ćwiczeniu'}” u ${targets.length} zawodniczek?${lockedCount ? `\nZablokowane wpisy (${lockedCount}) zostaną.` : ''}`)) return
+    setError('')
+    const ids = targets.map(e => e.athlete_id)
+    const { error: err } = await supabase.from('group_training_entries').delete().eq('exercise_id', ex.id).in('athlete_id', ids)
+    if (err) { setError(err.message); return }
+    setEntryMap(prev => {
+      const next = new Map(prev)
+      for (const id of ids) { const k = entryKey(ex.id, id); next.delete(k); latestSetsRef.current.delete(k) }
+      return next
+    })
+  }
+
+  // Zablokuj / odblokuj wpis zawodniczki w ćwiczeniu — zablokowanego nie da się edytować
+  async function toggleLockEntry(athlete: Athlete, ex: Exercise) {
+    const entry = entryMap.get(entryKey(ex.id, athlete.id))
+    await saveEntryMeta(athlete, ex, { locked: !entry?.locked })
+  }
   // Przełącz kolumnę POWT. ⇄ CZAS — przelicza wpisane wartości („30" ⇄ „30s")
   const setRepsUnit = (exerciseId: number, toTime: boolean) =>
     changePlanRows(exerciseId, rows => rows.map(r => ({ ...r, reps: convertRepsUnit(r.reps, toTime) })))
@@ -975,7 +1085,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
   // Wpisz 0 (masa ciała) w ciężar zawodniczkom na grupowej rozpisce (bez wybranego
   // wariantu). Zawodniczki z wariantem mają własny przycisk BW przy wariancie.
   async function fillColumnBodyweight(ex: Exercise) {
-    const present = athletes.filter(a => !absentIds.has(a.id))
+    const present = athletes.filter(a => !absentIds.has(a.id) && !entryMap.get(entryKey(ex.id, a.id))?.locked)
     if (present.length === 0) { setError('Brak obecnych zawodniczek.'); return }
     if (!confirm(`Wpisać 0 (masa ciała) w ciężar wszystkim zawodniczkom w „${ex.name || 'tym ćwiczeniu'}”?`)) return
     setError('')
@@ -1271,6 +1381,8 @@ export default function GroupTrainingClient({ group, training, athletes, initial
         ? 'Aby oznaczać ból w tabeli, uruchom migrację 202606200002 (kolumna pain).'
         : 'excluded' in patch && /'excluded'/.test(msg)
         ? 'Aby wykluczać z pojedynczego ćwiczenia, uruchom migrację 202609150003.'
+        : 'locked' in patch && /'locked'/.test(msg)
+        ? 'Aby blokować wpisy, uruchom migrację 202611050001 (kolumna locked).'
         : (msg || 'Błąd zapisu'))
       return
     }
@@ -1773,6 +1885,13 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                             >
                               <Plus size={10} /> ćwiczenie
                             </button>
+                            <button
+                              onClick={() => toggleBlockCompact(b.index)}
+                              title={compactBlocks.has(b.index) ? `Pokaż pełne nagłówki bloku ${b.letter}` : `Wersja kompaktowa bloku ${b.letter} — same skróty rozpiski`}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 3, border: 'none', borderRadius: 5, background: compactBlocks.has(b.index) ? 'var(--gold)' : 'rgba(255,255,255,0.08)', color: compactBlocks.has(b.index) ? 'var(--navy-900)' : '#ffffff', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.6rem', fontWeight: 700, padding: '3px 7px', outline: 'none' }}
+                            >
+                              {compactBlocks.has(b.index) ? <Maximize2 size={10} /> : <Minimize2 size={10} />} {compactBlocks.has(b.index) ? 'pełny' : 'kompakt'}
+                            </button>
                           </div>
                         </th>
                       ))}
@@ -1847,6 +1966,13 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 <Link2 size={13} />
                               </button>
                               <button
+                                onClick={() => clearExerciseEntries(ex)}
+                                title="Wyczyść wszystkie zapiski zawodniczek w tym ćwiczeniu"
+                                style={{ flexShrink: 0, width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: `1.5px solid var(--border)`, background: '#ffffff', color: 'var(--muted-light)', borderRadius: 7, outline: 'none' }}
+                              >
+                                <Eraser size={12} />
+                              </button>
+                              <button
                                 onClick={() => handleDeleteExercise(ex)}
                                 title="Usuń ćwiczenie"
                                 style={{ flexShrink: 0, width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: `1.5px solid var(--border)`, background: '#ffffff', color: 'var(--muted-light)', borderRadius: 7, outline: 'none' }}
@@ -1855,6 +1981,13 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                               </button>
                             </div>
                             <ExerciseLinkRow ex={ex} editing={linkEditId === ex.id} onSave={url => saveExerciseLink(ex.id, url)} onCancel={() => setLinkEditId(null)} />
+                            {compactBlocks.has(blockOf(ex)) ? (
+                              <div style={{ marginTop: 3, paddingLeft: 4, fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.7rem', fontWeight: 700, color: 'var(--navy-900)', textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {formatExercisePresc(ex) || <span style={{ color: 'var(--muted-light)', fontWeight: 500 }}>brak rozpiski</span>}
+                                {(ex.bodyweight || ex.individual) && <span style={{ color: '#92600A', fontWeight: 600 }}>{ex.bodyweight ? ' · powt.' : ''}{ex.individual ? ' · indyw.' : ''}</span>}
+                                {ex.coach_comment && <div title={ex.coach_comment} style={{ fontWeight: 500, fontSize: '0.62rem', color: 'var(--muted-light)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ex.coach_comment}</div>}
+                              </div>
+                            ) : (<>
                             {/* Rozpiska dla całej grupy — tabelka serii: powt./tempo, dla ISO czas (+ intensywność przy PIMA) */}
                             <SetPlanTable ex={ex} onChange={(i, field, v) => handlePlanCell(ex.id, i, field, v)} onCommit={() => persistExercise(ex.id)} onAdd={() => addPlanRow(ex.id)} onRemove={i => removePlanRow(ex.id, i)} onRepsUnit={t => setRepsUnit(ex.id, t)} />
                             <div style={{ display: 'flex', gap: 4, rowGap: 4, marginTop: 6, flexWrap: 'wrap' }}>
@@ -1896,6 +2029,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                               )}
                             </div>
                             <ExerciseCommentField ex={ex} onSave={v => saveExerciseComment(ex.id, v)} />
+                            </>)}
                           </th>
                         )
                       })}
@@ -1939,12 +2073,22 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                           // ustawione tej zawodniczce w szczegółach.
                           const repsMode = isMaxReps(resolvePresc(ex, entry).reps) || !!entry?.bodyweight || !!ex.bodyweight
                           const excluded = !!entry?.excluded
+                          const locked = !!entry?.locked
                           return (
-                            <td key={ex.id} className={col.blockStart ? 'gt-block-start' : undefined} style={{ padding: '0.35rem 0.4rem', ...(entry?.exercise_override ? { background: '#F7F2FE' } : {}), ...(absent || excluded ? { opacity: 0.35, pointerEvents: 'none' as const } : {}) }}>
+                            <td key={ex.id} className={col.blockStart ? 'gt-block-start' : undefined} style={{ padding: '0.35rem 0.4rem', ...(entry?.exercise_override ? { background: '#F7F2FE' } : {}), ...(locked ? { background: '#F1F3F7', pointerEvents: 'none' as const } : {}), ...(absent || excluded ? { opacity: 0.35, pointerEvents: 'none' as const } : {}) }}>
+                              {!absent && !excluded && (
+                                <button
+                                  onClick={() => toggleLockEntry(athlete, ex)}
+                                  title={locked ? 'Wpis zablokowany — kliknij, by odblokować' : 'Zablokuj wpis (bez edycji, pomijany przy zmianach zbiorczych)'}
+                                  style={{ pointerEvents: 'auto', float: 'right', width: 16, height: 16, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 5, border: `1px solid ${locked ? 'var(--navy-900)' : 'var(--border)'}`, background: locked ? 'var(--navy-900)' : '#ffffff', color: locked ? 'var(--gold)' : 'var(--muted-light)', marginLeft: 4 }}
+                                >
+                                  {locked ? <Lock size={9} /> : <Unlock size={9} />}
+                                </button>
+                              )}
                               <button
                                 onClick={() => toggleExcludeFromExercise(athlete, ex)}
                                 title={excluded ? 'Przywróć do tego ćwiczenia' : 'Ta zawodniczka nie robi tego ćwiczenia'}
-                                style={{ pointerEvents: 'auto', float: 'right', width: 16, height: 16, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 5, border: `1px solid ${excluded ? '#c23b3b' : 'var(--border)'}`, background: excluded ? '#c23b3b' : '#ffffff', color: excluded ? '#ffffff' : 'var(--muted-light)', marginLeft: 4 }}
+                                style={{ pointerEvents: locked ? 'none' : 'auto', float: 'right', width: 16, height: 16, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 5, border: `1px solid ${excluded ? '#c23b3b' : 'var(--border)'}`, background: excluded ? '#c23b3b' : '#ffffff', color: excluded ? '#ffffff' : 'var(--muted-light)', marginLeft: 4 }}
                               >
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width={10} height={10}><circle cx="12" cy="12" r="9" /><path d="m5 19 14-14" /></svg>
                               </button>
@@ -1978,6 +2122,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                           onBlur={e => saveInlineField(athlete, ex, i, repsMode ? 'reps' : 'weight', e.target.value)}
                                           onKeyDown={e => handleSetNavKeyDown(e, athlete, ex, exIdx, rowIdx, i, repsMode ? 'reps' : 'weight')}
                                           className={`gt-w${cellVal ? ' filled' : ''}`}
+                                          disabled={locked}
                                           data-set-nav="1"
                                           data-ex-idx={exIdx}
                                           data-row-idx={rowIdx}
