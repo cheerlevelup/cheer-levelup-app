@@ -87,14 +87,32 @@ const entryKey = (exerciseId: number, athleteId: number) => `${exerciseId}_${ath
 // Ćwiczenie ↔ test z katalogu po nazwie: „chin-up hold HIMA" zawiera „Chin-up",
 // „push up" to „Push-up" (porównujemy same litery i cyfry). Przy kilku
 // pasujących wygrywa najdłuższa nazwa testu (najbardziej szczegółowa).
-const normName = (s: string) => s.toLowerCase().replace(/[^a-z0-9ąćęłńóśźż]/g, '')
+// Synonimy PL → wspólna forma, liczba mnoga („push-ups") i dopiski w nawiasach
+// („Push-up (max)") nie psują dopasowania.
+const canonName = (s: string) => s.toLowerCase()
+  .replace(/\([^)]*\)/g, ' ')
+  .replace(/pompk[a-ząćęłńóśźż]*/g, 'pushup')
+  .replace(/podciąg[a-ząćęłńóśźż]*/g, 'pullup')
+  .replace(/(\w)[\s-]+(up|ups)\b/g, '$1up')
+  .replace(/ups\b/g, 'up')
+const normName = (s: string) => canonName(s).replace(/[^a-z0-9ąćęłńóśźż]/g, '')
+const TEST_FILLER = new Set(['test', 'max', 'maks', 'maksymalna', 'liczba', 'powt', 'powtorzen', 'powtórzeń', 'sek', 's', 'cm', 'kg', 'amrap', 'na', 'do', 'w', 'z', 'i', 'czas', 'hold'])
 function matchTest(exName: string, catalog: TestDef[]): TestDef | null {
   const n = normName(exName)
   if (!n) return null
   let best: TestDef | null = null
+  let bestScore = 0
   for (const t of catalog) {
     const tn = normName(t.name)
-    if (tn.length >= 4 && n.includes(tn) && (!best || tn.length > normName(best.name).length)) best = t
+    let score = 0
+    if (tn.length >= 4 && n.includes(tn)) score = tn.length + 100
+    else {
+      // Każde istotne słowo nazwy testu musi wystąpić w nazwie ćwiczenia
+      const words = canonName(t.name).split(/[\s/,.]+/).map(w => w.replace(/[^a-z0-9ąćęłńóśźż]/g, ''))
+        .filter(w => w && !TEST_FILLER.has(w) && !/^\d+$/.test(w))
+      if (words.length > 0 && words.some(w => w.length >= 4) && words.every(w => n.includes(w))) score = words.join('').length
+    }
+    if (score > bestScore) { best = t; bestScore = score }
   }
   return best
 }
