@@ -11,7 +11,7 @@ import { Button } from '@/components/coach/ui'
 import { loadPdf, pl, drawHeaderBar, drawFooter, TABLE_STYLES } from '@/lib/groupPdf'
 
 type Group = { id: number; name: string }
-type Training = { id: number; group_id: number; training_date: string; absent_athlete_ids?: number[] | null; individual_athlete_ids?: number[] | null }
+type Training = { id: number; group_id: number; training_date: string; absent_athlete_ids?: number[] | null; individual_athlete_ids?: number[] | null; notes?: string | null }
 type Athlete = { id: number; full_name: string; birth_year?: number | null }
 type Exercise = {
   id: number
@@ -1495,6 +1495,20 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     })
   }
 
+  // Notatki do całego treningu — zapis przy wyjściu z pola
+  const [trainingNotes, setTrainingNotes] = useState(training.notes || '')
+  const savedNotesRef = useRef(training.notes || '')
+  async function saveTrainingNotes() {
+    const val = trainingNotes.trim()
+    if (val === savedNotesRef.current.trim()) return
+    const { error: err } = await supabase.from('group_trainings').update({ notes: val || null }).eq('id', training.id)
+    if (err) {
+      setError(/'notes'/.test(err.message) ? 'Aby zapisywać notatki do treningu, uruchom migrację 202611050002 (kolumna notes).' : err.message)
+      return
+    }
+    savedNotesRef.current = val
+  }
+
   async function handleDateChange(newDate: string) {
     if (!newDate) return
     const prev = trainingDate
@@ -1909,6 +1923,15 @@ export default function GroupTrainingClient({ group, training, athletes, initial
             W nagłówku kolumny: serie, powtórzenia i tempo dla całej grupy. Przeciągnij ⠿, by zmienić kolejność. „BW" wpisuje 0 (masa ciała) w ciężar wszystkim, „P" przełącza kolumnę na wpisywanie powtórzeń zamiast kg. W wierszu zawodniczki wpisujesz ciężar, „+ ból"/„+ notatka" dają szybki wpis bez ✎. Kliknij numer serii (S1, S2…), by oznaczyć „nie zrobiła", a ✕ przy nazwisku wykreśla nieobecną. W polu z ciężarem: ← / → przechodzi między seriami (i ćwiczeniami), Enter — do tej samej serii u zawodniczki poniżej. Mały ⊘ przy komórce wyklucza jedną zawodniczkę z tego jednego ćwiczenia. Ikona osoby przy nazwisku przenosi ją do odrębnego planu indywidualnego. Ćwiczenia grupujesz w bloki (A, B, C…): „+ Ćwiczenie" dodaje do ostatniego bloku, „+ Nowy blok" zaczyna kolejny, a « przy nazwie bloku zwija go w wąski pasek (» rozwija).
           </p>
         )}
+
+        <textarea
+          value={trainingNotes}
+          onChange={e => setTrainingNotes(e.target.value)}
+          onBlur={saveTrainingNotes}
+          placeholder="📝 Notatki do treningu — najważniejsze rzeczy (kto z kontuzją, na co uważać, cel dnia...)"
+          rows={Math.min(Math.max(trainingNotes.split('\n').length, 1), 6)}
+          style={{ display: 'block', width: '100%', maxWidth: 900, resize: 'vertical', border: `1.5px solid ${trainingNotes.trim() ? 'var(--gold)' : 'var(--border)'}`, borderRadius: 10, background: trainingNotes.trim() ? '#FFFBEB' : '#ffffff', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.82rem', fontWeight: 500, color: 'var(--navy-900)', padding: '0.5rem 0.7rem', outline: 'none', lineHeight: 1.4, flexShrink: 0 }}
+        />
 
         {error && (
           <div style={{ padding: '0.75rem', background: '#fdedec', border: '1.5px solid #c23b3b', borderRadius: 10, color: '#c23b3b', fontWeight: 700, fontSize: '0.86rem', fontFamily: 'var(--font-inter), sans-serif' }}>
