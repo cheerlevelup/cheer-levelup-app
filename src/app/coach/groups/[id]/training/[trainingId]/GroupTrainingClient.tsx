@@ -75,9 +75,30 @@ interface Props {
   athletes: Athlete[]
   initialExercises: Exercise[]
   initialEntries: Entry[]
+  testCatalog?: TestDef[]
+  testResults?: TestResult[]
 }
 
+type TestDef = { id: number; name: string; unit: string }
+type TestResult = { id: number; athlete_id: number; test_catalog_id: number | null; value: number | null; test_date: string | null; missing: boolean }
+
 const entryKey = (exerciseId: number, athleteId: number) => `${exerciseId}_${athleteId}`
+
+// Ćwiczenie ↔ test z katalogu po nazwie: „chin-up hold HIMA" zawiera „Chin-up",
+// „push up" to „Push-up" (porównujemy same litery i cyfry). Przy kilku
+// pasujących wygrywa najdłuższa nazwa testu (najbardziej szczegółowa).
+const normName = (s: string) => s.toLowerCase().replace(/[^a-z0-9ąćęłńóśźż]/g, '')
+function matchTest(exName: string, catalog: TestDef[]): TestDef | null {
+  const n = normName(exName)
+  if (!n) return null
+  let best: TestDef | null = null
+  for (const t of catalog) {
+    const tn = normName(t.name)
+    if (tn.length >= 4 && n.includes(tn) && (!best || tn.length > normName(best.name).length)) best = t
+  }
+  return best
+}
+const shortDate = (d: string | null) => (d ? `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(2, 4)}` : '')
 
 // Mały kwadratowy przycisk-ikonka w rzędzie serii (dodaj/ból/notatka/szczegóły) —
 // jeden spójny styl, kolorowany tylko gdy dana rzecz jest aktywna.
@@ -637,7 +658,41 @@ function CellModal({ athlete, exercise, entry, training, onClose, onSaved }: {
   )
 }
 
-export default function GroupTrainingClient({ group, training, athletes, initialExercises, initialEntries }: Props) {
+export default function GroupTrainingClient({ group, training, athletes, initialExercises, initialEntries, testCatalog = [], testResults = [] }: Props) {
+  // Najnowszy wynik (z wartością) per test + zawodniczka: klucz `${testId}_${athleteId}`
+  const latestTest = useMemo(() => {
+    const m = new Map<string, TestResult>()
+    for (const r of testResults) {
+      if (r.missing || r.value == null || r.test_catalog_id == null) continue
+      const k = `${r.test_catalog_id}_${r.athlete_id}`
+      const prev = m.get(k)
+      const newer = !prev || (r.test_date || '') > (prev.test_date || '') || ((r.test_date || '') === (prev.test_date || '') && r.id > prev.id)
+      if (newer) m.set(k, r)
+    }
+    return m
+  }, [testResults])
+  // Test pasujący do ćwiczenia (po nazwie) — liczony raz na nazwę
+  const testForExercise = useMemo(() => {
+    const cache = new Map<string, TestDef | null>()
+    return (name: string) => {
+      if (!cache.has(name)) cache.set(name, matchTest(name, testCatalog))
+      return cache.get(name) ?? null
+    }
+  }, [testCatalog])
+  // Linijka „🏁 Chin-up: 29 sek. (12.10.26)" pod komórką zawodniczki
+  function testLine(ex: Exercise, athleteId: number) {
+    const test = testForExercise(ex.name || '')
+    if (!test) return null
+    const r = latestTest.get(`${test.id}_${athleteId}`)
+    return (
+      <div
+        title={r ? `Najnowszy wynik testu „${test.name}”${r.test_date ? ` z ${shortDate(r.test_date)}` : ''}` : `Brak wyniku testu „${test.name}”`}
+        style={{ marginTop: 3, fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.64rem', fontWeight: 700, color: r ? '#0f766e' : 'var(--muted-light)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 260 }}
+      >
+        🏁 {test.name}: {r ? <>{String(r.value).replace('.', ',')} {test.unit}{r.test_date && <span style={{ fontWeight: 500, color: 'var(--muted-light)' }}> ({shortDate(r.test_date)})</span>}</> : 'brak wyniku'}
+      </div>
+    )
+  }
   const router = useRouter()
   const { sidebarCollapsed, setSidebarCollapsed } = usePageMeta()
   const supabase = createClient()
@@ -2204,6 +2259,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                         💬 {entry.comment}
                                       </button>
                                     )}
+                                    {testLine(ex, athlete.id)}
                                   </>
                                 )
                               })()}
@@ -2416,6 +2472,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                         💬 {entry.comment}
                                       </button>
                                     )}
+                                    {testLine(ex, person.id)}
                                   </>
                                 )
                               })()}

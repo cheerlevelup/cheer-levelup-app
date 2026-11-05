@@ -76,6 +76,17 @@ export default async function GroupTrainingPage({ params }: Props) {
     .select('*')
     .eq('training_id', tId)
 
+  // Wyniki testów (zakładka Testy) — w komórce ćwiczenia o nazwie pasującej do
+  // testu (np. „chin-up hold" ↔ „Chin-up") pokazujemy najnowszy wynik zawodniczki.
+  const { data: testCatalog } = await supabase
+    .from('test_catalog')
+    .select('id, name, unit')
+    .eq('is_archived', false)
+  const athleteIds = athletes.map((a: any) => a.id)
+  const { data: testResults } = athleteIds.length > 0
+    ? await supabase.from('benchmark_tests').select('*').in('athlete_id', athleteIds)
+    : { data: [] }
+
   return (
     <GroupTrainingClient
       group={group}
@@ -83,6 +94,11 @@ export default async function GroupTrainingPage({ params }: Props) {
       athletes={athletes || []}
       initialExercises={exercises || []}
       initialEntries={entries || []}
+      testCatalog={testCatalog || []}
+      testResults={(testResults || []).map((r: any) => ({
+        athlete_id: r.athlete_id, test_catalog_id: r.test_catalog_id, value: r.value,
+        test_date: r.test_date, missing: !!r.missing, id: r.id,
+      }))}
     />
   )
 }
