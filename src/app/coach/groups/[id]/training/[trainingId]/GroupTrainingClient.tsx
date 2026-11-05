@@ -47,7 +47,7 @@ type Exercise = {
   reps_sets?: (string | null)[] | null
   tempo_sets?: (string | null)[] | null
 }
-type SetRow = { reps?: string; tempo?: string; weight?: string; skipped?: boolean }
+type SetRow = { reps?: string; tempo?: string; weight?: string; skipped?: boolean; seconds?: string }
 type Entry = {
   id?: number
   training_id: number
@@ -484,7 +484,7 @@ function CellModal({ athlete, exercise, entry, training, onClose, onSaved }: {
 
   async function handleSave() {
     setSaving(true); setError('')
-    const cleanSets = sets.filter(s => (s.reps || '').trim() || (s.tempo || '').trim() || (s.weight || '').trim() || s.skipped)
+    const cleanSets = sets.filter(s => (s.reps || '').trim() || (s.tempo || '').trim() || (s.weight || '').trim() || (s.seconds || '').trim() || s.skipped)
     const payload = {
       training_id: training.id,
       exercise_id: exercise.id,
@@ -1060,7 +1060,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
     const next = changePlanRows(exerciseId, rows => rows.filter((_, j) => j !== idx))
     if (!ex || !next) return
     const isEmpty = (s: SetRow, repsMode: boolean) => {
-      if (s.skipped) return false
+      if (s.skipped || (s.seconds || '').trim()) return false
       const v = ((repsMode ? s.reps : s.weight) || '').trim()
       return v === '' || v === '0' || (repsMode && isMaxReps(v))
     }
@@ -1252,7 +1252,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
   }
 
   // Szybki zapis wartości wpisanej w komórce tabeli (ciężar albo wykonane powtórzenia)
-  async function saveInlineField(athlete: Athlete, ex: Exercise, idx: number, field: 'weight' | 'reps', value: string) {
+  async function saveInlineField(athlete: Athlete, ex: Exercise, idx: number, field: 'weight' | 'reps' | 'seconds', value: string) {
     const key = entryKey(ex.id, athlete.id)
     const current = entryMap.get(key)
     const presc = resolvePresc(ex, current, idx)
@@ -1513,6 +1513,9 @@ export default function GroupTrainingClient({ group, training, athletes, initial
       : (s.weight || '-'))
     const filled = vals.some(v => v !== '-' && v !== 'x')
     const lines = [vals.join(' / ') + (filled ? (repsMode ? ' powt.' : ' kg') : '')]
+    // Własny czas serii (ISO + Indywidualnie)
+    const times = effectiveSets(ex, entry).map(s => (s.seconds || '').trim())
+    if (ex.iso && times.some(Boolean)) lines.push(`czas: ${times.map(t => t || '-').join(' / ')} s`)
     if (entry?.exercise_override) lines.push(`> ${entry.exercise_override}`)
     if (entry?.pain || entry?.pain_vas != null) lines.push(`(!) bol${entry.pain_vas != null ? ` ${entry.pain_vas}/10` : ''}${entry.pain_comment ? `: ${entry.pain_comment}` : ''}`)
     if (entry?.comment) lines.push(`"${entry.comment}"`)
@@ -2171,15 +2174,33 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                   // z rozpiski traktujemy jak puste (jeszcze nie wpisano wyniku).
                                   const repsPerf = s.reps && !isMaxReps(s.reps) ? s.reps : ''
                                   const cellVal = repsMode ? repsPerf : (s.weight || '')
+                                  // ISO + Indywidualnie: każda zawodniczka ma własny czas serii
+                                  const ownTime = !!ex.iso && !!ex.individual
+                                  const planTime = isoSetTimes(ex)[i]
                                   return (
-                                    <div key={`${ex.id}_${athlete.id}_${i}_${s.skipped ? 'x' : cellVal}`}>
+                                    <div key={`${ex.id}_${athlete.id}_${i}_${s.skipped ? 'x' : cellVal}_${s.seconds ?? ''}`}>
                                       <button
                                         onClick={() => toggleSkipInline(athlete, ex, i)}
                                         title={s.skipped ? 'Seria nie zrobiona — kliknij, by cofnąć' : 'Oznacz: nie zrobiła tej serii'}
                                         style={{ display: 'block', width: '100%', border: 'none', background: 'none', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.5rem', color: s.skipped ? '#c23b3b' : 'var(--muted-light)', textAlign: 'center', marginBottom: 1, letterSpacing: '0.03em', textDecoration: s.skipped ? 'line-through' : 'none', padding: 0 }}
                                       >
-                                        S{i + 1}{ex.iso && isoSetTimes(ex)[i] != null ? ` · ${isoSetTimes(ex)[i]}s` : ''}
+                                        S{i + 1}{ex.iso && !ownTime && planTime != null ? ` · ${planTime}s` : ''}
                                       </button>
+                                      {ownTime && !s.skipped && (
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, marginBottom: 2 }}>
+                                          <input
+                                            defaultValue={s.seconds ?? ''}
+                                            placeholder={planTime != null ? String(planTime) : 'czas'}
+                                            inputMode="numeric"
+                                            disabled={locked}
+                                            title="Czas tej serii dla tej zawodniczki (sekundy)"
+                                            onBlur={e => saveInlineField(athlete, ex, i, 'seconds', e.target.value)}
+                                            onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                                            style={{ width: 30, border: `1px solid ${s.seconds ? 'var(--navy-900)' : 'var(--border)'}`, borderRadius: 5, background: s.seconds ? '#eef2f8' : '#ffffff', fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.62rem', fontWeight: 700, color: 'var(--navy-900)', textAlign: 'center', padding: '1px 0', outline: 'none' }}
+                                          />
+                                          <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontSize: '0.55rem', color: 'var(--muted-light)' }}>s</span>
+                                        </div>
+                                      )}
                                       {s.skipped ? (
                                         <button
                                           onClick={() => toggleSkipInline(athlete, ex, i)}
