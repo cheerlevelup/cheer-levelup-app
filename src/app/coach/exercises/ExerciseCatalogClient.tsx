@@ -107,21 +107,21 @@ export default function ExerciseCatalogClient({ initialItems, missingTable }: { 
     <>
       <SetPageMeta title="Katalog ćwiczeń" />
       <div className="coach-content">
-        <Card>
-          <form onSubmit={handleAdd} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, alignItems: 'end' }}>
+        <Card style={{ padding: 16 }}>
+          <form onSubmit={handleAdd} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, alignItems: 'end' }}>
             <Field label="Nazwa ćwiczenia">
               <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="np. Bulgarian split squat" style={inputStyle} />
             </Field>
             <Field label="Link do filmiku">
               <input value={newLink} onChange={e => setNewLink(e.target.value)} placeholder="https://youtube.com/..." style={inputStyle} />
             </Field>
-            <div style={{ marginBottom: 10 }}>
-              <Button type="submit" variant="gold" disabled={saving || !cleanName(newName)}>
+            <div>
+              <Button type="submit" variant="gold" disabled={saving || !cleanName(newName)} style={{ width: '100%', justifyContent: 'center', height: 40 }}>
                 <Plus size={14} /> Dodaj do katalogu
               </Button>
             </div>
           </form>
-          <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+          <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 10 }}>
             Gdy dodasz do treningu lub planu ćwiczenie o tej samej nazwie, link do filmiku doda się automatycznie.
           </div>
         </Card>
@@ -133,16 +133,16 @@ export default function ExerciseCatalogClient({ initialItems, missingTable }: { 
         )}
 
         <div style={{ position: 'relative', margin: '14px 0 10px' }}>
-          <Search size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted-light)' }} />
+          <Search size={15} style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted-light)' }} />
           <input
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="Szukaj ćwiczenia…"
-            style={{ width: '100%', padding: '10px 12px 10px 34px', borderRadius: 10, border: '1.5px solid var(--border)', background: '#fff', fontSize: 14, outline: 'none' }}
+            style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px 10px 36px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--card)', fontSize: 14, outline: 'none' }}
           />
         </div>
 
-        <Card>
+        <Card style={{ padding: '8px 16px' }}>
           {filtered.length === 0 ? (
             <div className="coach-empty-list">{items.length === 0 ? 'Katalog jest pusty — dodaj pierwsze ćwiczenie powyżej.' : 'Brak ćwiczeń pasujących do wyszukiwania.'}</div>
           ) : (
