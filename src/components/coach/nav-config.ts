@@ -1,4 +1,4 @@
-import { LayoutGrid, Users, Layers, Calendar, FileText, Ruler, LucideIcon } from 'lucide-react'
+import { LayoutGrid, Users, Layers, Calendar, FileText, Ruler, Dumbbell, LucideIcon } from 'lucide-react'
 
 export interface NavItem {
   href: string
@@ -12,6 +12,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/coach/athletes', label: 'Zawodniczki', icon: Users },
   { href: '/coach/plans', label: 'Plany', icon: FileText },
   { href: '/coach/trainings', label: 'Treningi', icon: Calendar },
+  { href: '/coach/exercises', label: 'Katalog ćwiczeń', icon: Dumbbell },
   { href: '/coach/tests', label: 'Testy', icon: Ruler },
 ]
 

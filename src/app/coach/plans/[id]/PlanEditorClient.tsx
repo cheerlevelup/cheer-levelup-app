@@ -9,6 +9,7 @@ import PlanTableView, { type ExercisePatch } from './PlanTableView'
 import PlanWellnessConfig from '@/components/PlanWellnessConfig'
 import { SetPageMeta, usePageMeta } from '@/components/coach/PageMetaContext'
 import { Modal, Button, Field } from '@/components/coach/ui'
+import { useExerciseCatalog, linkAfterRename, ExerciseCatalogDatalist, EXERCISE_CATALOG_LIST_ID } from '@/lib/exerciseCatalog'
 import { insertExercisesWithVariants, sortWithVariants, variantLabels } from '@/lib/exerciseVariants'
 import { moveExercise, moveBlock } from '@/lib/planReorder'
 
@@ -251,12 +252,14 @@ function exercisePayloadWithoutIso<T extends { iso?: boolean; iso_type?: string 
 function ExerciseEditForm({
   exercise,
   exercises,
+  linkFor,
   onSave,
   onDelete,
   onClose,
 }: {
   exercise: BlockExercise
   exercises: ExerciseLibraryItem[]
+  linkFor: (name: string | null | undefined) => string | null
   onSave: (data: BlockExercise) => void
   onDelete: () => void
   onClose: () => void
@@ -453,7 +456,12 @@ function ExerciseEditForm({
 
       {!useCustomName ? (
         <Field label="Ćwiczenie">
-          <select value={exerciseId} onChange={e => setExerciseId(e.target.value)}>
+          <select value={exerciseId} onChange={e => {
+            const nameOf = (id: string) => exercises.find(x => x.id.toString() === id)?.name || ''
+            const l = linkAfterRename(linkFor, nameOf(exerciseId), nameOf(e.target.value), exerciseUrl.trim() || null)
+            if (l !== undefined) setExerciseUrl(l || '')
+            setExerciseId(e.target.value)
+          }}>
             <option value="">Wybierz ćwiczenie</option>
             {exercises.map(ex => (
               <option key={ex.id} value={ex.id}>{formatExerciseName(ex.name)}{ex.category ? ` (${ex.category})` : ''}</option>
@@ -462,7 +470,11 @@ function ExerciseEditForm({
         </Field>
       ) : (
         <Field label="Nazwa ćwiczenia">
-          <input value={exerciseCode} onChange={e => setExerciseCode(e.target.value)} placeholder="np. rdl, tgu, chest press" />
+          <input list={EXERCISE_CATALOG_LIST_ID} value={exerciseCode} onChange={e => {
+            const l = linkAfterRename(linkFor, exerciseCode, e.target.value, exerciseUrl.trim() || null)
+            if (l !== undefined) setExerciseUrl(l || '')
+            setExerciseCode(e.target.value)
+          }} placeholder="np. rdl, tgu, chest press" />
         </Field>
       )}
 
@@ -818,6 +830,7 @@ function MoveModal({
 export default function PlanEditorClient({ plan, athletes = [], weeks, days, blocks, exercises, allPlans, allWeeks, allDays, allBlocks }: Props) {
   const router = useRouter()
   const supabase = createClient()
+  const catalog = useExerciseCatalog()
   // Plan grupy samodzielnej wraca do zakładki Plan tej grupy, ogólny — do listy planów
   const backHref = plan.group_id ? `/coach/groups/${plan.group_id}/plan` : '/coach/plans'
   const { sidebarCollapsed, setSidebarCollapsed } = usePageMeta()
@@ -1149,6 +1162,11 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
 
   // Edycja komórki tabeli — od razu w stanie i w bazie (bez czekania na „Zapisz plan")
   async function updateExercise(blockId: number, exercise: BlockExercise, patch: ExercisePatch) {
+    // zmiana nazwy → link do filmiku z katalogu ćwiczeń (jeśli nazwa się zgadza)
+    if ('exercise_code' in patch && !('exercise_url' in patch)) {
+      const l = linkAfterRename(catalog.linkFor, exercise.exercise?.name || exercise.exercise_code, patch.exercise_code, exercise.exercise_url ?? null)
+      if (l !== undefined) patch = { ...patch, exercise_url: l }
+    }
     const apply = (list: Block[]) => list.map(block => block.id !== blockId ? block : {
       ...block,
       workout_block_exercises: (block.workout_block_exercises || []).map(item => item.id === exercise.id ? { ...item, ...patch } : item),
@@ -1366,6 +1384,7 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
 
   return (
     <>
+      <ExerciseCatalogDatalist items={catalog.items} />
       <SetPageMeta title={plan.name} backHref={backHref} backLabel={plan.group_id ? "Plan grupy" : "Plany"} sidebarCollapsible />
 
       <div className="coach-content">
@@ -1454,6 +1473,7 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
               key={editingExercise.id ?? `new-${editingExercise.block_id}`}
               exercise={editingExercise}
               exercises={exercises}
+              linkFor={catalog.linkFor}
               onSave={saved => {
                 handleExerciseSave(editingExercise.block_id, saved)
                 // nowy wariant — od razu wybór, kto go robi

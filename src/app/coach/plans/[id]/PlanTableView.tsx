@@ -5,6 +5,7 @@ import type { CSSProperties } from 'react'
 import { sortWithVariants, variantLabels } from '@/lib/exerciseVariants'
 import { fmtRange, isoPowtLines, repsLines, eccTempoLines } from '@/lib/coach/planFormat'
 import { buildPlanPdf, loadPdfFonts } from '@/lib/coach/planPdf'
+import { EXERCISE_CATALOG_LIST_ID } from '@/lib/exerciseCatalog'
 
 type WarmupSet = { reps?: string; weight_kg?: string; note?: string }
 type WorkSet = { reps?: string; weight_kg?: string; tempo?: string; rir?: string; seconds?: string; intensity?: string; rest?: string; ecc?: string; hold?: string }
@@ -46,8 +47,9 @@ function fmtName(s: string) { return s.replace(/-/g, ' ') }
 function blockLabel(i: number) { return String.fromCharCode(65 + i) }
 
 // ─── Inline editable cell ─────────────────────────────────────────────────────
-function EditCell({ value, onCommit, align = 'center', placeholder, renderDisplay }: {
+function EditCell({ value, onCommit, align = 'center', placeholder, renderDisplay, list }: {
   value: string; onCommit: (v: string) => void; align?: 'left' | 'center'
+  list?: string
   placeholder?: string; renderDisplay?: (val: string) => React.ReactNode
 }) {
   const [editing, setEditing] = useState(false)
@@ -57,7 +59,7 @@ function EditCell({ value, onCommit, align = 'center', placeholder, renderDispla
   function commit() { setEditing(false); if (draft !== value) onCommit(draft) }
 
   if (editing) return (
-    <input autoFocus value={draft}
+    <input autoFocus value={draft} list={list}
       onChange={e => setDraft(e.target.value)}
       onBlur={commit}
       onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false) }}
@@ -622,7 +624,7 @@ export default function PlanTableView(props: Props) {
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                                           <div style={{ flex: 1, minWidth: 0 }}>
                                             {/* wpisana nazwa = własna nazwa (odpina od biblioteki); zmiana z biblioteki — przez ✏️ */}
-                                            <EditCell value={name} onCommit={v => onUpdateExercise(block.id, ex, { exercise_code: v.trim() || name, exercise_id: null, exercise: null })} align="left" placeholder="nazwa" />
+                                            <EditCell value={name} onCommit={v => onUpdateExercise(block.id, ex, { exercise_code: v.trim() || name, exercise_id: null, exercise: null })} align="left" placeholder="nazwa" list={EXERCISE_CATALOG_LIST_ID} />
                                           </div>
                                           {ex.ecc && !ex.iso && (
                                             <span title="Ćwiczenie ekscentryczne" style={{ flexShrink: 0, background: '#7c2d12', color: '#fed7aa', fontFamily: 'var(--font-inter),sans-serif', fontSize: 9, fontWeight: 700, borderRadius: 4, padding: '1px 5px', letterSpacing: '.02em' }}>

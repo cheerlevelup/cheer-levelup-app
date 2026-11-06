@@ -9,6 +9,7 @@ import { CheckSquare, MessageCircle, Info, AlertTriangle, Pencil, Plus, Check, X
 import { SetPageMeta, usePageMeta } from '@/components/coach/PageMetaContext'
 import { Button } from '@/components/coach/ui'
 import { loadPdf, pl, drawHeaderBar, drawFooter, TABLE_STYLES } from '@/lib/groupPdf'
+import { useExerciseCatalog, linkAfterRename, ExerciseCatalogDatalist, EXERCISE_CATALOG_LIST_ID } from '@/lib/exerciseCatalog'
 
 type Group = { id: number; name: string }
 type Training = { id: number; group_id: number; training_date: string; absent_athlete_ids?: number[] | null; individual_athlete_ids?: number[] | null; notes?: string | null }
@@ -763,6 +764,10 @@ export default function GroupTrainingClient({ group, training, athletes, initial
   const [copying, setCopying] = useState(false)
   const [focusExerciseId, setFocusExerciseId] = useState<number | null>(null)
   const nameInputRefs = useRef<Map<number, HTMLInputElement>>(new Map())
+  // Katalog ćwiczeń — podpowiedzi nazw i automatyczny link do filmiku
+  const catalog = useExerciseCatalog()
+  // Ostatnio zapisane nazwy — do wykrycia zmiany nazwy przy zapisie
+  const savedNames = useRef<Map<number, string>>(new Map(initialExercises.map(e => [e.id, e.name || ''])))
   const boardWrapRef = useRef<HTMLDivElement>(null)
   // Najnowsze serie per komórka — chroni przed zgubieniem ciężaru przy szybkim
   // przechodzeniu między polami (zapis async może nie zdążyć przed kolejnym blur)
@@ -1111,7 +1116,12 @@ export default function GroupTrainingClient({ group, training, athletes, initial
   async function persistExercise(exerciseId: number, override?: Exercise) {
     const ex = override ?? exercises.find(e => e.id === exerciseId)
     if (!ex) return
+    const prevName = savedNames.current.get(ex.id) ?? ''
+    const newLink = linkAfterRename(catalog.linkFor, prevName, ex.name, ex.link_url)
+    savedNames.current.set(ex.id, ex.name.trim())
+    if (newLink !== undefined) setExercises(p => p.map(e => e.id === ex.id ? { ...e, link_url: newLink } : e))
     const update: Record<string, any> = {
+      ...(newLink !== undefined ? { link_url: newLink } : {}),
       name: ex.name.trim(), sets_planned: ex.sets_planned ?? null, reps: ex.reps?.trim() || null, tempo: ex.tempo?.trim() || null,
       iso_seconds: ex.iso_seconds ?? null, iso_intensity: ex.iso_intensity ?? null,
     }
@@ -1933,6 +1943,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
         .gt-ex-header:hover .gt-ex-drag { opacity: 1; }
       `}</style>
       <SetPageMeta title="Trening" sidebarCollapsible />
+      <ExerciseCatalogDatalist items={catalog.items} />
       <div className="coach-content" style={{ minHeight: '100%' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -2132,6 +2143,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                               <input
                                 ref={el => { if (el) nameInputRefs.current.set(ex.id, el); else nameInputRefs.current.delete(ex.id) }}
                                 value={ex.name}
+                                list={EXERCISE_CATALOG_LIST_ID}
                                 onChange={e => handleExerciseField(ex.id, 'name', e.target.value)}
                                 onBlur={e => {
                                   e.target.style.background = 'transparent'
@@ -2544,6 +2556,7 @@ export default function GroupTrainingClient({ group, training, athletes, initial
                                 <input
                                   ref={el => { if (el) nameInputRefs.current.set(ex.id, el); else nameInputRefs.current.delete(ex.id) }}
                                   value={ex.name}
+                                  list={EXERCISE_CATALOG_LIST_ID}
                                   onChange={e => handleExerciseField(ex.id, 'name', e.target.value)}
                                   onBlur={() => persistExercise(ex.id)}
                                   onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
