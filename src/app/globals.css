@@ -71,3 +71,12 @@ button {
 input, textarea, select {
   touch-action: manipulation;
 }
+
+/* iPhone (Safari) przybliża ekran przy wejściu w pole z czcionką < 16px —
+   na dotykowych ekranach wszystkie pola mają co najmniej 16px (przybliżanie
+   palcami dalej działa, w przeciwieństwie do maximum-scale=1). */
+@media (hover: none) and (pointer: coarse) {
+  input, textarea, select {
+    font-size: max(16px, 1em) !important;
+  }
+}

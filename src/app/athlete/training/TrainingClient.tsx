@@ -13,7 +13,7 @@ import { fmtRange, isoPowtLines, type PlanWorkSet } from '@/lib/coach/planFormat
 const isBW = (v: unknown) => typeof v === 'string' && /^\s*bw\s*$/i.test(v)
 const isNumericWeight = (v: string) => /^[\d.,\s/–-]+$/.test(v)
 // wspólny wygląd pól i przycisku „zrobione" w wierszu serii
-const setInput = (done: boolean): React.CSSProperties => ({ width: '100%', height: 34, padding: '0 6px', border: `1px solid ${done ? '#9fdcbc' : '#d9dfe9'}`, borderRadius: 8, fontFamily: sans, fontSize: '0.95rem', fontWeight: 600, color: C.navy, background: '#fff', outline: 'none', textAlign: 'center' })
+const setInput = (done: boolean): React.CSSProperties => ({ width: '100%', height: 34, padding: '0 6px', border: `1px solid ${done ? '#9fdcbc' : '#d9dfe9'}`, borderRadius: 8, fontFamily: sans, fontSize: 16, fontWeight: 600, color: C.navy, background: '#fff', outline: 'none', textAlign: 'center' })
 const doneBtn = (done: boolean): React.CSSProperties => ({ width: 34, height: 34, borderRadius: 8, background: done ? C.green : '#fff', border: `1.5px solid ${done ? C.green : '#cfd6e2'}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 0.15s' })
 
 // ─── STAŁE ────────────────────────────────────────────────────────────────────
