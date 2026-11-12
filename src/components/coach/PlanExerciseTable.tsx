@@ -9,6 +9,13 @@ export type ActualSet = { num: number; weight: number | null; reps: number | nul
 export type ActualEntry = { sets: ActualSet[]; inProgress?: boolean }
 export type PainEntry = { vas: number; comment: string | null }
 
+// nagłówek kolumny — przyklejony u góry tabeli przy przewijaniu
+const TH: React.CSSProperties = {
+  position: 'sticky', top: 0, zIndex: 2, background: 'var(--navy-900)', padding: '4px 6px', textAlign: 'center',
+  fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.56rem', color: 'var(--gold)', letterSpacing: '0.04em',
+  textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: '1.5px solid var(--navy-600)', verticalAlign: 'bottom',
+}
+
 export default function PlanExerciseTable({ rows, athletes, overrides, actual, uniqueDays, painByAthleteDay, painByAthleteEx, absentByDay }: {
   rows: { exId: number; name: string; block: string; day: string; dayId: number; sets: number; reps: string; tempo: string; weight: number | null }[]
   athletes: any[]
@@ -66,17 +73,18 @@ export default function PlanExerciseTable({ rows, athletes, overrides, actual, u
         <div style={{ padding: '1.5rem', textAlign: 'center', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.72rem', color: 'var(--muted-light)' }}>Brak ćwiczeń w tym treningu.</div>
       )}
       {filtered.length > 0 && (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ borderCollapse: 'collapse', width: 'max-content' }}>
+        // kompaktowo: wpisy serii w jednej linii, nagłówek przyklejony przy przewijaniu
+        <div style={{ overflow: 'auto', maxHeight: 'calc(100vh - 200px)' }}>
+          <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: 'max-content' }}>
             <thead>
-              <tr style={{ background: 'var(--navy-900)' }}>
-                {/* sticky first col: athlete name */}
-                <th style={{ padding: '0.6rem 1rem', textAlign: 'left', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.58rem', color: 'var(--gold)', letterSpacing: '0.07em', textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: `1.5px solid var(--navy-600)`, position: 'sticky', left: 0, zIndex: 2, background: 'var(--navy-900)' }}>Zawodniczka</th>
+              <tr>
+                <th style={{ ...TH, textAlign: 'left', left: 0, zIndex: 3, padding: '5px 10px' }}>Zawodniczka</th>
                 {filtered.map((row, ci) => (
-                  <th key={`${row.exId}-${ci}`} style={{ padding: '0.5rem 0.65rem', textAlign: 'center', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.56rem', color: 'var(--gold)', letterSpacing: '0.05em', textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: `1.5px solid var(--navy-600)`, minWidth: 100, verticalAlign: 'bottom' }}>
-                    <div style={{ color: '#fff', fontWeight: 700, marginBottom: 2 }}>{row.name}</div>
-                    <div style={{ color: 'var(--muted-light)', fontSize: '0.52rem' }}>{row.block}</div>
-                    <div style={{ color: 'var(--muted-light)', fontSize: '0.52rem' }}>{row.sets}×{row.reps || '—'}{row.weight !== null ? ` · ${row.weight}kg` : ''}{row.tempo ? ` · ${row.tempo}` : ''}</div>
+                  <th key={`${row.exId}-${ci}`} title={`${row.block} · ${row.name}`} style={{ ...TH, minWidth: 70, maxWidth: 170 }}>
+                    <div style={{ color: '#fff', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.name}</div>
+                    <div style={{ color: 'var(--muted-light)', fontSize: '0.5rem', fontWeight: 600, textTransform: 'none', letterSpacing: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {row.sets}×{row.reps || '—'}{row.weight !== null ? ` · ${row.weight}kg` : ''}{row.tempo ? ` · ${row.tempo}` : ''}
+                    </div>
                   </th>
                 ))}
               </tr>
@@ -86,13 +94,13 @@ export default function PlanExerciseTable({ rows, athletes, overrides, actual, u
                 const rowBg = ri % 2 === 0 ? '#fff' : '#FAFBFC'
                 return (
                   <tr key={a.id} style={{ background: rowBg }}>
-                    <td style={{ padding: '0.6rem 1rem', fontWeight: 700, color: 'var(--navy-900)', borderBottom: `1px solid var(--border)`, fontSize: '0.88rem', whiteSpace: 'nowrap', position: 'sticky', left: 0, zIndex: 1, background: rowBg }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <td style={{ padding: '3px 10px', fontWeight: 700, color: 'var(--navy-900)', borderBottom: `1px solid var(--border)`, fontSize: '0.74rem', whiteSpace: 'nowrap', position: 'sticky', left: 0, zIndex: 1, background: rowBg }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                         {(absentByDay?.[selDayId] || []).includes(a.id)
                           ? <span style={{ textDecoration: 'line-through', color: 'var(--muted-light)' }}>{a.full_name}</span>
                           : a.full_name}
                         {painByAthleteDay?.[a.id]?.has(selDayId) && (
-                          <span title="Zawodniczka zgłosiła ból w tym treningu" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, borderRadius: '50%', background: '#EF4444', color: '#fff', fontSize: '0.6rem', fontWeight: 900, flexShrink: 0 }}>!</span>
+                          <span title="Zawodniczka zgłosiła ból w tym treningu" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, borderRadius: '50%', background: '#EF4444', color: '#fff', fontSize: '0.52rem', fontWeight: 900, flexShrink: 0 }}>!</span>
                         )}
                       </div>
                     </td>
@@ -104,12 +112,9 @@ export default function PlanExerciseTable({ rows, athletes, overrides, actual, u
                       const planR = effectiveReps(row.exId, a.id, row.reps)
                       const planT = effectiveTempo(row.exId, a.id, row.tempo)
                       const absent = (absentByDay?.[row.dayId] || []).includes(a.id)
+                      const td: React.CSSProperties = { padding: '3px 6px', textAlign: 'center', borderBottom: `1px solid var(--border)`, verticalAlign: 'middle', fontFamily: 'var(--font-inter),sans-serif', whiteSpace: 'nowrap' }
                       if (absent) {
-                        return (
-                          <td key={`${row.exId}-${ci}`} style={{ padding: '0.4rem 0.6rem', textAlign: 'center', borderBottom: `1px solid var(--border)`, verticalAlign: 'middle', background: '#F6F7F9' }}>
-                            <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.62rem', fontWeight: 700, color: '#c23b3b' }}>nieobecna</span>
-                          </td>
-                        )
+                        return <td key={`${row.exId}-${ci}`} style={{ ...td, background: '#F6F7F9', fontSize: '0.58rem', fontWeight: 700, color: '#c23b3b' }}>nieob.</td>
                       }
                       const act = actual[row.exId]?.[a.id] ?? null
                       const hasAct = act !== null && act.sets.length > 0
@@ -119,68 +124,43 @@ export default function PlanExerciseTable({ rows, athletes, overrides, actual, u
                       const painEntry = painByAthleteEx?.[a.id]
                         ? Object.entries(painByAthleteEx[a.id]).find(([k]) => k.includes(exNameKey) || exNameKey.includes(k))?.[1] ?? null
                         : null
+                      const pain = painEntry && (
+                        <span title={`Ból: VAS ${painEntry.vas}/10${painEntry.comment ? ` · ${painEntry.comment}` : ''}`}
+                          style={{ marginLeft: 4, padding: '0 4px', borderRadius: 4, background: '#FEF2F2', border: '1px solid #FCA5A5', color: '#EF4444', fontSize: '0.56rem', fontWeight: 800 }}>!{painEntry.vas}</span>
+                      )
 
                       // Kolory tła: priorytet: pominięte > faktyczne > modyfikacja > brak
                       const bgColor = skip ? '#FEF2F2' : hasAct ? '#F0FDF4' : mod ? '#1A2E4520' : undefined
 
+                      if (skip) return <td key={`${row.exId}-${ci}`} style={{ ...td, background: bgColor, fontSize: '0.58rem', color: '#EF4444', fontWeight: 700 }}>pominięte{pain}</td>
+
+                      if (hasAct) {
+                        // ZIELONY — faktyczne dane z set_logs, wszystkie serie w jednej linii
+                        const weights = act.sets.map(x => x.weight)
+                        const reps = act.sets.map(x => x.reps)
+                        const hasW = weights.some(w => w !== null)
+                        const hasR = reps.some(r => r !== null)
+                        const notes = act.sets.map(x => x.note).filter(Boolean)
+                        const detail = act.sets.map(x => `S${x.num}: ${x.weight !== null ? `${x.weight} kg` : '—'}${x.reps !== null ? ` × ${x.reps}` : ''}${x.note ? ` „${x.note}”` : ''}`).join('\n')
+                        return (
+                          <td key={`${row.exId}-${ci}`} title={detail} style={{ ...td, background: bgColor }}>
+                            <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#16A34A' }}>
+                              {hasW ? `${weights.map(w => w ?? '—').join('/')} kg` : ''}
+                            </span>
+                            {hasR && <span style={{ fontSize: '0.58rem', fontWeight: 700, color: '#15803D', marginLeft: hasW ? 3 : 0 }}>×{reps.map(r => r ?? '—').join('/')}</span>}
+                            {notes.length > 0 && <span style={{ marginLeft: 3, fontSize: '0.6rem' }}>💬</span>}
+                            {mod && <span title="Zmodyfikowane przez trenera" style={{ marginLeft: 3, fontSize: '0.56rem', color: 'var(--gold)' }}>✎</span>}
+                            {pain}
+                          </td>
+                        )
+                      }
+                      // ZŁOTY (modyfikacja trenera) / SZARY (plan bazowy) — jedna linia
                       return (
-                        <td key={`${row.exId}-${ci}`} style={{ padding: '0.4rem 0.6rem', textAlign: 'center', borderBottom: `1px solid var(--border)`, verticalAlign: 'middle', background: bgColor, position: 'relative' }}>
-                          {skip ? (
-                            // CZERWONY — pominięte przez trenera
-                            <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.6rem', color: '#EF4444', fontWeight: 700 }}>pominięte</span>
-                          ) : hasAct ? (
-                            // ZIELONY — faktyczne dane z set_logs
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                              {act.sets.map((s, si) => (
-                                <div key={si} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                  <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.55rem', color: '#16A34A', minWidth: 14 }}>S{s.num}</span>
-                                  <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.72rem', fontWeight: 800, color: '#16A34A' }}>
-                                    {s.weight !== null ? `${s.weight} kg` : '—'}
-                                  </span>
-                                  {s.reps !== null && (
-                                    <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.55rem', color: '#4ADE80' }}>{s.reps}p</span>
-                                  )}
-                                  </div>
-                                  {s.note && <div style={{ fontSize: '0.55rem', color: '#15803D', fontStyle: 'italic', maxWidth: 120, whiteSpace: 'normal', lineHeight: 1.25 }}>&ldquo;{s.note}&rdquo;</div>}
-                                </div>
-                              ))}
-                              {mod && (
-                                <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.5rem', color: 'var(--gold)', marginTop: 1 }}>✎ mod.</span>
-                              )}
-                            </div>
-                          ) : mod ? (
-                            // ZŁOTY — modyfikacja trenera, brak danych treningowych
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-                              {planW !== null && (
-                                <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.72rem', fontWeight: 800, color: 'var(--gold)' }}>{planW} kg</span>
-                              )}
-                              <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.55rem', color: 'var(--gold)' }}>
-                                {planS}×{planR || '—'}{planT ? ` ${planT}` : ''}
-                              </span>
-                              <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.5rem', color: 'var(--gold)' }}>✎ mod.</span>
-                            </div>
-                          ) : (
-                            // SZARY — plan bazowy, brak danych
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-                              {planW !== null ? (
-                                <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.72rem', fontWeight: 700, color: 'var(--muted-light)' }}>{planW} kg</span>
-                              ) : (
-                                <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.65rem', color: 'var(--border)' }}>—</span>
-                              )}
-                              <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.55rem', color: 'var(--border)', whiteSpace: 'nowrap' }}>
-                                {planS}×{planR || '—'}{planT ? ` ${planT}` : ''}
-                              </span>
-                            </div>
-                          )}
-                          {painEntry && (
-                            <div title={`VAS ${painEntry.vas}/10${painEntry.comment ? ` · ${painEntry.comment}` : ''}`}
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: 3, marginTop: 3, padding: '1px 6px', background: '#FEF2F2', border: `1px solid #FCA5A5`, borderRadius: 6, cursor: 'default' }}>
-                              <span style={{ color: '#EF4444', fontWeight: 900, fontSize: '0.62rem' }}>!</span>
-                              <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.58rem', color: '#EF4444', fontWeight: 700 }}>VAS {painEntry.vas}</span>
-                              {painEntry.comment && <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.55rem', color: '#EF4444', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{painEntry.comment}</span>}
-                            </div>
-                          )}
+                        <td key={`${row.exId}-${ci}`} title={mod ? 'Zmodyfikowane przez trenera' : undefined} style={{ ...td, background: bgColor }}>
+                          {planW !== null && <span style={{ fontSize: '0.66rem', fontWeight: mod ? 800 : 600, color: mod ? 'var(--gold)' : 'var(--muted-light)', marginRight: 3 }}>{planW} kg</span>}
+                          <span style={{ fontSize: '0.56rem', color: mod ? 'var(--gold)' : '#c9cfda' }}>{planS}×{planR || '—'}{planT ? ` ${planT}` : ''}</span>
+                          {mod && <span style={{ marginLeft: 3, fontSize: '0.56rem', color: 'var(--gold)' }}>✎</span>}
+                          {pain}
                         </td>
                       )
                     })}
