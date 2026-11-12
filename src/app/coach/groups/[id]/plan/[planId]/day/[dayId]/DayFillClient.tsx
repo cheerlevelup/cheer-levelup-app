@@ -37,7 +37,8 @@ type Extra = {
   exercise?: { id: number; name: string } | null
 }
 // Ćwiczenie w komórce zawodniczki — z planu (z jej modyfikacjami) albo dodatkowe
-type CellExercise = { id: number; name: string; sets: number; reps: string; weight: number | null; warmups: WarmupSet[] }
+// bw — seria z ciężarem „BW” w planie (masa ciała): pole od razu pokazuje 0 kg
+type CellExercise = { id: number; name: string; sets: number; reps: string; weight: number | null; warmups: WarmupSet[]; bw?: boolean[] }
 type Block = { id: number; block_name: string | null; block_order: number; rounds?: number | null; workout_block_exercises: BlockEx[] }
 type Session = { id: number; athlete_id: number; workout_day_id: number; assignment_id: number | null; completed: boolean; report_sent?: boolean | null; date_completed?: string | null; created_at?: string }
 type SetLog = { id: number; workout_session_id: number; block_exercise_id: number; athlete_id: number; set_number: number; weight: number | null; reps_completed: number | null; completed: boolean; is_warmup: boolean; athlete_note?: string | null }
@@ -76,6 +77,9 @@ function pickVal(ex: BlockEx, field: keyof PlanWorkSet, legacy: unknown): string
   return r === '—' ? '' : r
 }
 const exReps = (ex: BlockEx) => pickVal(ex, 'reps', ex.reps)
+// „BW” (masa ciała) w ciężarze planu = 0 kg w wynikach
+const isBW = (v: unknown) => typeof v === 'string' && /^\s*bw\s*$/i.test(v)
+const bwSets = (ex: BlockEx, o?: { weight_override?: number | null }) => (o?.weight_override != null ? [] : workSets(ex).map(w => isBW(w.weight_kg)))
 function prescText(ex: BlockEx): string {
   const sets = ex.sets || workSets(ex).length || 0
   let main: string
@@ -89,7 +93,7 @@ function prescText(ex: BlockEx): string {
   const weight = pickVal(ex, 'weight_kg', ex.weight_kg)
   const tempo = ex.ecc ? eccTempoLines(ex).filter(l => l !== '—').join(' / ') : ex.iso ? '' : pickVal(ex, 'tempo', ex.tempo)
   const rir = pickVal(ex, 'rir', ex.rir)
-  return [main, weight ? `${weight} kg` : '', tempo ? (ex.ecc ? tempo : `tempo ${tempo}`) : '', rir ? `RIR ${rir}` : ''].filter(Boolean).join(' · ')
+  return [main, weight ? (/^[\d.,\s/–-]+$/.test(weight) ? `${weight} kg` : weight) : '', tempo ? (ex.ecc ? tempo : `tempo ${tempo}`) : '', rir ? `RIR ${rir}` : ''].filter(Boolean).join(' · ')
 }
 
 const qiBtn: React.CSSProperties = {
@@ -299,6 +303,28 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
     })())
   }
 
+  // Serie z ciężarem „BW” w planie, których nikt nie wpisał — zapis 0 kg (przy zakończeniu treningu)
+  async function fillBodyweight(s: Session, athleteId: number) {
+    const targets: { exId: number; setNum: number; warmup: boolean }[] = []
+    for (const col of columns) {
+      if (col.kind !== 'ex' || !col.isFor(athleteId)) continue
+      const o = ovrMap.get(ovrKey(athleteId, col.ex.id))
+      if (o?.skip) continue
+      if (!isAmrap(o?.reps_override || exReps(col.ex))) bwSets(col.ex, o).forEach((bw, i) => { if (bw) targets.push({ exId: col.ex.id, setNum: i + 1, warmup: false }) })
+      ;(o?.warmup_sets_override ?? planWarmups(col.ex)).forEach((w, i) => { if (isBW(w?.weight_kg)) targets.push({ exId: col.ex.id, setNum: i + 1, warmup: true }) })
+    }
+    for (const t of targets) {
+      const key = logKey(s.id, t.exId, t.setNum, t.warmup)
+      const prev = logs[key]
+      if (prev?.weight != null) continue
+      const res = prev
+        ? await supabase.from('set_logs').update({ weight: 0, completed: true }).eq('id', prev.id).select().single()
+        : await supabase.from('set_logs').insert({ workout_session_id: s.id, block_exercise_id: t.exId, athlete_id: athleteId, set_number: t.setNum, is_warmup: t.warmup, weight: 0, reps_completed: null, completed: true }).select().single()
+      if (res.error || !res.data) { setError(res.error?.message || 'Błąd zapisu serii BW'); return }
+      setLogs(m => ({ ...m, [key]: res.data as SetLog }))
+    }
+  }
+
   // Zakończony / niezakończony — trener może przełączać w obie strony
   async function toggleCompleted(athleteId: number) {
     setError('')
@@ -306,6 +332,7 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
       const s = await ensureSession(athleteId)
       if (!s) return
       const next = !s.completed
+      if (next) await fillBodyweight(s, athleteId)
       const { data, error: err } = await supabase.from('workout_sessions')
         .update({ completed: next, date_completed: next ? new Date().toISOString() : null })
         .eq('id', s.id).select().single()
@@ -432,7 +459,7 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
           const reps = o?.reps_override || exReps(ex)
           const changed = o && (o.sets_override || o.reps_override || o.weight_override != null || o.exercise_code_override)
           return { items: [sheetItem(session,
-            { id: ex.id, name: exName(ex, o), sets: planned, reps, weight: o?.weight_override ?? ex.weight_kg ?? null, warmups: o?.warmup_sets_override ?? planWarmups(ex) },
+            { id: ex.id, name: exName(ex, o), sets: planned, reps, weight: o?.weight_override ?? ex.weight_kg ?? null, warmups: o?.warmup_sets_override ?? planWarmups(ex), bw: bwSets(ex, o) },
             undefined,
             changed ? `zmiana: ${o?.exercise_code_override ? `${o.exercise_code_override} · ` : ''}${planned}×${reps || '?'}${o?.weight_override != null ? ` · ${o.weight_override} kg` : ''}` : undefined,
           )] }
@@ -467,12 +494,15 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
     const input = (label: string, setNum: number, warmup: boolean, placeholder: string) => {
       const log = session ? logs[logKey(session.id, item.id, setNum, warmup)] : undefined
       const f = warmup ? 'weight' : field
-      const val = log?.[f] != null ? String(log[f]) : ''
+      const logged = log?.[f] != null ? String(log[f]) : ''
+      // ciężar „BW” w planie — od razu 0 kg (zapisze się po wyjściu z pola albo przy zakończeniu treningu)
+      const bw = f === 'weight' && !logged && (warmup ? isBW(item.warmups[setNum - 1]?.weight_kg) : !!item.bw?.[setNum - 1])
+      const val = logged || (bw ? '0' : '')
       const s = nav.next++
       return (
         <div key={`${warmup ? 'w' : 's'}${setNum}_${val}`}>
           <input
-            title={warmup ? `Rozgrzewka ${label}` : `Seria ${label.slice(1)}`}
+            title={`${warmup ? `Rozgrzewka ${label}` : `Seria ${label.slice(1)}`}${bw ? ' — BW (0 kg)' : ''}`}
             defaultValue={val} placeholder={placeholder} inputMode="decimal"
             className={`df-w${val ? ' filled' : ''}`}
             style={warmup ? { borderStyle: 'dashed' } : undefined}
@@ -732,6 +762,7 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                               id: ex.id, name: exName(ex, o), sets: planned, reps,
                               weight: o?.weight_override ?? ex.weight_kg ?? null,
                               warmups: o?.warmup_sets_override ?? planWarmups(ex),
+                              bw: bwSets(ex, o),
                             }, nav)}
                           </td>
                         )
