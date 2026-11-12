@@ -6,6 +6,8 @@ import { sortWithVariants, variantLabels } from '@/lib/exerciseVariants'
 import { fmtRange, isoPowtLines, repsLines, eccTempoLines } from '@/lib/coach/planFormat'
 import { buildPlanPdf, loadPdfFonts } from '@/lib/coach/planPdf'
 import { EXERCISE_CATALOG_LIST_ID } from '@/lib/exerciseCatalog'
+import Link from 'next/link'
+import PlanModeSwitch, { fillHref, lastFillDay } from '@/components/coach/PlanModeSwitch'
 
 type WarmupSet = { reps?: string; weight_kg?: string; note?: string }
 type WorkSet = { reps?: string; weight_kg?: string; tempo?: string; rir?: string; seconds?: string; intensity?: string; rest?: string; ecc?: string; hold?: string }
@@ -40,7 +42,7 @@ type Block = {
 }
 type Day = { id: number; week_id: number; day_name: string; day_order: number; coach_intro?: string | null; coach_closing?: string | null }
 type Week = { id: number; plan_id: number; week_number: number; name?: string | null }
-type Plan = { id: number; name: string }
+type Plan = { id: number; name: string; group_id?: number | null }
 
 
 function fmtName(s: string) { return s.replace(/-/g, ' ') }
@@ -408,6 +410,16 @@ export default function PlanTableView(props: Props) {
 
   const allDays = [...days].sort((a, b) => a.day_order - b.day_order)
 
+  // Plan grupy: przełącznik na wpisywanie wyników (ostatnio otwarty trening, inaczej pierwszy)
+  const groupId = plan.group_id ?? null
+  const [savedFillDay, setSavedFillDay] = useState<number | null>(null)
+  useEffect(() => {
+    const t = setTimeout(() => setSavedFillDay(lastFillDay(plan.id)), 0)
+    return () => clearTimeout(t)
+  }, [plan.id])
+  const orderedDays = [...weeks].sort((a, b) => a.week_number - b.week_number).flatMap(w => allDays.filter(d => d.week_id === w.id))
+  const fillDayId = savedFillDay && days.some(d => d.id === savedFillDay) ? savedFillDay : orderedDays[0]?.id
+
   // ── Kopiuj / wklej ──
   // Zaznaczenie ćwiczeń (checkbox przy numerze, w obrębie jednego bloku) → Ctrl+C;
   // kliknięcie w blok wybiera miejsce wklejenia → Ctrl+V (ćwiczenia do bloku, blok do treningu)
@@ -504,6 +516,11 @@ export default function PlanTableView(props: Props) {
         </div>
       )}
       {/* toolbar */}
+      {groupId != null && (
+        <div style={{ marginBottom: 10 }}>
+          <PlanModeSwitch mode="editor" editorLink="#" fillLink={fillDayId ? fillHref(groupId, plan.id, fillDayId) : null} />
+        </div>
+      )}
       <div className="coach-tabelka-toolbar">
         <div className="coach-warmup-counter">
           <span>Rozgrzewka (R):</span>
@@ -541,13 +558,16 @@ export default function PlanTableView(props: Props) {
                   const dayBlocks = blocks.filter(b => b.day_id === day.id).sort((a, b) => a.block_order - b.block_order)
 
                   return (
-                    <div key={day.id}>
+                    <div key={day.id} id={`day-${day.id}`} style={{ scrollMarginTop: 70 }}>
                       {/* day header: nazwa (edytowalna), akcje treningu */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '0.4rem', flexWrap: 'wrap' }}>
                         <div className="coach-training-pill-name" style={{ minWidth: 160 }}>
                           <EditCell value={day.day_name} onCommit={v => props.onRenameDay(day.id, v)} align="left" placeholder="nazwa treningu" />
                         </div>
                         <button className="coach-btn coach-btn-ghost coach-btn-small" onClick={() => onAddBlock(day.id)}>+ Blok</button>
+                        {groupId != null && (
+                          <Link href={fillHref(groupId, plan.id, day.id)} className="coach-btn coach-btn-gold coach-btn-small" style={{ textDecoration: 'none' }} title="Wpisuj wyniki zawodniczek w tym treningu">📝 Wpisuj wyniki</Link>
+                        )}
                         {props.clipboard?.kind === 'block' && (
                           <button style={{ ...iconBtn, color: 'var(--gold)', fontWeight: 700 }} title="Wklej skopiowany blok na koniec tego treningu (Ctrl+V)" onClick={() => pasteInto(day.id, null)}>📋 wklej blok „{props.clipboard.name}”</button>
                         )}

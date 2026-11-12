@@ -7,6 +7,7 @@
 //  - notatka do ćwiczenia → set_logs.athlete_note pierwszej serii
 //  - ból → pain_logs (pain_location = nazwa ćwiczenia, jak u zawodniczki)
 //  - „zakończony" → workout_sessions.completed (zaznacza trener albo zawodniczka)
+import PlanModeSwitch, { editorHref, rememberFillDay } from '@/components/coach/PlanModeSwitch'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
@@ -113,6 +114,8 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
   }, [initialSessions, initialLogs, initialPains])
 
   const [error, setError] = useState('')
+  // przełącznik z edytora planu otwiera ostatnio wpisywany trening
+  useEffect(() => { rememberFillDay(plan.id, day.id) }, [plan.id, day.id])
   const [saving, setSaving] = useState(0)
   const [cellEdit, setCellEdit] = useState<{ key: string; type: 'note' | 'pain' } | null>(null)
   const sessionPromises = useRef<Map<number, Promise<Session | null>>>(new Map())
@@ -519,6 +522,7 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
       `}</style>
       <div className="coach-content" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <PlanModeSwitch mode="fill" editorLink={editorHref(group.id, plan.id, day.id)} fillLink={null} />
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {dayNav.map((d, i) => (
               <button
