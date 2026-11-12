@@ -6,6 +6,7 @@ import { createClient } from '@/utils/supabase/server'
 import {
   getAthleteByUserId,
   getNextTrainingForAthlete,
+  getPlanTrainingsForAthlete,
   getAthleteTrainingHistory,
 } from '@/lib/training'
 import AthleteClient from './AthleteClient'
@@ -50,8 +51,9 @@ export default async function AthletePage() {
   const todayDateStr = todayStart.toISOString().split('T')[0]
 
   // Wszystkie zapytania równolegle — zamiast sekwencyjnie
-  const [nextTraining, history, { data: todayWellnessLog }, { data: athleteWellnessConfig }, { data: groupWellnessConfig }] = await Promise.all([
+  const [nextTraining, planTrainings, history, { data: todayWellnessLog }, { data: athleteWellnessConfig }, { data: groupWellnessConfig }] = await Promise.all([
     getNextTrainingForAthlete(athlete.id, athlete.group_id || undefined),
+    getPlanTrainingsForAthlete(athlete.id, athlete.group_id || undefined),
     getAthleteTrainingHistory(athlete.id, 5),
     supabase
       .from('wellness_logs')
@@ -112,6 +114,7 @@ export default async function AthletePage() {
     <AthleteClient
       athlete={athlete}
       nextTraining={nextTraining}
+      planTrainings={planTrainings}
       history={history}
       todayWellness={{
         dateIso: todayStart.toISOString(),

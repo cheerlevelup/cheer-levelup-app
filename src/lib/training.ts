@@ -26,15 +26,18 @@ export async function getUserRole(email: string): Promise<'coach' | 'athlete'> {
   return 'athlete'
 }
 
-export async function getNextTrainingForAthlete(
-  athleteId: number,
-  groupId?: number
-): Promise<{
-  assignment: AthleteWorkoutAssignment
-  day: WorkoutDay
-  completedCount: number
-  totalCount: number
-} | null> {
+// Trening planu na liście zawodniczki (ekran główny — wybór dowolnego treningu)
+export type PlanTrainingItem = {
+  id: number
+  day_name: string
+  week_number: number
+  day_order: number
+  completed: boolean   // ma ukończoną sesję
+  inProgress: boolean  // ma rozpoczętą, niezakończoną sesję
+}
+
+// Aktywny plan zawodniczki (indywidualny, potem grupowy) z treningami i statusem sesji
+async function loadAthletePlan(athleteId: number, groupId?: number) {
   const supabase = await createClient()
 
   // Szukaj najpierw przypisania indywidualnego, potem grupowego
@@ -67,24 +70,41 @@ export async function getNextTrainingForAthlete(
   if (weekIds.length === 0) return null
 
   // Pobierz dni
-  const { data: days, error: dErr } = await supabase
+  const { data: rawDays, error: dErr } = await supabase
     .from('workout_days')
     .select('*, week:workout_weeks(*, plan:workout_plans(*))')
     .in('week_id', weekIds)
     .order('week_id', { ascending: true })
     .order('day_order', { ascending: true })
 
-  if (dErr || !days || days.length === 0) return null
+  if (dErr || !rawDays || rawDays.length === 0) return null
+  // kolejność: tydzień (numer), potem trening w tygodniu
+  const days = [...rawDays].sort((x: any, y: any) => (x.week?.week_number ?? 0) - (y.week?.week_number ?? 0) || x.day_order - y.day_order)
 
-  // Ukończone sesje — szukaj zarówno po assignment_id jak i po planie (NULL assignment_id)
+  // Sesje zawodniczki dla dni planu — ukończone i rozpoczęte
   const { data: sessions } = await supabase
     .from('workout_sessions')
-    .select('workout_day_id')
+    .select('workout_day_id, completed')
     .eq('athlete_id', athleteId)
     .in('workout_day_id', days.map((d: any) => d.id))
-    .eq('completed', true)
 
-  const completedDayIds = new Set((sessions || []).map((s: any) => s.workout_day_id))
+  const completedDayIds = new Set((sessions || []).filter((s: any) => s.completed).map((s: any) => s.workout_day_id))
+  const inProgressDayIds = new Set((sessions || []).filter((s: any) => !s.completed).map((s: any) => s.workout_day_id))
+  return { assignment, days, completedDayIds, inProgressDayIds }
+}
+
+export async function getNextTrainingForAthlete(
+  athleteId: number,
+  groupId?: number
+): Promise<{
+  assignment: AthleteWorkoutAssignment
+  day: WorkoutDay
+  completedCount: number
+  totalCount: number
+} | null> {
+  const plan = await loadAthletePlan(athleteId, groupId)
+  if (!plan) return null
+  const { assignment, days, completedDayIds } = plan
   const nextDay = days.find((d: any) => !completedDayIds.has(d.id))
   if (!nextDay) return null
 
@@ -93,6 +113,28 @@ export async function getNextTrainingForAthlete(
     day: nextDay as WorkoutDay,
     completedCount: completedDayIds.size,
     totalCount: days.length,
+  }
+}
+
+// Wszystkie treningi aktywnego planu ze statusem — zawodniczka może rozpocząć dowolny
+export async function getPlanTrainingsForAthlete(
+  athleteId: number,
+  groupId?: number
+): Promise<{ assignmentId: number; planName: string; trainings: PlanTrainingItem[] } | null> {
+  const plan = await loadAthletePlan(athleteId, groupId)
+  if (!plan) return null
+  const { assignment, days, completedDayIds, inProgressDayIds } = plan
+  return {
+    assignmentId: assignment.id,
+    planName: (assignment as any).plan?.name || 'Plan treningowy',
+    trainings: days.map((d: any) => ({
+      id: d.id,
+      day_name: d.day_name || 'Trening',
+      week_number: d.week?.week_number ?? 1,
+      day_order: d.day_order,
+      completed: completedDayIds.has(d.id),
+      inProgress: inProgressDayIds.has(d.id),
+    })),
   }
 }
 

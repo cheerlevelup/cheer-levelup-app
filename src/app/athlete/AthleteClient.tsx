@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Athlete, WorkoutSession, AthleteWorkoutAssignment, WorkoutDay } from '@/types/workout'
+import type { PlanTrainingItem } from '@/lib/training'
 import WellnessModal from '@/components/WellnessModal'
 import { C, sans, display, shadow, radius } from '@/lib/athleteTheme'
 
@@ -15,6 +16,8 @@ interface Props {
     completedCount: number
     totalCount: number
   } | null
+  // wszystkie treningi aktywnego planu — zawodniczka może rozpocząć dowolny
+  planTrainings: { assignmentId: number; planName: string; trainings: PlanTrainingItem[] } | null
   history: WorkoutSession[]
   todayWellness: WellnessStatus
   wellnessEnabled: boolean
@@ -39,10 +42,16 @@ function formatLongDate(iso: string): string {
   return new Date(iso).toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' })
 }
 
-export default function AthleteClient({ athlete, nextTraining, history, todayWellness, wellnessEnabled, wellnessFields }: Props) {
+export default function AthleteClient({ athlete, nextTraining, planTrainings, history, todayWellness, wellnessEnabled, wellnessFields }: Props) {
   const router = useRouter()
   const [wellnessOpen, setWellnessOpen] = useState(false)
   const [wellnessDone, setWellnessDone] = useState(todayWellness.isComplete)
+  const [showAll, setShowAll] = useState(false)
+  const trainings = planTrainings?.trainings || []
+  const multiWeek = new Set(trainings.map(t => t.week_number)).size > 1
+  const startTraining = (dayId: number) => planTrainings && router.push(`/athlete/training?day=${dayId}&assignment=${planTrainings.assignmentId}`)
+  // domyślnie: rozpoczęte i do zrobienia; ukończone po „pokaż wszystkie"
+  const visibleTrainings = showAll ? trainings : trainings.filter(t => !t.completed || t.inProgress)
 
   // Prefetch kluczowych tras przy ładowaniu panelu
   useState(() => {
@@ -147,6 +156,46 @@ export default function AthleteClient({ athlete, nextTraining, history, todayWel
               <div style={{ fontSize: 14, color: C.gray, marginTop: 6 }}>Trener wkrótce przypisze nowy plan.</div>
               {reportSent && <div style={{ marginTop: 10, fontSize: 12, fontWeight: 600, color: C.green }}>✓ Ostatni raport wysłany</div>}
             </div>
+          )}
+
+          {/* ── WSZYSTKIE TRENINGI PLANU: dowolny do rozpoczęcia ── */}
+          {trainings.length > 1 && (
+            <section style={{ background: C.white, border: `1px solid ${C.grayLight}`, borderRadius: radius, boxShadow: shadow, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '14px 16px 8px' }}>
+                <div>
+                  <div className="ath-eyebrow" style={{ color: C.muted, fontSize: 10 }}>Treningi planu</div>
+                  <div className="ath-display" style={{ fontSize: 20, color: C.ink, marginTop: 2 }}>Wybierz trening</div>
+                </div>
+                {trainings.some(t => t.completed && !t.inProgress) && (
+                  <button onClick={() => setShowAll(v => !v)} style={{ flexShrink: 0, border: `1px solid ${C.grayLight}`, background: C.offWhite, color: C.muted, borderRadius: 999, padding: '6px 12px', fontSize: 12, fontWeight: 600 }}>
+                    {showAll ? 'Ukryj ukończone' : `Pokaż wszystkie (${trainings.length})`}
+                  </button>
+                )}
+              </div>
+              {visibleTrainings.length === 0 ? (
+                <div style={{ padding: '6px 16px 16px', fontSize: 13, color: C.muted }}>Wszystkie treningi ukończone — możesz powtórzyć dowolny po „Pokaż wszystkie”.</div>
+              ) : visibleTrainings.map(t => {
+                const isNext = nextTraining?.day.id === t.id
+                const status = t.inProgress ? { label: 'w trakcie', fg: '#a8650f', bg: '#fdf3e2', bd: '#f3d9a8' }
+                  : t.completed ? { label: '✓ ukończony', fg: '#1f9d68', bg: '#ecfaf3', bd: '#bfe9d3' }
+                  : isNext ? { label: 'następny', fg: C.navy, bg: '#fdf3e2', bd: C.gold }
+                  : null
+                return (
+                  <button key={t.id} className="ath-card" onClick={() => startTraining(t.id)}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, minHeight: 56, padding: '10px 16px', border: 'none', borderTop: `1px solid ${C.grayLight}`, background: isNext ? '#fffaf0' : C.white, textAlign: 'left' }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: t.completed && !t.inProgress ? '#ecfaf3' : isNext ? C.gold : C.offWhite, color: t.completed && !t.inProgress ? '#1f9d68' : C.navy, fontFamily: display, fontWeight: 700, fontSize: 16 }}>
+                      {t.completed && !t.inProgress ? '✓' : t.day_order}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 15, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.day_name}</div>
+                      {multiWeek && <div style={{ fontSize: 12, color: C.muted, marginTop: 1 }}>Tydzień {t.week_number}</div>}
+                    </div>
+                    {status && <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: status.fg, background: status.bg, border: `1px solid ${status.bd}`, borderRadius: 999, padding: '3px 9px' }}>{status.label}</span>}
+                    <span style={{ flexShrink: 0, color: C.gray, fontSize: 22, lineHeight: 1 }}>›</span>
+                  </button>
+                )
+              })}
+            </section>
           )}
 
           {/* ── WELLNESS ── */}
