@@ -8,7 +8,7 @@ import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { C, sans, display, shadow, radius } from '@/lib/athleteTheme'
-import { isMaxReps, type GroupEntry, type GroupExercise, type GroupSetRow, type GroupTrainingInfo } from '@/lib/athleteGroupTraining'
+import { isMaxReps, type GroupEntry, type GroupExercise, type GroupSetRow, type GroupTrainingInfo } from '@/lib/athleteGroupTrainingShared'
 
 interface Props {
   athleteId: number

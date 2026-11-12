@@ -4,58 +4,9 @@
 // group_training_entries), więc wpisy widać po obu stronach po odświeżeniu.
 // Dostęp zawodniczki: migracja 202611120002.
 import { createClient } from '@/utils/supabase/server'
+import { entryFilled, isMaxReps, type GroupEntry, type GroupExercise, type GroupTrainingInfo, type GroupTrainingListItem } from './athleteGroupTrainingShared'
+export type { GroupSetRow, GroupExercise, GroupEntry, GroupTrainingInfo, GroupTrainingListItem } from './athleteGroupTrainingShared'
 
-export type GroupSetRow = { reps?: string; tempo?: string; weight?: string; skipped?: boolean; seconds?: string }
-
-export type GroupExercise = {
-  id: number
-  training_id: number
-  name: string
-  exercise_order: number
-  block_index?: number | null
-  link_url?: string | null
-  coach_comment?: string | null
-  sets_planned?: number | null
-  reps?: string | null
-  tempo?: string | null
-  bodyweight?: boolean | null
-  individual?: boolean | null
-  athlete_id?: number | null
-  iso?: boolean | null
-  iso_type?: 'PIMA' | 'HIMA' | null
-  iso_seconds?: number | null
-  iso_intensity?: number | null
-  iso_seconds_sets?: (number | null)[] | null
-  iso_intensity_sets?: (number | null)[] | null
-  reps_sets?: (string | null)[] | null
-  tempo_sets?: (string | null)[] | null
-}
-
-export type GroupEntry = {
-  id?: number
-  training_id: number
-  exercise_id: number
-  athlete_id: number
-  sets: GroupSetRow[]
-  pain?: boolean | null
-  pain_vas?: number | null
-  pain_comment?: string | null
-  comment?: string | null
-  exercise_override?: string | null
-  bodyweight?: boolean | null
-  excluded?: boolean | null
-  locked?: boolean | null
-}
-
-export type GroupTrainingInfo = {
-  id: number
-  group_id: number
-  training_date: string
-  notes?: string | null
-  absent: boolean
-}
-
-export type GroupTrainingListItem = GroupTrainingInfo & { exercises: number; filled: number }
 
 type TrainingRow = { id: number; group_id: number; training_date: string; notes?: string | null; absent_athlete_ids?: unknown; roster_athlete_ids?: unknown }
 
@@ -66,11 +17,6 @@ const info = (t: TrainingRow, athleteId: number): GroupTrainingInfo => ({
   id: t.id, group_id: t.group_id, training_date: t.training_date, notes: t.notes ?? null,
   absent: ids(t.absent_athlete_ids).includes(athleteId),
 })
-// wpis ma jakąkolwiek wartość wpisaną przez zawodniczkę albo trenera
-// (przy masie własnej / „max" wynikiem są powtórzenia — wtedy liczą się też powt.)
-export const entryFilled = (e: GroupEntry | undefined, repsMode = false) => !!e?.sets?.some(s =>
-  (s.weight ?? '').toString().trim() !== '' || (s.seconds ?? '').toString().trim() !== '' || (repsMode && (s.reps ?? '').toString().trim() !== ''))
-export const isMaxReps = (reps?: string | null) => /(amrap|maks|max|upad)/i.test((reps || '').trim())
 
 // Ostatnie treningi grupy zawodniczki (od najnowszego) z licznikiem uzupełnionych ćwiczeń
 export async function getAthleteGroupTrainings(athleteId: number, groupId: number | null | undefined, limit = 8): Promise<GroupTrainingListItem[]> {

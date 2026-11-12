@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Athlete, WorkoutSession, AthleteWorkoutAssignment, WorkoutDay } from '@/types/workout'
 import type { PlanTrainingItem } from '@/lib/training'
-import type { GroupTrainingListItem } from '@/lib/athleteGroupTraining'
+import type { GroupTrainingListItem } from '@/lib/athleteGroupTrainingShared'
 import WellnessModal from '@/components/WellnessModal'
 import { C, sans, display, shadow, radius } from '@/lib/athleteTheme'
 
