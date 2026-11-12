@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { sortWithVariants, variantLabels } from '@/lib/exerciseVariants'
 import { fmtRange, isoPowtLines, repsLines, eccTempoLines } from '@/lib/coach/planFormat'
@@ -314,19 +314,22 @@ interface Props {
   onAddDay: (weekId: number) => Promise<void>
   onRenameDay: (dayId: number, name: string) => void
   onDeleteDay: (dayId: number) => void
-  onMoveDay: (day: Day) => void
   onSaveDayMessage: (dayId: number, field: 'coach_intro' | 'coach_closing', value: string) => void
   onAddBlock: (dayId: number) => Promise<void>
   onRenameBlock: (blockId: number, name: string) => void
   onCopyBlock: (block: Block) => void
-  onMoveBlock: (block: Block) => void
+  // schowek kopiuj / wklej (blok albo ćwiczenia z wariantami)
+  clipboard: { kind: 'block'; name: string } | { kind: 'exercises'; count: number } | null
+  onCopyBlockToClipboard: (block: Block) => void
+  onCopyExercises: (blockId: number, baseIds: number[]) => void
+  onPasteBlock: (dayId: number) => Promise<void>
+  onPasteExercises: (blockId: number) => Promise<void>
   onDeleteBlock: (blockId: number) => void
   onAddExercise: (blockId: number) => void          // otwiera formularz ćwiczenia w oknie
   onAddVariant: (blockId: number, base: BlockExercise) => void
   onAssignVariants: (blockId: number, baseId: number) => void
   athletes: { id: number; full_name: string }[]
   onEditExercise: (blockId: number, exercise: BlockExercise) => void
-  onMoveExercise: (blockId: number, exercise: BlockExercise) => void
   onDeleteExercise: (blockId: number, exerciseId?: number) => void
   // przeciąganie w obrębie treningu: ćwiczenie (z wariantami) na miejsce innego / na koniec bloku; blok na miejsce innego
   onDropExercise: (exerciseId: number, fromBlockId: number, toBlockId: number, targetBaseId: number | null) => void
@@ -406,6 +409,62 @@ export default function PlanTableView(props: Props) {
 
   const allDays = [...days].sort((a, b) => a.day_order - b.day_order)
 
+  // ── Kopiuj / wklej ──
+  // Zaznaczenie ćwiczeń (checkbox przy numerze, w obrębie jednego bloku) → Ctrl+C;
+  // kliknięcie w blok wybiera miejsce wklejenia → Ctrl+V (ćwiczenia do bloku, blok do treningu)
+  const [selection, setSelection] = useState<{ blockId: number; ids: number[] } | null>(null)
+  const [active, setActive] = useState<{ dayId: number; blockId: number | null } | null>(null)
+  const [flash, setFlash] = useState('')
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const notify = (msg: string) => {
+    setFlash(msg)
+    if (flashTimer.current) clearTimeout(flashTimer.current)
+    flashTimer.current = setTimeout(() => setFlash(''), 2500)
+  }
+  const exWord = (n: number) => n === 1 ? 'ćwiczenie' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 'ćwiczenia' : 'ćwiczeń'
+  function toggleSelect(blockId: number, exId: number) {
+    setSelection(prev => {
+      const ids = prev?.blockId === blockId ? prev.ids : []
+      const next = ids.includes(exId) ? ids.filter(i => i !== exId) : [...ids, exId]
+      return next.length ? { blockId, ids: next } : null
+    })
+  }
+  function copySelection() {
+    if (!selection) return
+    props.onCopyExercises(selection.blockId, selection.ids)
+    notify(`Skopiowano ${selection.ids.length} ${exWord(selection.ids.length)} — kliknij blok i wklej (Ctrl+V)`)
+  }
+  async function pasteInto(dayId: number, blockId: number | null) {
+    const cb = props.clipboard
+    if (!cb) return
+    if (cb.kind === 'exercises') {
+      if (blockId == null) { notify('Kliknij blok, do którego wkleić ćwiczenia'); return }
+      await props.onPasteExercises(blockId)
+      notify(`Wklejono ${cb.count} ${exWord(cb.count)}`)
+    } else {
+      await props.onPasteBlock(dayId)
+      notify(`Wklejono blok „${cb.name}”`)
+    }
+  }
+  const keyState = useRef({ selection, active, clipboard: props.clipboard, copySelection, pasteInto })
+  useEffect(() => {
+    keyState.current = { selection, active, clipboard: props.clipboard, copySelection, pasteInto }
+  })
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
+      const k = keyState.current
+      if (e.key === 'Escape') { setSelection(null); return }
+      if (!(e.ctrlKey || e.metaKey)) return
+      const key = e.key.toLowerCase()
+      if (key === 'c' && k.selection && !window.getSelection()?.toString()) { e.preventDefault(); k.copySelection() }
+      if (key === 'v' && k.clipboard && k.active) { e.preventDefault(); k.pasteInto(k.active.dayId, k.active.blockId) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   function updateWarmupSet(blockId: number, ex: BlockExercise, rIdx: number, field: 'reps' | 'weight_kg' | 'note', value: string) {
     const sets = [...(ex.warmup_sets || [])]
     while (sets.length <= rIdx) sets.push({ reps: '', weight_kg: '', note: '' })
@@ -440,6 +499,11 @@ export default function PlanTableView(props: Props) {
 
   return (
     <div>
+      {flash && (
+        <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 200, background: 'var(--navy-900)', color: '#fff', borderRadius: 10, padding: '0.6rem 1.1rem', fontFamily: 'var(--font-inter),sans-serif', fontSize: 13, fontWeight: 600, boxShadow: 'var(--shadow)', maxWidth: 'calc(100vw - 2rem)', textAlign: 'center' }}>
+          {flash}
+        </div>
+      )}
       {/* toolbar */}
       <div className="coach-tabelka-toolbar">
         <div className="coach-warmup-counter">
@@ -450,7 +514,7 @@ export default function PlanTableView(props: Props) {
         </div>
         <button className="coach-btn coach-btn-dark coach-btn-small" onClick={onAddWeek}>+ Tydzień</button>
         <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: 11, color: 'var(--muted)' }}>
-          Kliknij komórkę, by edytować (zapisuje się od razu) · ✏️ pełna edycja ćwiczenia (biblioteka, ISO, różne serie)
+          Kliknij komórkę, by edytować (zapisuje się od razu) · ✏️ pełna edycja ćwiczenia · ☐ zaznacz ćwiczenia → Ctrl+C, kliknij blok → Ctrl+V
         </span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
           <button className="coach-btn coach-btn-excel" onClick={() => doExport('xlsx')} disabled={exporting !== null}>
@@ -485,7 +549,9 @@ export default function PlanTableView(props: Props) {
                           <EditCell value={day.day_name} onCommit={v => props.onRenameDay(day.id, v)} align="left" placeholder="nazwa treningu" />
                         </div>
                         <button className="coach-btn coach-btn-ghost coach-btn-small" onClick={() => onAddBlock(day.id)}>+ Blok</button>
-                        <button style={iconBtn} title="Przenieś trening do innego tygodnia" onClick={() => props.onMoveDay(day)}>↔ przenieś</button>
+                        {props.clipboard?.kind === 'block' && (
+                          <button style={{ ...iconBtn, color: 'var(--gold)', fontWeight: 700 }} title="Wklej skopiowany blok na koniec tego treningu (Ctrl+V)" onClick={() => pasteInto(day.id, null)}>📋 wklej blok „{props.clipboard.name}”</button>
+                        )}
                         <button style={{ ...iconBtn, color: '#c23b3b' }} title="Usuń trening" onClick={() => props.onDeleteDay(day.id)}>✕ usuń</button>
                       </div>
                       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: '0.5rem' }}>
@@ -502,7 +568,7 @@ export default function PlanTableView(props: Props) {
                       </div>
 
                       <div className="coach-plan-table-wrap">
-                        <table className="coach-plan-table">
+                        <table className="coach-plan-table" onMouseDown={() => setActive({ dayId: day.id, blockId: null })}>
                           <thead>
                             <tr>
                               <th style={th({ width: 32 })}>Blok</th>
@@ -539,10 +605,11 @@ export default function PlanTableView(props: Props) {
                               // kto robi który wariant: baza = wszyscy nieprzypisani do innego wariantu
                               const assignedIn = (baseId?: number) => new Set(exs.filter(v => v.variant_of === baseId).flatMap(v => v.variant_athlete_ids || []))
 
-                              // wiersz bloku: nazwa (edytowalna) + kopiuj / przenieś / usuń
+                              // wiersz bloku: nazwa (edytowalna) + kopiuj / wklej / usuń
                               const blockHeadRow = (
                                 <tr
                                   key={`head-${block.id}`}
+                                  onMouseDown={e => { e.stopPropagation(); setActive({ dayId: day.id, blockId: block.id }) }}
                                   style={dropKey === `block-${block.id}` ? dropLine : undefined}
                                   onDragOver={e => {
                                     if (drag?.kind === 'block' && drag.dayId === day.id && drag.blockId !== block.id) { e.preventDefault(); setDropKey(`block-${block.id}`) }
@@ -562,8 +629,14 @@ export default function PlanTableView(props: Props) {
                                         <EditCell value={block.block_name} onCommit={v => props.onRenameBlock(block.id, v)} align="left" placeholder="nazwa bloku" />
                                       </div>
                                       <div style={{ marginLeft: 'auto', display: 'flex', gap: 2 }}>
-                                        <button style={iconBtn} title="Kopiuj blok do wszystkich pozostałych treningów" onClick={() => props.onCopyBlock(block)}>⧉ kopiuj do treningów</button>
-                                        <button style={iconBtn} title="Przenieś blok do innego treningu" onClick={() => props.onMoveBlock(block)}>↔ przenieś</button>
+                                        {selection?.blockId === block.id && (
+                                          <button style={{ ...iconBtn, color: 'var(--gold)', fontWeight: 700 }} title="Kopiuj zaznaczone ćwiczenia (Ctrl+C)" onClick={copySelection}>⧉ kopiuj zaznaczone ({selection.ids.length})</button>
+                                        )}
+                                        {props.clipboard?.kind === 'exercises' && (
+                                          <button style={{ ...iconBtn, color: 'var(--gold)', fontWeight: 700 }} title="Wklej skopiowane ćwiczenia na koniec tego bloku (Ctrl+V)" onClick={() => pasteInto(day.id, block.id)}>📋 wklej {props.clipboard.count} {exWord(props.clipboard.count)}</button>
+                                        )}
+                                        <button style={iconBtn} title="Kopiuj blok — potem „wklej blok” przy dowolnym treningu (też w innym planie)" onClick={() => { props.onCopyBlockToClipboard(block); notify(`Skopiowano blok „${block.block_name}” — kliknij trening i wklej (Ctrl+V)`) }}>⧉ kopiuj</button>
+                                        <button style={iconBtn} title="Kopiuj blok do wszystkich pozostałych treningów" onClick={() => props.onCopyBlock(block)}>⧉ do wszystkich treningów</button>
                                         <button style={{ ...iconBtn, color: '#c23b3b' }} title="Usuń blok z ćwiczeniami" onClick={() => props.onDeleteBlock(block.id)}>✕ usuń</button>
                                       </div>
                                     </div>
@@ -574,6 +647,7 @@ export default function PlanTableView(props: Props) {
                               const addExRow = (
                                 <tr
                                   key={`add-ex-${block.id}`}
+                                  onMouseDown={e => { e.stopPropagation(); setActive({ dayId: day.id, blockId: block.id }) }}
                                   style={dropKey === `end-${block.id}` ? dropLine : undefined}
                                   onDragOver={e => {
                                     if (drag?.kind === 'ex' && drag.dayId === day.id) { e.preventDefault(); setDropKey(`end-${block.id}`) }
@@ -603,7 +677,8 @@ export default function PlanTableView(props: Props) {
                                   return (
                                     <tr
                                       key={ex.id ?? `${block.id}-${i}`}
-                                      style={{ ...(ex.variant_of != null ? { background: '#faf7ff' } : {}), ...(dropKey === `ex-${ex.variant_of ?? ex.id}` && ex.variant_of == null ? dropLine : {}) }}
+                                      onMouseDown={e => { e.stopPropagation(); setActive({ dayId: day.id, blockId: block.id }) }}
+                                      style={{ ...(ex.variant_of != null ? { background: '#faf7ff' } : {}), ...(selection?.blockId === block.id && selection.ids.includes((ex.variant_of ?? ex.id) as number) ? { background: '#fff7e0' } : {}), ...(dropKey === `ex-${ex.variant_of ?? ex.id}` && ex.variant_of == null ? dropLine : {}) }}
                                       onDragOver={e => {
                                         const target = ex.variant_of ?? ex.id
                                         if (drag?.kind === 'ex' && drag.dayId === day.id && target != null && drag.exId !== target) { e.preventDefault(); setDropKey(`ex-${target}`) }
@@ -618,6 +693,15 @@ export default function PlanTableView(props: Props) {
                                       <td style={td({ color: ex.variant_of != null ? '#7c3aed' : 'var(--muted-light)', fontWeight: labels.get(ex)?.match(/[a-z]/) ? 700 : 400, whiteSpace: 'nowrap' })}>
                                         {/* uchwyt tylko przy ćwiczeniu bazowym — warianty jadą razem z nim */}
                                         {ex.variant_of == null && ex.id != null && handle('Przeciągnij, by przenieść ćwiczenie (z wariantami) w tym treningu', () => setDrag({ kind: 'ex', exId: ex.id as number, blockId: block.id, dayId: day.id }))}
+                                        {ex.variant_of == null && ex.id != null && (
+                                          <input
+                                            type="checkbox"
+                                            checked={selection?.blockId === block.id && selection.ids.includes(ex.id)}
+                                            onChange={() => toggleSelect(block.id, ex.id as number)}
+                                            title="Zaznacz do kopiowania (Ctrl+C) — razem z wariantami"
+                                            style={{ margin: '0 3px 0 0', verticalAlign: 'middle', cursor: 'pointer', accentColor: 'var(--gold)' }}
+                                          />
+                                        )}
                                         {labels.get(ex) ?? i + 1}
                                       </td>
                                       <td style={td({ textAlign: 'left', minWidth: 150 })}>
@@ -749,9 +833,9 @@ export default function PlanTableView(props: Props) {
                                         {ex.variant_of == null && (
                                           <button onClick={() => props.onAddVariant(block.id, ex)} title="Dodaj wariant tego ćwiczenia (1a → 1b) dla części zawodniczek" style={{ ...iconBtn, color: '#7c3aed', fontWeight: 700 }}>+wariant</button>
                                         )}
-                                        {/* wariant przenosi się razem ze swoim ćwiczeniem bazowym */}
-                                        {ex.variant_of == null && (
-                                          <button onClick={() => props.onMoveExercise(block.id, ex)} title="Przenieś do innego bloku (z wariantami)" style={iconBtn}>↔</button>
+                                        {/* wariant kopiuje się razem ze swoim ćwiczeniem bazowym */}
+                                        {ex.variant_of == null && ex.id != null && (
+                                          <button onClick={() => { props.onCopyExercises(block.id, [ex.id as number]); notify('Skopiowano ćwiczenie — kliknij blok i wklej (Ctrl+V)') }} title="Kopiuj ćwiczenie (z wariantami)" style={iconBtn}>⧉</button>
                                         )}
                                         <button onClick={() => props.onDeleteExercise(block.id, ex.id)} title="Usuń ćwiczenie" style={{ ...iconBtn, color: '#c23b3b' }}>✕</button>
                                       </td>
@@ -772,6 +856,12 @@ export default function PlanTableView(props: Props) {
                     </div>
                   )
                 })}
+
+                {weekDays.length > 0 && (
+                  <div>
+                    <button className="coach-btn coach-btn-ghost coach-btn-small" onClick={() => onAddDay(week.id)}>+ Trening do tygodnia {week.week_number}</button>
+                  </div>
+                )}
 
                 {weekDays.length === 0 && (
                   <div style={{ color: 'var(--muted)', fontFamily: 'var(--font-inter),sans-serif', fontSize: 12, padding: '0.5rem 0' }}>

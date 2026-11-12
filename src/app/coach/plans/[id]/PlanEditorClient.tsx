@@ -1,7 +1,7 @@
 'use client'
 // src/app/coach/plans/[id]/PlanEditorClient.tsx
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { ClipboardList, X, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
@@ -116,10 +116,12 @@ interface Props {
   allBlocks: Block[]
 }
 
-type MoveItem =
-  | { type: 'exercise'; exercise: BlockExercise; fromBlockId: number }
-  | { type: 'block'; block: Block }
-  | { type: 'day'; day: Day }
+// Schowek edytora (kopiuj / wklej): blok albo ćwiczenia (z wariantami).
+// Trzymany też w localStorage — można wkleić w innym planie.
+type PlanClipboard =
+  | { kind: 'block'; block: Block }
+  | { kind: 'exercises'; exercises: BlockExercise[] }
+const CLIPBOARD_KEY = 'cheer-plan-clipboard'
 
 function formatExerciseName(name: string) {
   return name.replace(/-/g, ' ')
@@ -732,101 +734,6 @@ function VariantAssignModal({ options, athletes, onSave, onClose }: {
   )
 }
 
-function MoveModal({
-  item,
-  plans,
-  weeks,
-  days,
-  blocks,
-  onMove,
-  onClose,
-}: {
-  item: MoveItem
-  plans: Plan[]
-  weeks: Week[]
-  days: Day[]
-  blocks: Block[]
-  onMove: (targetId: number) => Promise<void>
-  onClose: () => void
-}) {
-  const [targetId, setTargetId] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  const planName = (planId: number) => plans.find(plan => plan.id === planId)?.name || 'Plan'
-  const weekLabel = (weekId: number) => {
-    const week = weeks.find(itemWeek => itemWeek.id === weekId)
-    return week ? `${planName(week.plan_id)} / Tydzien ${week.week_number}` : 'Tydzien'
-  }
-  const dayLabel = (dayId: number) => {
-    const day = days.find(itemDay => itemDay.id === dayId)
-    return day ? `${weekLabel(day.week_id)} / ${day.day_name}` : 'Trening'
-  }
-
-  const options = item.type === 'exercise'
-    ? blocks
-        .filter(block => block.id !== item.fromBlockId)
-        .map(block => ({ id: block.id, label: `${dayLabel(block.day_id)} / ${block.block_name}` }))
-    : item.type === 'block'
-      ? days
-          .filter(day => day.id !== item.block.day_id)
-          .map(day => ({ id: day.id, label: dayLabel(day.id) }))
-      : weeks
-          .filter(week => week.id !== item.day.week_id)
-          .map(week => ({ id: week.id, label: weekLabel(week.id) }))
-
-  const title = item.type === 'exercise'
-    ? 'Przenies cwiczenie'
-    : item.type === 'block'
-      ? 'Przenies blok'
-      : 'Przenies trening'
-
-  const hint = item.type === 'exercise'
-    ? 'Wybierz blok docelowy.'
-    : item.type === 'block'
-      ? 'Wybierz trening docelowy.'
-      : 'Wybierz tydzien docelowy.'
-
-  async function handleMove() {
-    if (!targetId) return
-    setSaving(true)
-    await onMove(parseInt(targetId))
-    setSaving(false)
-    onClose()
-  }
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      eyebrow="Organizacja planu"
-      title={title}
-      sub={hint}
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>Anuluj</Button>
-          <Button variant="dark" onClick={handleMove} disabled={!targetId || saving}>
-            {saving ? 'Przenosze...' : 'Przenies'}
-          </Button>
-        </>
-      }
-    >
-      <Field label="Miejsce docelowe">
-        <select value={targetId} onChange={event => setTargetId(event.target.value)}>
-          <option value="">Wybierz...</option>
-          {options.map(option => (
-            <option key={option.id} value={option.id}>{option.label}</option>
-          ))}
-        </select>
-      </Field>
-      {options.length === 0 && (
-        <div style={{ color: 'var(--muted)', fontSize: 13, fontFamily: 'var(--font-inter),sans-serif' }}>
-          Brak innych miejsc docelowych. Dodaj najpierw tydzien, trening albo blok.
-        </div>
-      )}
-    </Modal>
-  )
-}
-
 export default function PlanEditorClient({ plan, athletes = [], weeks, days, blocks, exercises, allPlans, allWeeks, allDays, allBlocks }: Props) {
   const router = useRouter()
   const supabase = createClient()
@@ -843,12 +750,19 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
   const [localWeeks, setLocalWeeks] = useState<Week[]>(weeks)
   const [localDays, setLocalDays] = useState<Day[]>(days)
   const [localBlocks, setLocalBlocks] = useState<Block[]>(blocks)
-  const [targetWeeks, setTargetWeeks] = useState<Week[]>(allWeeks)
-  const [targetDays, setTargetDays] = useState<Day[]>(allDays)
-  const [targetBlocks, setTargetBlocks] = useState<Block[]>(allBlocks)
+  const [, setTargetWeeks] = useState<Week[]>(allWeeks)
+  const [, setTargetDays] = useState<Day[]>(allDays)
+  const [, setTargetBlocks] = useState<Block[]>(allBlocks)
   const [selectedDayId, setSelectedDayId] = useState<number | null>(days[0]?.id || null)
   const [editingExercise, setEditingExercise] = useState<BlockExercise | null>(null)
-  const [movingItem, setMovingItem] = useState<MoveItem | null>(null)
+  const [clipboard, setClipboard] = useState<PlanClipboard | null>(null)
+  useEffect(() => {
+    // schowek z localStorage (też skopiowany w innej karcie / innym planie)
+    const load = () => { try { const raw = localStorage.getItem(CLIPBOARD_KEY); if (raw) setClipboard(JSON.parse(raw)) } catch {} }
+    const t = setTimeout(load, 0)
+    window.addEventListener('storage', load)
+    return () => { clearTimeout(t); window.removeEventListener('storage', load) }
+  }, [])
   const [savingPlan, setSavingPlan] = useState(false)
   const [planSaveMessage, setPlanSaveMessage] = useState('')
   const [globalError, setGlobalError] = useState('')
@@ -1066,50 +980,8 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
 
     const newBlocks: Block[] = []
     for (const day of otherDays) {
-      const dayBlocks = localBlocks.filter(b => b.day_id === day.id)
-      const order = dayBlocks.length + 1
-      const { data: blockData } = await supabase
-        .from('workout_day_blocks')
-        .insert({ day_id: day.id, block_name: block.block_name, block_order: order, rounds: block.rounds })
-        .select()
-        .single()
-      if (!blockData) continue
-
-      const exercises = block.workout_block_exercises || []
-      let copiedExercises: BlockExercise[] = []
-      if (exercises.length > 0) {
-        const rowFor = (ex: BlockExercise) => ({
-          block_id: (blockData as Block).id,
-          exercise_id: ex.exercise_id || null,
-          exercise_code: ex.exercise_code || null,
-          exercise_order: ex.exercise_order,
-          sets: ex.sets,
-          reps: ex.reps || null,
-          tempo: ex.tempo || null,
-          weight_kg: ex.weight_kg ?? null,
-          rir: ex.rir ?? null,
-          is_warmup: ex.is_warmup,
-          warmup_sets: ex.warmup_sets || [],
-          coach_comment: ex.coach_comment || null,
-          exercise_url: ex.exercise_url || null,
-          // osobne wartości serii i ISO — jak w oryginale
-          work_sets: ex.work_sets || [],
-          iso: !!ex.iso,
-          ...(ex.ecc ? { ecc: true } : {}),
-          iso_type: ex.iso ? (ex.iso_type || null) : null,
-        })
-        // warianty (1b, 1c...) kopiujemy z przepiętym variant_of na nowe ćwiczenia bazowe
-        let { data: exData, error: exErr } = await insertExercisesWithVariants(supabase, exercises, rowFor)
-        if (exErr && (isWorkSetsColumnError(exErr) || isIsoColumnError(exErr))) {
-          // brak kolumn work_sets / iso w bazie — skopiuj bez nich (usuń to, co już weszło)
-          if (exData.length) await supabase.from('workout_block_exercises').delete().in('id', exData.map((e: any) => e.id))
-          ;({ data: exData, error: exErr } = await insertExercisesWithVariants(supabase, exercises, ex => exercisePayloadWithoutIso(exercisePayloadWithoutWorkSets(rowFor(ex)))))
-        }
-        if (exErr) showError(`Nie udało się skopiować ćwiczeń bloku: ${exErr.message}`)
-        copiedExercises = (exData as BlockExercise[]) || []
-      }
-
-      newBlocks.push({ ...(blockData as Block), workout_block_exercises: copiedExercises })
+      const copy = await insertBlockCopy(block, day.id)
+      if (copy) newBlocks.push(copy)
     }
 
     setLocalBlocks(prev => [...prev, ...newBlocks])
@@ -1296,90 +1168,89 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
     handleExerciseDelete(blockId, exerciseId)
   }
 
-  async function handleMove(targetId: number) {
-    if (!movingItem) return
-
-    if (movingItem.type === 'exercise') {
-      const targetBlock = targetBlocks.find(block => block.id === targetId)
-      if (!targetBlock || !movingItem.exercise.id) return
-
-      const { count } = await supabase
-        .from('workout_block_exercises')
-        .select('id', { count: 'exact', head: true })
-        .eq('block_id', targetId)
-      const targetOrder = (count || 0) + 1
-      await supabase
-        .from('workout_block_exercises')
-        .update({ block_id: targetId, exercise_order: targetOrder })
-        .eq('id', movingItem.exercise.id)
-      // warianty idą razem ze swoim ćwiczeniem bazowym
-      const movingIds = new Set<number>([movingItem.exercise.id])
-      const variantsToMove = (localBlocks.find(b => b.id === movingItem.fromBlockId)?.workout_block_exercises || []).filter(e => e.variant_of === movingItem.exercise.id)
-      if (variantsToMove.length) {
-        await supabase.from('workout_block_exercises').update({ block_id: targetId, exercise_order: targetOrder }).eq('variant_of', movingItem.exercise.id)
-        variantsToMove.forEach(v => v.id != null && movingIds.add(v.id))
-      }
-      const movedRows = [{ ...movingItem.exercise, block_id: targetId, exercise_order: targetOrder }, ...variantsToMove.map(v => ({ ...v, block_id: targetId, exercise_order: targetOrder }))]
-
-      setLocalBlocks(prev => prev.map(block => {
-        if (block.id === movingItem.fromBlockId) {
-          return { ...block, workout_block_exercises: (block.workout_block_exercises || []).filter(exercise => !movingIds.has(exercise.id as number)) }
-        }
-        if (block.id === targetId) {
-          return { ...block, workout_block_exercises: [...(block.workout_block_exercises || []), ...movedRows] }
-        }
-        return block
-      }))
-      setTargetBlocks(prev => prev.map(block => block.id === targetId
-        ? {
-            ...block,
-            workout_block_exercises: [...(block.workout_block_exercises || []), ...movedRows],
-          }
-        : block
-      ))
-      return
-    }
-
-    if (movingItem.type === 'block') {
-      const targetDay = targetDays.find(day => day.id === targetId)
-      if (!targetDay) return
-
-      const targetOrder = targetBlocks.filter(block => block.day_id === targetId).length + 1
-      await supabase
-        .from('workout_day_blocks')
-        .update({ day_id: targetId, block_order: targetOrder })
-        .eq('id', movingItem.block.id)
-
-      const movedBlock = { ...movingItem.block, day_id: targetId, block_order: targetOrder }
-      setLocalBlocks(prev => {
-        const withoutBlock = prev.filter(block => block.id !== movingItem.block.id)
-        return targetDays.some(day => day.id === targetId && localWeeks.some(week => week.id === day.week_id))
-          ? [...withoutBlock, movedBlock]
-          : withoutBlock
-      })
-      setTargetBlocks(prev => prev.map(block => block.id === movingItem.block.id ? movedBlock : block))
-      return
-    }
-
-    const targetWeek = targetWeeks.find(week => week.id === targetId)
-    if (!targetWeek) return
-
-    const targetOrder = targetDays.filter(day => day.week_id === targetId).length + 1
-    await supabase
-      .from('workout_days')
-      .update({ week_id: targetId, day_order: targetOrder })
-      .eq('id', movingItem.day.id)
-
-    const movedDay = { ...movingItem.day, week_id: targetId, day_order: targetOrder }
-    const isCurrentPlanTarget = targetWeek.plan_id === plan.id
-    setLocalDays(prev => {
-      const withoutDay = prev.filter(day => day.id !== movingItem.day.id)
-      return isCurrentPlanTarget ? [...withoutDay, movedDay] : withoutDay
+  // ── Kopiuj / wklej ──
+  // Kopia ćwiczeń (z wariantami) do bloku; startOrder: numeracja dla wklejanych baz (warianty idą za swoją bazą)
+  async function insertExerciseCopies(blockId: number, exercises: BlockExercise[], startOrder?: number): Promise<BlockExercise[]> {
+    if (exercises.length === 0) return []
+    const bases = sortWithVariants(exercises).filter(e => e.variant_of == null)
+    const orderOf = new Map<number | undefined, number>(bases.map((b, i) => [b.id, startOrder != null ? startOrder + i : b.exercise_order]))
+    const rowFor = (ex: BlockExercise) => ({
+      block_id: blockId,
+      exercise_id: ex.exercise_id || null,
+      exercise_code: ex.exercise_code || null,
+      exercise_order: orderOf.get(ex.variant_of ?? ex.id) ?? ex.exercise_order,
+      sets: ex.sets,
+      reps: ex.reps || null,
+      tempo: ex.tempo || null,
+      weight_kg: ex.weight_kg ?? null,
+      rir: ex.rir ?? null,
+      is_warmup: ex.is_warmup,
+      warmup_sets: ex.warmup_sets || [],
+      coach_comment: ex.coach_comment || null,
+      exercise_url: ex.exercise_url || null,
+      // osobne wartości serii i ISO — jak w oryginale
+      work_sets: ex.work_sets || [],
+      iso: !!ex.iso,
+      ...(ex.ecc ? { ecc: true } : {}),
+      iso_type: ex.iso ? (ex.iso_type || null) : null,
     })
-    setTargetDays(prev => prev.map(day => day.id === movingItem.day.id ? movedDay : day))
-    if (!isCurrentPlanTarget && selectedDayId === movingItem.day.id) {
-      setSelectedDayId(localDays.find(day => day.id !== movingItem.day.id)?.id || null)
+    // warianty (1b, 1c...) kopiujemy z przepiętym variant_of na nowe ćwiczenia bazowe
+    let { data: exData, error: exErr } = await insertExercisesWithVariants(supabase, exercises, rowFor)
+    if (exErr && (isWorkSetsColumnError(exErr) || isIsoColumnError(exErr))) {
+      // brak kolumn work_sets / iso w bazie — skopiuj bez nich (usuń to, co już weszło)
+      if (exData.length) await supabase.from('workout_block_exercises').delete().in('id', exData.map((e: any) => e.id))
+      ;({ data: exData, error: exErr } = await insertExercisesWithVariants(supabase, exercises, ex => exercisePayloadWithoutIso(exercisePayloadWithoutWorkSets(rowFor(ex)))))
     }
+    if (exErr) showError(`Nie udało się skopiować ćwiczeń: ${exErr.message}`)
+    return (exData as BlockExercise[]) || []
+  }
+
+  async function insertBlockCopy(source: Block, dayId: number): Promise<Block | null> {
+    const order = Math.max(0, ...localBlocks.filter(b => b.day_id === dayId).map(b => b.block_order)) + 1
+    const { data: blockData, error } = await supabase
+      .from('workout_day_blocks')
+      .insert({ day_id: dayId, block_name: source.block_name, block_order: order, rounds: source.rounds })
+      .select()
+      .single()
+    if (error || !blockData) { showError(`Nie udało się wkleić bloku: ${error?.message || ''}`); return null }
+    const copied = await insertExerciseCopies((blockData as Block).id, source.workout_block_exercises || [])
+    return { ...(blockData as Block), workout_block_exercises: copied }
+  }
+
+  function saveClipboard(next: PlanClipboard) {
+    setClipboard(next)
+    try { localStorage.setItem(CLIPBOARD_KEY, JSON.stringify(next)) } catch {}
+  }
+
+  function copyBlockToClipboard(block: Block) {
+    saveClipboard({ kind: 'block', block: { ...block, workout_block_exercises: [...(block.workout_block_exercises || [])] } })
+  }
+
+  // ćwiczenia bazowe po id — warianty jadą razem ze swoją bazą
+  function copyExercisesToClipboard(blockId: number, baseIds: number[]) {
+    const all = localBlocks.find(b => b.id === blockId)?.workout_block_exercises || []
+    const ids = new Set(baseIds)
+    const picked = all.filter(e => (e.id != null && ids.has(e.id)) || (e.variant_of != null && ids.has(e.variant_of)))
+    if (picked.length) saveClipboard({ kind: 'exercises', exercises: picked })
+  }
+
+  async function pasteBlock(dayId: number) {
+    if (clipboard?.kind !== 'block') return
+    const newBlock = await insertBlockCopy(clipboard.block, dayId)
+    if (!newBlock) return
+    setLocalBlocks(prev => [...prev, newBlock])
+    setTargetBlocks(prev => [...prev, newBlock])
+  }
+
+  async function pasteExercises(blockId: number) {
+    if (clipboard?.kind !== 'exercises') return
+    const existing = localBlocks.find(b => b.id === blockId)?.workout_block_exercises || []
+    const start = Math.max(0, ...existing.map(e => e.exercise_order)) + 1
+    const copied = await insertExerciseCopies(blockId, clipboard.exercises, start)
+    if (copied.length === 0) return
+    const apply = (list: Block[]) => list.map(b => b.id === blockId ? { ...b, workout_block_exercises: [...(b.workout_block_exercises || []), ...copied] } : b)
+    setLocalBlocks(apply)
+    setTargetBlocks(apply)
   }
 
   return (
@@ -1396,18 +1267,6 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
 
         {showWellness && (
           <PlanWellnessConfig planId={plan.id} onClose={() => setShowWellness(false)} />
-        )}
-
-        {movingItem && (
-          <MoveModal
-            item={movingItem}
-            plans={allPlans}
-            weeks={targetWeeks}
-            days={targetDays}
-            blocks={targetBlocks}
-            onMove={handleMove}
-            onClose={() => setMovingItem(null)}
-          />
         )}
 
         <div className="coach-editor-hero">
@@ -1496,16 +1355,18 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
           onAddDay={addDay}
           onRenameDay={renameDay}
           onDeleteDay={deleteDay}
-          onMoveDay={day => setMovingItem({ type: 'day', day })}
           onSaveDayMessage={(dayId, field, value) => field === 'coach_intro' ? saveCoachIntro(dayId, value) : saveCoachClosing(dayId, value)}
           onAddBlock={addBlock}
           onRenameBlock={renameBlock}
           onCopyBlock={copyBlockToAllDays}
-          onMoveBlock={block => setMovingItem({ type: 'block', block })}
+          clipboard={clipboard ? (clipboard.kind === 'block' ? { kind: 'block', name: clipboard.block.block_name } : { kind: 'exercises', count: clipboard.exercises.filter(e => e.variant_of == null).length }) : null}
+          onCopyBlockToClipboard={copyBlockToClipboard}
+          onCopyExercises={copyExercisesToClipboard}
+          onPasteBlock={pasteBlock}
+          onPasteExercises={pasteExercises}
           onDeleteBlock={deleteBlock}
           onAddExercise={blockId => setEditingExercise({ block_id: blockId, exercise_order: (localBlocks.find(b => b.id === blockId)?.workout_block_exercises?.length ?? 0) + 1, sets: 3, is_warmup: false })}
           onEditExercise={(blockId, exercise) => setEditingExercise({ ...exercise, block_id: blockId })}
-          onMoveExercise={(blockId, exercise) => setMovingItem({ type: 'exercise', exercise: { ...exercise, block_id: blockId }, fromBlockId: blockId })}
           onDeleteExercise={deleteExercise}
           athletes={athletes}
           onAddVariant={addVariant}
