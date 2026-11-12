@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { sortWithVariants, variantLabels } from '@/lib/exerciseVariants'
 import { fmtRange, isoPowtLines, repsLines, eccTempoLines } from '@/lib/coach/planFormat'
-import { buildPlanPdf, loadPdfFonts } from '@/lib/coach/planPdf'
+import { buildPlanPdf, loadPdfFonts, loadPdfLogo } from '@/lib/coach/planPdf'
 import { EXERCISE_CATALOG_LIST_ID } from '@/lib/exerciseCatalog'
 import Link from 'next/link'
 import PlanModeSwitch, { fillHref, lastFillDay } from '@/components/coach/PlanModeSwitch'
@@ -297,7 +297,8 @@ async function exportXlsx(plan: Plan, days: Day[], blocks: Block[], wCols: numbe
 
 // ─── Export PDF ───────────────────────────────────────────────────────────────
 async function exportPdf(plan: Plan, days: Day[], blocks: Block[], athletes: { id: number; full_name: string }[]) {
-  const doc = await buildPlanPdf({ plan, days, blocks, athletes, fonts: await loadPdfFonts() })
+  const [fonts, logo] = await Promise.all([loadPdfFonts(), loadPdfLogo()])
+  const doc = await buildPlanPdf({ plan, days, blocks, athletes, fonts, logo })
   doc.save(`${plan.name}.pdf`)
 }
 

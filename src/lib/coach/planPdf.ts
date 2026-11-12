@@ -95,6 +95,7 @@ type DayCtx = {
   plan: { name: string }
   athletes: { id: number; full_name: string }[]
   blocks: PdfBlock[]
+  logo?: string | null   // logo Cheer LevelUP (PNG jako data URL) w nagłówku
 }
 
 export async function buildPlanPdf(opts: {
@@ -104,9 +105,10 @@ export async function buildPlanPdf(opts: {
   athletes: { id: number; full_name: string }[]
   fonts?: PdfFonts | null
   theme?: PdfTheme
+  logo?: string | null
 }): Promise<JsPDF> {
   const { plan, blocks, athletes, fonts } = opts
-  applyTheme(opts.theme ?? 'jasny')
+  applyTheme(opts.theme ?? 'sportowy')
   const { jsPDF } = await import('jspdf')
   const { default: autoTable } = await import('jspdf-autotable')
 
@@ -123,7 +125,7 @@ export async function buildPlanPdf(opts: {
 
   const doc = newDoc()
   const { font, t } = registerPdfFonts(doc, fonts)
-  const ctx: DayCtx = { font, t, plan, athletes, blocks }
+  const ctx: DayCtx = { font, t, plan, athletes, blocks, logo: opts.logo }
   const pageW = doc.internal.pageSize.getWidth()
   const pageH = doc.internal.pageSize.getHeight()
 
@@ -161,7 +163,7 @@ export async function buildPlanPdf(opts: {
     doc.setPage(p)
     doc.setDrawColor(...RULE); doc.setLineWidth(0.2); doc.line(12, pageH - 8, pageW - 12, pageH - 8)
     doc.setFont(font, 'normal'); doc.setFontSize(7); doc.setTextColor(...MUTED)
-    doc.text(t(`${plan.name} · Cheer LevelUP`), 12, pageH - 4.5)
+    doc.text(t(`${plan.name} · Cheer Level Up — Cheer Body Training Programs`), 12, pageH - 4.5)
     doc.text(`${p} / ${pages}`, pageW - 12, pageH - 4.5, { align: 'right' })
   }
   return doc
@@ -181,7 +183,7 @@ function drawDay(
   const pageW = doc.internal.pageSize.getWidth()
   const pageH = doc.internal.pageSize.getHeight()
   const m = 12
-  const headerH = 21
+  const headerH = TH.headerBand ? 28 : 21
   const bottom = 12
   const available = pageW - 2 * m
   const fs = 8 * s                     // podstawowy rozmiar tekstu
@@ -283,6 +285,10 @@ function drawDay(
   })
 
   const badgeFs = fs * 0.72
+  const spaced = (str: string, x: number, y: number, cs: number, opt: Record<string, unknown> = {}) => {
+    doc.text(str, x, y, { charSpace: cs, ...opt })
+    return doc.getTextWidth(str) + cs * Math.max(0, str.length - 1)
+  }
   const badgeW = (b: string) => { doc.setFont(font, 'bold'); doc.setFontSize(badgeFs); return doc.getTextWidth(b) + 2.6 * s }
   const badgesW = (bs: string[]) => bs.reduce((a, b) => a + badgeW(b) + 1.2, 0)
   const sectionPadTop = 3.2 * s
@@ -363,12 +369,10 @@ function drawDay(
         doc.setFont(font, 'bold'); doc.setFontSize(fs * 1.05); doc.setTextColor(...TH.circleFg)
         doc.text(row.letter, cx, cy + 0.1, { align: 'center', baseline: 'middle' })
         doc.setTextColor(...(solid ? [255, 255, 255] as RGB : NAVY))
-        const title = `Blok ${row.letter}`
-        doc.text(title, cx + r + 2.5, cy + 0.1, { baseline: 'middle' })
+        const tw = spaced(`BLOK ${row.letter}`, cx + r + 2.8, cy + 0.1, 0.55 * s, { baseline: 'middle' })
         if (row.name) {
-          const tw = doc.getTextWidth(title)
-          doc.setFont(font, 'normal'); doc.setTextColor(...(solid ? [175, 190, 212] as RGB : MUTED))
-          doc.text(row.name, cx + r + 2.5 + tw + 2.5, cy + 0.1, { baseline: 'middle' })
+          doc.setFont(font, 'normal'); doc.setFontSize(fs * 0.95); doc.setTextColor(...(solid ? GOLD : MUTED))
+          spaced(row.name.toUpperCase(), cx + r + 2.8 + tw + 3.5, cy + 0.1, 0.45 * s, { baseline: 'middle' })
         }
         if (!solid) { doc.setDrawColor(...(TH.section === 'line' ? NAVY : GOLD)); doc.setLineWidth(TH.section === 'line' ? 0.6 : 0.5); doc.line(c.x, y + h, c.x + c.width, y + h) }
         return
@@ -406,17 +410,34 @@ function drawDay(
     didDrawPage: () => {
       // nagłówek strony: nazwa treningu i plan — pełny pasek albo jasny z akcentem
       if (TH.headerBand) {
-        doc.setFillColor(...TH.headerBand); doc.rect(0, 0, pageW, headerH - 2, 'F')
-        doc.setFillColor(...GOLD); doc.rect(0, headerH - 2, pageW, 0.9, 'F')
-        doc.setFont(font, 'bold'); doc.setFontSize(17); doc.setTextColor(255, 255, 255)
-        doc.text(t(day.day_name), m, 12.6)
-        const dw = doc.getTextWidth(t(day.day_name))
-        doc.setFont(font, 'normal'); doc.setFontSize(10); doc.setTextColor(...GOLD)
-        doc.text(t(plan.name), m + dw + 4, 12.6)
-        doc.setFont(font, 'bold'); doc.setFontSize(8); doc.setTextColor(255, 255, 255)
-        doc.text('CHEER LEVELUP', pageW - m, 10.6, { align: 'right' })
-        doc.setFont(font, 'normal'); doc.setFontSize(7); doc.setTextColor(160, 178, 204)
-        doc.text(t('plan treningowy'), pageW - m, 14.2, { align: 'right' })
+        const bandH = headerH - 4
+        doc.setFillColor(...TH.headerBand); doc.rect(0, 0, pageW, bandH, 'F')
+        // ukośne pasy z prawej: jaśniejszy granat + złota linia
+        const sx = pageW * 0.64, sk = bandH * 0.55
+        doc.setFillColor(28, 50, 86); doc.lines([[pageW - sx + sk, 0], [0, bandH], [-(pageW - sx), 0]], sx, 0, [1, 1], 'F', true)
+        doc.setFillColor(...GOLD); doc.lines([[2.2, 0], [-sk, bandH], [-2.2, 0]], sx - 1.4, 0, [1, 1], 'F', true)
+        doc.lines([[1, 0], [-sk, bandH], [-1, 0]], sx - 5, 0, [1, 1], 'F', true)
+        doc.setFillColor(...GOLD); doc.rect(0, bandH, pageW, 1.1, 'F')
+        // logo w białym kółku
+        let x = m
+        if (ctx.logo) {
+          const d = bandH - 4.5
+          // białe kafelki z zaokrąglonymi rogami — plik logo ma białe tło
+          doc.setFillColor(255, 255, 255); doc.roundedRect(x - 0.8, bandH / 2 - d / 2 - 0.8, d + 1.6, d + 1.6, 2, 2, 'F')
+          try { doc.addImage(ctx.logo, 'PNG', x, bandH / 2 - d / 2, d, d, 'cheer-logo', 'FAST') } catch { /* brak logo — sam tekst */ }
+          x += d + 5
+        }
+        doc.setFont(font, 'bold'); doc.setFontSize(19); doc.setTextColor(255, 255, 255)
+        spaced(t(day.day_name).toUpperCase(), x, bandH / 2 - 0.4, 0.5)
+        doc.setFont(font, 'bold'); doc.setFontSize(7.5); doc.setTextColor(...GOLD)
+        spaced(t(`PLAN TRENINGOWY  ·  ${plan.name}`).toUpperCase(), x, bandH / 2 + 5.2, 0.9)
+        const rx = pageW - m
+        doc.setFont(font, 'bold'); doc.setFontSize(11); doc.setTextColor(255, 255, 255)
+        const w1 = doc.getTextWidth('CHEER LEVEL UP') + 1.2 * 13
+        doc.text('CHEER LEVEL UP', rx - w1, bandH / 2 - 0.2, { charSpace: 1.2 })
+        doc.setFont(font, 'normal'); doc.setFontSize(6.3); doc.setTextColor(165, 182, 208)
+        const w2 = doc.getTextWidth('CHEER BODY TRAINING PROGRAMS') + 0.55 * 27
+        doc.text('CHEER BODY TRAINING PROGRAMS', rx - w2, bandH / 2 + 4.4, { charSpace: 0.55 })
         return
       }
       doc.setFillColor(...GOLD); doc.rect(m, 9.5, 1.4, 8, 'F')
@@ -467,6 +488,24 @@ export async function loadPdfFonts(): Promise<PdfFonts | null> {
     return { regular, bold }
   } catch (e) {
     console.error('Nie udało się wczytać czcionek PDF', e)
+    return null
+  }
+}
+
+// Logo Cheer LevelUP do nagłówka PDF (public/pdf-logo.png); błąd → PDF bez logo
+export async function loadPdfLogo(): Promise<string | null> {
+  try {
+    const res = await fetch('/pdf-logo.png')
+    if (!res.ok) throw new Error('pdf-logo.png')
+    const blob = await res.blob()
+    return await new Promise<string>((resolve, reject) => {
+      const r = new FileReader()
+      r.onload = () => resolve(String(r.result))
+      r.onerror = () => reject(r.error)
+      r.readAsDataURL(blob)
+    })
+  } catch (e) {
+    console.error('Nie udało się wczytać logo PDF', e)
     return null
   }
 }
