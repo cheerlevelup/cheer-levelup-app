@@ -15,6 +15,7 @@ import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { Button } from '@/components/coach/ui'
 import { AlertTriangle, MessageCircle, Check, X, RefreshCw, FileDown } from 'lucide-react'
 import { sortWithVariants } from '@/lib/exerciseVariants'
+import { fmtRange, isoPowtLines, eccTempoLines, type PlanWorkSet } from '@/lib/coach/planFormat'
 import type { SheetBox, SheetCell, SheetColumn, SheetItem, SheetRow } from '@/lib/coach/dayFillPdf'
 
 type Athlete = { id: number; full_name: string }
@@ -25,6 +26,8 @@ type BlockEx = {
   warmup_sets?: WarmupSet[] | null; warmup_reps?: string | null; warmup_weight?: number | null
   // wariant ćwiczenia (1b, 1c...) — baza (1a) i zawodniczki, które go robią
   variant_of?: number | null; variant_athlete_ids?: number[] | null
+  // osobne wartości serii, ISO (PIMA/HIMA), ekscentryczne — jak w edytorze planu
+  work_sets?: PlanWorkSet[] | null; iso?: boolean | null; iso_type?: string | null; ecc?: boolean | null
 }
 type WarmupSet = { reps?: string | null; weight_kg?: string | number | null; note?: string | null }
 // Dodatkowe ćwiczenie trenera dla jednej zawodniczki (athlete_extra_exercises)
@@ -64,9 +67,34 @@ const logKey = (sessionId: number, exId: number, setNum: number, warmup = false)
 const ovrKey = (athleteId: number, exId: number) => `${athleteId}_${exId}`
 const blockLetter = (pos: number) => String.fromCharCode(65 + (pos % 26))
 
+// Rozpiska ćwiczenia z planu ("3×8 · 40 kg · tempo 3-1-1 · RIR 2", "HIMA 3×60''") —
+// z uwzględnieniem osobnych wartości serii (work_sets), ISO i ekscentrycznych
+const workSets = (ex: BlockEx) => (Array.isArray(ex.work_sets) ? ex.work_sets : [])
+function pickVal(ex: BlockEx, field: keyof PlanWorkSet, legacy: unknown): string {
+  if (legacy != null && String(legacy).trim() !== '') return String(legacy).trim()
+  const r = fmtRange(workSets(ex).map(w => w[field]))
+  return r === '—' ? '' : r
+}
+const exReps = (ex: BlockEx) => pickVal(ex, 'reps', ex.reps)
+function prescText(ex: BlockEx): string {
+  const sets = ex.sets || workSets(ex).length || 0
+  let main: string
+  if (ex.iso) {
+    const line = isoPowtLines(ex).join(' / ')
+    main = `${ex.iso_type ? `${ex.iso_type} ` : ''}${sets ? `${sets}×` : ''}${line.includes('×') || line.includes('/') ? ` (${line})` : line}`
+  } else {
+    const reps = exReps(ex)
+    main = sets ? `${sets}×${reps || '?'}` : reps
+  }
+  const weight = pickVal(ex, 'weight_kg', ex.weight_kg)
+  const tempo = ex.ecc ? eccTempoLines(ex).filter(l => l !== '—').join(' / ') : ex.iso ? '' : pickVal(ex, 'tempo', ex.tempo)
+  const rir = pickVal(ex, 'rir', ex.rir)
+  return [main, weight ? `${weight} kg` : '', tempo ? (ex.ecc ? tempo : `tempo ${tempo}`) : '', rir ? `RIR ${rir}` : ''].filter(Boolean).join(' · ')
+}
+
 const qiBtn: React.CSSProperties = {
-  width: 20, height: 20, padding: 0, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-  borderRadius: 6, border: '1.5px solid var(--border)', background: '#ffffff', color: 'var(--muted-light)', lineHeight: 1, outline: 'none',
+  width: 17, height: 17, padding: 0, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+  borderRadius: 5, border: '1px solid var(--border)', background: '#ffffff', color: 'var(--muted-light)', lineHeight: 1, outline: 'none',
 }
 
 // Pole edycji pod komórką: notatka albo ból (z oceną 0–10)
@@ -123,15 +151,22 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
 
   const ovrMap = useMemo(() => new Map(overrides.map(o => [ovrKey(o.athlete_id, o.block_exercise_id), o])), [overrides])
 
-  // Kolumny: ćwiczenia wszystkich bloków dnia (A1, A2, B1...)
+  // Kolumny: ćwiczenia wszystkich bloków dnia (A1, A2, B1...); warianty w osobnych
+  // kolumnach (B1a = bazowe dla nieprzypisanych, B1b, B1c...) — zawodniczka ma pola tylko w swojej
   // + kolumna „Dodatkowe" na końcu bloku, jeśli któraś zawodniczka ma w nim własne ćwiczenia
   type Column =
-    | { kind: 'ex'; ex: BlockEx; variants: BlockEx[]; block: Block; label: string; blockStart: boolean }
+    | { kind: 'ex'; ex: BlockEx; block: Block; label: string; blockStart: boolean; variant: 'base' | 'alt' | null; isFor: (athleteId: number) => boolean }
     | { kind: 'extra'; block: Block; label: string; blockStart: boolean; extras: Extra[] }
   const columns = useMemo(() => blocks.flatMap((b, bi): Column[] => {
-    // jedna kolumna na ćwiczenie; jego warianty (1b, 1c...) w tej samej kolumnie — każda zawodniczka widzi swój
     const sorted = sortWithVariants(b.workout_block_exercises)
-    const cols: Column[] = sorted.filter(ex => ex.variant_of == null).map((ex, i) => ({ kind: 'ex', ex, variants: sorted.filter(v => v.variant_of === ex.id), block: b, label: `${blockLetter(bi)}${i + 1}`, blockStart: i === 0 }))
+    const cols: Column[] = []
+    sorted.filter(ex => ex.variant_of == null).forEach((ex, i) => {
+      const slot = `${blockLetter(bi)}${i + 1}`
+      const vs = sorted.filter(v => v.variant_of === ex.id)
+      const taken = new Set(vs.flatMap(v => v.variant_athlete_ids || []))
+      cols.push({ kind: 'ex', ex, block: b, label: vs.length ? `${slot}a` : slot, blockStart: cols.length === 0, variant: vs.length ? 'base' : null, isFor: id => !taken.has(id) })
+      vs.forEach((v, vi) => cols.push({ kind: 'ex', ex: v, block: b, label: `${slot}${String.fromCharCode(98 + vi)}`, blockStart: false, variant: 'alt', isFor: id => (v.variant_athlete_ids || []).includes(id) }))
+    })
     const blockExtras = extras.filter(e => e.block_id === b.id)
     if (blockExtras.length) cols.push({ kind: 'extra', block: b, label: `${blockLetter(bi)}+`, blockStart: cols.length === 0, extras: blockExtras })
     return cols
@@ -302,7 +337,7 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
       if (el) { el.focus(); el.select(); return true }
       return false
     }
-    if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur(); go(row + 1, col, setIdx) }
+    if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur(); for (let r = row + 1; r < orderedAthletes.length; r++) if (go(r, col, setIdx)) break }
     else if (e.key === 'ArrowRight' && !go(row, col, setIdx + 1)) { for (let c = col + 1; c < columns.length; c++) if (go(row, c, 0)) break }
     else if (e.key === 'ArrowLeft' && setIdx > 0) go(row, col, setIdx - 1)
   }
@@ -370,10 +405,10 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
         return {
           blockIndex: bi, blockTitle, label: col.label, name: exName(ex),
           details: [
-            [ex.sets ? `${ex.sets}×${ex.reps || '?'}` : ex.reps, ex.tempo ? `tempo ${ex.tempo}` : '', ex.weight_kg != null ? `${ex.weight_kg} kg` : '', ex.rir != null ? `RIR ${ex.rir}` : ''].filter(Boolean).join(' · '),
+            prescText(ex),
             warmups.length ? `+ rozgrzewka: ${warmups.length} ${warmups.length === 1 ? 'seria' : 'serie'}` : '',
             ex.coach_comment || '',
-            col.variants.length ? [ex, ...col.variants].map((v, vi) => `${String.fromCharCode(97 + vi)}: ${exName(v)}`).join(' · ') : '',
+            col.variant ? (col.variant === 'base' ? 'wariant a — reszta grupy' : 'wariant — przypisane zawodniczki') : '',
           ].filter(Boolean),
         }
       })
@@ -389,16 +424,16 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                 `${name} · ${e.sets || 1}×${e.reps || '?'}${e.weight_kg != null ? ` · ${e.weight_kg} kg` : ''}`)
             }) }
           }
-          const variantIdx = col.variants.findIndex(v => (v.variant_athlete_ids || []).includes(athlete.id))
-          const ex = variantIdx >= 0 ? col.variants[variantIdx] : col.ex
+          if (!col.isFor(athlete.id)) return { text: '—' }
+          const ex = col.ex
           const o = ovrMap.get(ovrKey(athlete.id, ex.id))
           if (o?.skip) return { text: 'pominięte dla tej zawodniczki' }
-          const planned = o?.sets_override || ex.sets || 1
-          const reps = o?.reps_override || ex.reps || ''
+          const planned = o?.sets_override || ex.sets || workSets(ex).length || 1
+          const reps = o?.reps_override || exReps(ex)
           const changed = o && (o.sets_override || o.reps_override || o.weight_override != null || o.exercise_code_override)
           return { items: [sheetItem(session,
             { id: ex.id, name: exName(ex, o), sets: planned, reps, weight: o?.weight_override ?? ex.weight_kg ?? null, warmups: o?.warmup_sets_override ?? planWarmups(ex) },
-            col.variants.length ? `${col.label}${String.fromCharCode(97 + variantIdx + 1)} · ${exName(ex, o)}` : undefined,
+            undefined,
             changed ? `zmiana: ${o?.exercise_code_override ? `${o.exercise_code_override} · ` : ''}${planned}×${reps || '?'}${o?.weight_override != null ? ` · ${o.weight_override} kg` : ''}` : undefined,
           )] }
         })
@@ -451,7 +486,7 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
 
     return (
       <>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           {Array.from({ length: nWarm }, (_, i) => {
             const w = item.warmups[i]
             return input(`R${i + 1}`, i + 1, true, w?.weight_kg != null && w.weight_kg !== '' ? String(w.weight_kg) : 'kg')
@@ -463,14 +498,14 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
             title={pain ? `Ból ${pain.vas_score ?? ''}/10${pain.pain_comment ? `: ${pain.pain_comment}` : ''}` : 'Zaznacz ból'}
             style={pain ? { ...qiBtn, border: '1.5px solid #c23b3b', background: '#FDEDED', color: '#c23b3b' } : qiBtn}
           >
-            <AlertTriangle size={11} />
+            <AlertTriangle size={10} />
           </button>
           <button
             onClick={() => setCellEdit(prev => prev?.key === cellKey && prev.type === 'note' ? null : { key: cellKey, type: 'note' })}
             title={note || 'Dodaj notatkę'}
             style={note ? { ...qiBtn, border: '1.5px solid #2c5aa3', background: '#eaf1fb', color: '#2c5aa3' } : qiBtn}
           >
-            <MessageCircle size={11} />
+            <MessageCircle size={10} />
           </button>
         </div>
         {pain && !(cellEdit?.key === cellKey && cellEdit.type === 'pain') && (
@@ -510,31 +545,35 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
         .df-table tbody td { vertical-align: middle; }
         .df-sticky { position: sticky; left: 0; z-index: 2; background: #ffffff; box-shadow: 3px 0 8px rgba(13,27,42,0.05); }
         .df-table thead th { position: sticky; top: 0; z-index: 4; }
-        .df-table thead tr.df-ex-row th { top: 30px; }
+        .df-table thead tr.df-ex-row th { top: 22px; }
         .df-table thead th.df-sticky { z-index: 5; }
         .df-block-start { border-left: 2px solid var(--navy-900) !important; }
         .df-row:nth-child(even) td, .df-row:nth-child(even) .df-sticky { background: #FBFCFE; }
         .df-row:hover td, .df-row:hover .df-sticky { background: #EFF4FB; }
-        .df-w { width: 40px; border: 1.5px solid #DBE2EB; border-radius: 6px; background: #FAFBFC; font-family: var(--font-inter), sans-serif; font-size: 0.7rem; color: var(--navy-900); padding: 0.2rem 0.15rem; outline: none; text-align: center; }
+        .df-w { width: 34px; height: 20px; box-sizing: border-box; border: 1px solid #DBE2EB; border-radius: 5px; background: #FAFBFC; font-family: var(--font-inter), sans-serif; font-size: 0.66rem; color: var(--navy-900); padding: 0 2px; outline: none; text-align: center; }
         .df-w::placeholder { color: #B8C2D0; }
         .df-w.filled { border-color: var(--border); background: #ffffff; font-weight: 700; }
         .df-w:focus { border-color: var(--gold); background: #ffffff; }
       `}</style>
-      <div className="coach-content" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+      <div className="coach-content" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <PlanModeSwitch mode="fill" editorLink={editorHref(group.id, plan.id, day.id)} fillLink={null} />
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {dayNav.map((d, i) => (
               <button
                 key={d.id}
                 onClick={() => d.id !== day.id && router.push(`/coach/groups/${group.id}/plan/${plan.id}/day/${d.id}`)}
-                style={{ border: `1.5px solid ${d.id === day.id ? 'var(--navy-900)' : 'var(--border)'}`, background: d.id === day.id ? 'var(--navy-900)' : '#ffffff', color: d.id === day.id ? 'var(--gold)' : 'var(--navy-900)', borderRadius: 8, padding: '5px 10px', fontFamily: INTER, fontSize: '0.72rem', fontWeight: 700, outline: 'none' }}
+                style={{ border: `1.5px solid ${d.id === day.id ? 'var(--navy-900)' : 'var(--border)'}`, background: d.id === day.id ? 'var(--navy-900)' : '#ffffff', color: d.id === day.id ? 'var(--gold)' : 'var(--navy-900)', borderRadius: 7, padding: '3px 8px', fontFamily: INTER, fontSize: '0.68rem', fontWeight: 700, outline: 'none' }}
               >
                 {d.day_name || `Trening ${i + 1}`}
               </button>
             ))}
           </div>
-          <span style={{ marginLeft: 'auto', fontFamily: INTER, fontSize: '0.74rem', color: 'var(--muted)' }}>
+          <span
+            title="Wpisz ciężary (lub powtórzenia przy AMRAP/max) za zawodniczki — zapisują się po wyjściu z pola. Dopóki trening nie jest oznaczony jako zakończony, zawodniczka widzi te wpisy u siebie i może je zmieniać. Enter — ta sama seria u następnej zawodniczki, ← → — sąsiednia seria. Kółko przy nazwisku — oznacz trening jako zakończony."
+            style={{ marginLeft: 'auto', cursor: 'help', fontFamily: INTER, fontSize: '0.7rem', color: 'var(--muted)' }}
+          >ⓘ </span>
+          <span style={{ fontFamily: INTER, fontSize: '0.7rem', color: 'var(--muted)' }}>
             {saving > 0 ? 'Zapisuję…' : 'Zapisano'} · zakończone {doneCount}/{presentCount}{presentCount < athletes.length ? ` · nieobecne ${athletes.length - presentCount}` : ''}
           </span>
           <Button variant="ghost" size="small" onClick={exportPdf} disabled={exporting || columns.length === 0} title="Karta treningu do druku — wpisane serie i puste kratki do uzupełnienia">
@@ -544,11 +583,6 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
             <RefreshCw size={13} /> Odśwież
           </Button>
         </div>
-
-        <p style={{ margin: 0, fontFamily: INTER, fontSize: '0.74rem', color: 'var(--muted)' }}>
-          Wpisz ciężary (lub powtórzenia przy AMRAP/max) za zawodniczki — zapisują się po wyjściu z pola. Dopóki trening nie jest oznaczony jako
-          zakończony, zawodniczka widzi te wpisy u siebie i może je zmieniać. Enter — ta sama seria u następnej zawodniczki, ← → — sąsiednia seria.
-        </p>
 
         {error && (
           <div style={{ padding: '0.7rem', background: '#fdedec', border: '1.5px solid #c23b3b', borderRadius: 10, color: '#c23b3b', fontWeight: 700, fontSize: '0.84rem', fontFamily: INTER }}>❌ {error}</div>
@@ -562,19 +596,19 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
         ) : athletes.length === 0 ? (
           <div style={{ background: '#ffffff', border: '1.5px solid var(--border)', borderRadius: 14, padding: '1.5rem', textAlign: 'center', color: 'var(--muted-light)', fontFamily: INTER }}>Brak zawodniczek w grupie.</div>
         ) : (
-          <div ref={boardRef} style={{ background: '#ffffff', overflow: 'auto', maxHeight: 'calc(100vh - 220px)', boxShadow: 'var(--shadow)', borderRadius: 12 }}>
+          <div ref={boardRef} style={{ background: '#ffffff', overflow: 'auto', maxHeight: 'calc(100vh - 120px)', boxShadow: 'var(--shadow)', borderRadius: 12 }}>
             <table className="df-table">
               <thead>
                 <tr>
-                  <th rowSpan={2} className="df-sticky" style={{ width: 190, minWidth: 190, padding: '0.55rem 0.5rem', textAlign: 'left', fontFamily: INTER, fontSize: '0.6rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.08em', background: 'var(--bg)' }}>
+                  <th rowSpan={2} className="df-sticky" style={{ width: 150, minWidth: 150, padding: '0.3rem 0.45rem', textAlign: 'left', fontFamily: INTER, fontSize: '0.56rem', color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '0.08em', background: 'var(--bg)' }}>
                     Zawodniczka
                   </th>
                   {blocks.map((b, bi) => {
                     const span = columns.filter(c => c.block.id === b.id).length
                     return span > 0 && (
-                      <th key={b.id} colSpan={span} className="df-block-start" style={{ height: 30, padding: '0 0.6rem', background: 'var(--navy-900)', verticalAlign: 'middle', textAlign: 'left' }}>
-                        <span style={{ fontFamily: INTER, fontSize: '0.74rem', fontWeight: 800, color: 'var(--gold)' }}>Blok {blockLetter(bi)}</span>
-                        {b.block_name && <span style={{ fontFamily: INTER, fontSize: '0.68rem', fontWeight: 600, color: '#aeb7cc', marginLeft: 8 }}>{b.block_name}{b.rounds && b.rounds > 1 ? ` · ${b.rounds} rundy` : ''}</span>}
+                      <th key={b.id} colSpan={span} className="df-block-start" style={{ height: 22, padding: '0 0.5rem', background: 'var(--navy-900)', verticalAlign: 'middle', textAlign: 'left', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontFamily: INTER, fontSize: '0.68rem', fontWeight: 800, color: 'var(--gold)' }}>Blok {blockLetter(bi)}</span>
+                        {b.block_name && <span style={{ fontFamily: INTER, fontSize: '0.62rem', fontWeight: 600, color: '#aeb7cc', marginLeft: 6 }}>{b.block_name}{b.rounds && b.rounds > 1 ? ` · ${b.rounds} rundy` : ''}</span>}
                       </th>
                     )
                   })}
@@ -582,9 +616,9 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                 </tr>
                 <tr className="df-ex-row">
                   {columns.map(col => {
-                    const headStyle: React.CSSProperties = { minWidth: 170, maxWidth: 300, padding: '0.3rem 0.45rem', background: 'var(--bg)', textAlign: 'left' }
+                    const headStyle: React.CSSProperties = { minWidth: 110, maxWidth: 240, padding: '0.22rem 0.4rem', background: 'var(--bg)', textAlign: 'left' }
                     const pill = (text: string, purple = false) => (
-                      <span style={{ flexShrink: 0, minWidth: 26, textAlign: 'center', borderRadius: 6, background: purple ? '#7c3aed' : 'var(--navy-900)', color: purple ? '#ffffff' : 'var(--gold)', fontFamily: INTER, fontSize: '0.66rem', fontWeight: 800, padding: '3px 5px', lineHeight: 1 }}>{text}</span>
+                      <span style={{ flexShrink: 0, minWidth: 26, textAlign: 'center', borderRadius: 6, background: purple ? '#7c3aed' : 'var(--navy-900)', color: purple ? '#ffffff' : 'var(--gold)', fontFamily: INTER, fontSize: '0.6rem', fontWeight: 800, padding: '2px 4px', lineHeight: 1 }}>{text}</span>
                     )
                     if (col.kind === 'extra') {
                       return (
@@ -598,27 +632,22 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                       )
                     }
                     const ex = col.ex
-                    const presc = [
-                      ex.sets ? `${ex.sets}×${ex.reps || '?'}` : ex.reps,
-                      ex.tempo ? `tempo ${ex.tempo}` : '',
-                      ex.weight_kg != null ? `${ex.weight_kg} kg` : '',
-                      ex.rir != null ? `RIR ${ex.rir}` : '',
-                    ].filter(Boolean).join(' · ')
+                    const presc = prescText(ex)
                     const warmups = planWarmups(ex)
+                    const who = col.variant ? athletes.filter(a => col.isFor(a.id)) : []
                     return (
-                      <th key={ex.id} className={col.blockStart ? 'df-block-start' : undefined} style={headStyle}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          {pill(col.label)}
-                          <span style={{ fontWeight: 800, fontSize: '0.84rem', color: 'var(--navy-900)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={exName(ex)}>{exName(ex)}</span>
+                      <th key={ex.id} className={col.blockStart ? 'df-block-start' : undefined} style={{ ...headStyle, ...(col.variant === 'alt' ? { background: '#F6F1FE' } : {}) }}
+                        title={[exName(ex), presc, ex.coach_comment, col.variant ? `Robią: ${who.map(a => a.full_name).join(', ') || 'nikt'}` : ''].filter(Boolean).join('\n')}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                          {pill(col.label, col.variant === 'alt')}
+                          <span style={{ fontWeight: 800, fontSize: '0.72rem', color: col.variant === 'alt' ? '#7c3aed' : 'var(--navy-900)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{exName(ex)}</span>
                         </div>
-                        {presc && <div style={{ marginTop: 4, fontFamily: INTER, fontSize: '0.66rem', fontWeight: 700, color: 'var(--muted)' }}>{presc}</div>}
-                        {warmups.length > 0 && <div style={{ marginTop: 2, fontFamily: INTER, fontSize: '0.6rem', fontWeight: 700, color: '#c07f1e' }}>+ rozgrzewka: {warmups.length} {warmups.length === 1 ? 'seria' : 'serie'}</div>}
-                        {ex.coach_comment && <div style={{ marginTop: 2, fontFamily: INTER, fontSize: '0.6rem', color: 'var(--muted-light)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={ex.coach_comment}>{ex.coach_comment}</div>}
-                        {col.variants.length > 0 && (
-                          <div style={{ marginTop: 3, fontFamily: INTER, fontSize: '0.6rem', fontWeight: 700, color: '#7c3aed' }}>
-                            {[ex, ...col.variants].map((v, vi) => `${String.fromCharCode(97 + vi)}: ${exName(v)}`).join(' · ')}
-                          </div>
-                        )}
+                        <div style={{ marginTop: 2, fontFamily: INTER, fontSize: '0.6rem', fontWeight: 700, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {presc}
+                          {warmups.length > 0 && <span style={{ color: '#c07f1e' }}> · +{warmups.length}R</span>}
+                          {col.variant && <span style={{ color: '#7c3aed' }}> · 👥 {who.length}{col.variant === 'base' ? ' (reszta)' : ''}</span>}
+                          {ex.coach_comment && <span style={{ color: 'var(--muted-light)', fontWeight: 600 }}> · 💬</span>}
+                        </div>
                       </th>
                     )
                   })}
@@ -631,7 +660,7 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                   const absent = absentIds.has(athlete.id)
                   return (
                     <tr key={athlete.id} className="df-row">
-                      <td className="df-sticky" style={{ padding: '0.22rem 0.45rem' }}>
+                      <td className="df-sticky" style={{ padding: '1px 0.4rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           {absent ? (
                             <span title="Nieobecna na tym treningu" style={{ flexShrink: 0, width: 18, height: 18, borderRadius: '50%', border: '1.5px solid #F4B5B5', background: '#FDEDED', color: '#c23b3b', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: INTER, fontSize: '0.55rem', fontWeight: 800 }}>N</span>
@@ -644,7 +673,7 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                               {done ? <Check size={11} /> : session ? <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#c07f1e' }} /> : null}
                             </button>
                           )}
-                          <div title={athlete.full_name} style={{ fontWeight: 700, fontSize: '0.76rem', color: absent ? 'var(--muted-light)' : 'var(--navy-900)', textDecoration: absent ? 'line-through' : 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140 }}>{athlete.full_name}</div>
+                          <div title={athlete.full_name} style={{ fontWeight: 700, fontSize: '0.7rem', color: absent ? 'var(--muted-light)' : 'var(--navy-900)', textDecoration: absent ? 'line-through' : 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 110 }}>{athlete.full_name}</div>
                           <button
                             onClick={() => toggleAbsent(athlete.id)}
                             title={absent ? 'Przywróć — była na treningu' : 'Zaznacz nieobecność na tym treningu'}
@@ -656,7 +685,7 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                       </td>
                       {columns.map((col, colIdx) => {
                         const tdClass = col.blockStart ? 'df-block-start' : undefined
-                        const tdStyle: React.CSSProperties = { padding: '0.22rem 0.4rem', ...(done ? { background: '#F4FBF6' } : {}), ...(absent ? { opacity: 0.35, pointerEvents: 'none' as const } : {}) }
+                        const tdStyle: React.CSSProperties = { padding: '2px 4px', ...(done ? { background: '#F4FBF6' } : {}), ...(absent ? { opacity: 0.35, pointerEvents: 'none' as const } : {}) }
                         // numeracja pól w komórce (rozgrzewka + serie, kolejne ćwiczenia) — do nawigacji klawiaturą
                         const nav = { row: rowIdx, col: colIdx, next: 0 }
                         if (col.kind === 'extra') {
@@ -680,25 +709,22 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                             </td>
                           )
                         }
-                        // wariant tej zawodniczki (nieprzypisana = ćwiczenie bazowe 1a)
-                        const variantIdx = col.variants.findIndex(v => (v.variant_athlete_ids || []).includes(athlete.id))
-                        const ex = variantIdx >= 0 ? col.variants[variantIdx] : col.ex
+                        // kolumna wariantu, którego ta zawodniczka nie robi — pusta
+                        if (!col.isFor(athlete.id)) {
+                          return <td key={col.ex.id} className={tdClass} style={{ background: '#F5F6F8' }} />
+                        }
+                        const ex = col.ex
                         const o = ovrMap.get(ovrKey(athlete.id, ex.id))
                         if (o?.skip) {
-                          return <td key={col.ex.id} className={tdClass} style={{ padding: '0.45rem 0.55rem', fontFamily: INTER, fontSize: '0.66rem', color: 'var(--muted-light)', fontStyle: 'italic' }}>pominięte dla tej zawodniczki</td>
+                          return <td key={col.ex.id} className={tdClass} style={{ padding: '2px 6px', fontFamily: INTER, fontSize: '0.6rem', color: 'var(--muted-light)', fontStyle: 'italic', whiteSpace: 'nowrap' }}>pominięte</td>
                         }
-                        const planned = o?.sets_override || ex.sets || 1
-                        const reps = o?.reps_override || ex.reps || ''
+                        const planned = o?.sets_override || ex.sets || workSets(ex).length || 1
+                        const reps = o?.reps_override || exReps(ex)
                         const changed = o && (o.sets_override || o.reps_override || o.weight_override != null || o.exercise_code_override)
                         return (
                           <td key={col.ex.id} className={tdClass} style={tdStyle}>
-                            {col.variants.length > 0 && (
-                              <div style={{ fontFamily: INTER, fontSize: '0.58rem', fontWeight: 800, color: '#7c3aed', marginBottom: 1, whiteSpace: 'nowrap' }}>
-                                {col.label}{String.fromCharCode(97 + variantIdx + 1)} · {exName(ex, o)}
-                              </div>
-                            )}
                             {changed && (
-                              <div style={{ fontFamily: INTER, fontSize: '0.6rem', fontWeight: 700, color: '#7c3aed', marginBottom: 3 }}>
+                              <div style={{ fontFamily: INTER, fontSize: '0.56rem', fontWeight: 700, color: '#7c3aed', marginBottom: 1, whiteSpace: 'nowrap' }}>
                                 ✎ {o?.exercise_code_override ? `${o.exercise_code_override} · ` : ''}{planned}×{reps || '?'}{o?.weight_override != null ? ` · ${o.weight_override} kg` : ''}
                               </div>
                             )}
