@@ -21,6 +21,7 @@ type BlockExercise = {
   work_sets?: WorkSet[] | null; iso?: boolean | null; iso_type?: 'PIMA' | 'HIMA' | null
   // ćwiczenie ekscentryczne: w seriach czas fazy ekscentrycznej (ecc) i hold w rozciągnięciu (hold)
   ecc?: boolean | null
+  is_individual?: boolean | null
   // wariant ćwiczenia (1b, 1c...) — wskazuje na ćwiczenie bazowe (1a) i zawodniczki, które go robią
   variant_of?: number | null; variant_athlete_ids?: number[] | null
 }
@@ -728,6 +729,11 @@ export default function PlanTableView(props: Props) {
                                             {/* wpisana nazwa = własna nazwa (odpina od biblioteki); zmiana z biblioteki — przez ✏️ */}
                                             <EditCell value={name} onCommit={v => onUpdateExercise(block.id, ex, { exercise_code: v.trim() || name, exercise_id: null, exercise: null })} align="left" placeholder="nazwa" list={EXERCISE_CATALOG_LIST_ID} />
                                           </div>
+                                          {ex.is_individual && (
+                                            <button onClick={() => props.onEditExercise(block.id, ex)} title="Ćwiczenie indywidualne — każda zawodniczka ma własne parametry (kliknij, by edytować)" style={{ flexShrink: 0, border: '1px solid #0e7490', background: '#ecfeff', color: '#0e7490', fontFamily: 'var(--font-inter),sans-serif', fontSize: 9, fontWeight: 700, borderRadius: 4, padding: '1px 5px', letterSpacing: '.02em', cursor: 'pointer' }}>
+                                              INDYW.
+                                            </button>
+                                          )}
                                           {ex.ecc && !ex.iso && (
                                             <span title="Ćwiczenie ekscentryczne" style={{ flexShrink: 0, background: '#7c2d12', color: '#fed7aa', fontFamily: 'var(--font-inter),sans-serif', fontSize: 9, fontWeight: 700, borderRadius: 4, padding: '1px 5px', letterSpacing: '.02em' }}>
                                               ECC

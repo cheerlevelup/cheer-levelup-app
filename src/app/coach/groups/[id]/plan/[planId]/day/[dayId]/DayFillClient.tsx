@@ -28,6 +28,8 @@ type BlockEx = {
   variant_of?: number | null; variant_athlete_ids?: number[] | null
   // osobne wartości serii, ISO (PIMA/HIMA), ekscentryczne — jak w edytorze planu
   work_sets?: PlanWorkSet[] | null; iso?: boolean | null; iso_type?: string | null; ecc?: boolean | null
+  // ćwiczenie indywidualne — parametry każdej zawodniczki w athlete_exercise_overrides
+  is_individual?: boolean | null
 }
 type WarmupSet = { reps?: string | null; weight_kg?: string | number | null; note?: string | null }
 // Dodatkowe ćwiczenie trenera dla jednej zawodniczki (athlete_extra_exercises)
@@ -38,7 +40,7 @@ type Extra = {
 }
 // Ćwiczenie w komórce zawodniczki — z planu (z jej modyfikacjami) albo dodatkowe
 // bw — seria z ciężarem „BW” w planie (masa ciała): pole od razu pokazuje 0 kg
-type CellExercise = { id: number; name: string; sets: number; reps: string; weight: number | null; warmups: WarmupSet[]; bw?: boolean[] }
+type CellExercise = { id: number; name: string; sets: number; reps: string; weight: number | null; warmups: WarmupSet[]; bw?: boolean[]; info?: string; infoTitle?: string }
 type Block = { id: number; block_name: string | null; block_order: number; rounds?: number | null; workout_block_exercises: BlockEx[] }
 type Session = { id: number; athlete_id: number; workout_day_id: number; assignment_id: number | null; completed: boolean; report_sent?: boolean | null; date_completed?: string | null; created_at?: string }
 type SetLog = { id: number; workout_session_id: number; block_exercise_id: number; athlete_id: number; set_number: number; weight: number | null; reps_completed: number | null; completed: boolean; is_warmup: boolean; athlete_note?: string | null }
@@ -517,6 +519,9 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
     return (
       <>
         <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          {item.info && (
+            <span title={item.infoTitle} style={{ fontFamily: INTER, fontSize: '0.6rem', fontWeight: 800, color: '#0e7490', whiteSpace: 'nowrap', marginRight: 3 }}>{item.info}</span>
+          )}
           {Array.from({ length: nWarm }, (_, i) => {
             const w = item.warmups[i]
             return input(`R${i + 1}`, i + 1, true, w?.weight_kg != null && w.weight_kg !== '' ? String(w.weight_kg) : 'kg')
@@ -675,6 +680,7 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                         <div style={{ marginTop: 2, fontFamily: INTER, fontSize: '0.6rem', fontWeight: 700, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {presc}
                           {warmups.length > 0 && <span style={{ color: '#c07f1e' }}> · +{warmups.length}R</span>}
+                          {ex.is_individual && <span style={{ color: '#0e7490' }}> · indyw.</span>}
                           {col.variant && <span style={{ color: '#7c3aed' }}> · 👥 {who.length}{col.variant === 'base' ? ' (reszta)' : ''}</span>}
                           {ex.coach_comment && <span style={{ color: 'var(--muted-light)', fontWeight: 600 }}> · 💬</span>}
                         </div>
@@ -753,16 +759,16 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                         const changed = o && (o.sets_override || o.reps_override || o.weight_override != null || o.exercise_code_override)
                         return (
                           <td key={col.ex.id} className={tdClass} style={tdStyle}>
-                            {changed && (
-                              <div style={{ fontFamily: INTER, fontSize: '0.56rem', fontWeight: 700, color: '#7c3aed', marginBottom: 1, whiteSpace: 'nowrap' }}>
-                                ✎ {o?.exercise_code_override ? `${o.exercise_code_override} · ` : ''}{planned}×{reps || '?'}{o?.weight_override != null ? ` · ${o.weight_override} kg` : ''}
-                              </div>
-                            )}
                             {renderExercise(athlete, session, {
                               id: ex.id, name: exName(ex, o), sets: planned, reps,
                               weight: o?.weight_override ?? ex.weight_kg ?? null,
                               warmups: o?.warmup_sets_override ?? planWarmups(ex),
                               bw: bwSets(ex, o),
+                              // indywidualne (albo zmienione dla tej zawodniczki) — jej parametry przed polami
+                              ...(ex.is_individual || changed ? {
+                                info: `${changed && !ex.is_individual ? '✎ ' : ''}${o?.exercise_code_override ? `${o.exercise_code_override} · ` : ''}${planned}×${reps || '?'}${o?.weight_override != null ? ` · ${o.weight_override} kg` : ''}${o?.tempo_override ? ` · ${o.tempo_override}` : ''}`,
+                                infoTitle: ex.is_individual ? 'Parametry tej zawodniczki (ćwiczenie indywidualne)' : 'Zmienione dla tej zawodniczki',
+                              } : {}),
                             }, nav)}
                           </td>
                         )

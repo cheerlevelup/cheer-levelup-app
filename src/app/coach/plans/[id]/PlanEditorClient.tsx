@@ -91,7 +91,19 @@ type BlockExercise = {
   // wariant ćwiczenia (1b, 1c...): id ćwiczenia bazowego (1a) i zawodniczki, które go robią
   variant_of?: number | null
   variant_athlete_ids?: number[] | null
+  // ćwiczenie indywidualne — parametry każdej zawodniczki w athlete_exercise_overrides
+  is_individual?: boolean | null
 }
+
+// Czas zamiast powtórzeń: zapisywany w polu powtórzeń jako np. 30'' — widać go wszędzie tam, gdzie powtórzenia
+const TIME_SUFFIX = /\s*(''|"|s|sek)\s*$/i
+const isTimeVal = (v?: string | null) => !!v && TIME_SUFFIX.test(v.trim())
+const stripTime = (v?: string | null) => (v || '').trim().replace(TIME_SUFFIX, '')
+const toTime = (v: string) => { const t = stripTime(v); return t ? `${t}''` : '' }
+
+// Parametry jednej zawodniczki w ćwiczeniu indywidualnym (puste = jak w planie)
+type IndivRow = { sets: string; reps: string; weight: string; tempo: string }
+const EMPTY_INDIV: IndivRow = { sets: '', reps: '', weight: '', tempo: '' }
 
 type Block = {
   id: number
@@ -254,6 +266,7 @@ function exercisePayloadWithoutIso<T extends { iso?: boolean; iso_type?: string 
 function ExerciseEditForm({
   exercise,
   exercises,
+  athletes,
   linkFor,
   onSave,
   onDelete,
@@ -261,6 +274,7 @@ function ExerciseEditForm({
 }: {
   exercise: BlockExercise
   exercises: ExerciseLibraryItem[]
+  athletes: { id: number; full_name: string }[]
   linkFor: (name: string | null | undefined) => string | null
   onSave: (data: BlockExercise) => void
   onDelete: () => void
@@ -279,8 +293,67 @@ function ExerciseEditForm({
   const [useCustomName, setUseCustomName] = useState(!exercise.exercise_id)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
+  // powtórzenia albo czas (s) — wykryte z zapisanych serii (30'' = czas)
+  const [timeMode, setTimeMode] = useState(() => {
+    const filled = normalizeWorkSets(exercise).map(w => w.reps?.trim()).filter(Boolean)
+    return !exercise.iso && filled.length > 0 && filled.every(r => isTimeVal(r))
+  })
+  const [individual, setIndividual] = useState(!!exercise.is_individual)
+  const [indiv, setIndiv] = useState<Record<number, IndivRow>>({})
+  const [indivLoaded, setIndivLoaded] = useState<Set<number>>(new Set())
 
   const supabase = createClient()
+
+  // istniejące indywidualne parametry zawodniczek tego ćwiczenia
+  useEffect(() => {
+    if (!exercise.id) return
+    let cancelled = false
+    ;(async () => {
+      const { data } = await supabase.from('athlete_exercise_overrides')
+        .select('athlete_id, sets_override, reps_override, weight_override, tempo_override')
+        .eq('block_exercise_id', exercise.id)
+      if (cancelled || !data) return
+      const rows: Record<number, IndivRow> = {}
+      for (const o of data as { athlete_id: number; sets_override: number | null; reps_override: string | null; weight_override: number | null; tempo_override: string | null }[]) {
+        rows[o.athlete_id] = { sets: o.sets_override?.toString() || '', reps: o.reps_override || '', weight: o.weight_override?.toString() || '', tempo: o.tempo_override || '' }
+      }
+      setIndiv(rows)
+      setIndivLoaded(new Set(Object.keys(rows).map(Number)))
+    })()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exercise.id])
+
+  function updateIndiv(athleteId: number, field: keyof IndivRow, value: string) {
+    setIndiv(prev => ({ ...prev, [athleteId]: { ...EMPTY_INDIV, ...prev[athleteId], [field]: value } }))
+  }
+
+  function switchTimeMode(on: boolean) {
+    if (on === timeMode) return
+    const conv = (v?: string) => (v ? (on ? toTime(v) : stripTime(v)) : v)
+    setWorkSets(prev => prev.map(w => ({ ...w, reps: conv(w.reps) })))
+    setIndiv(prev => Object.fromEntries(Object.entries(prev).map(([k, r]) => [k, { ...r, reps: conv(r.reps) || '' }])))
+    setTimeMode(on)
+  }
+
+  // zapis indywidualnych parametrów (upsert tylko tych pól — reszta zmian zawodniczki zostaje)
+  async function saveIndividual(exId: number): Promise<string | null> {
+    const rows = athletes.map(a => {
+      const r = individual ? (indiv[a.id] || EMPTY_INDIV) : EMPTY_INDIV
+      const sets = parseInt(r.sets)
+      const weight = parseFloat(r.weight.replace(',', '.'))
+      return {
+        athlete_id: a.id, block_exercise_id: exId,
+        sets_override: isNaN(sets) ? null : sets,
+        reps_override: r.reps.trim() || null,
+        weight_override: isNaN(weight) ? (/^\s*bw\s*$/i.test(r.weight) ? 0 : null) : weight,
+        tempo_override: r.tempo.trim() || null,
+      }
+    }).filter(r => indivLoaded.has(r.athlete_id) || r.sets_override != null || r.reps_override || r.weight_override != null || r.tempo_override)
+    if (rows.length === 0) return null
+    const { error } = await supabase.from('athlete_exercise_overrides').upsert(rows, { onConflict: 'athlete_id,block_exercise_id' })
+    return error ? error.message : null
+  }
   const isNew = !exercise.id
   const canSave = useCustomName ? exerciseCode.trim().length > 0 : exerciseId.length > 0
 
@@ -334,6 +407,8 @@ function ExerciseEditForm({
       is_warmup: isWarmup,
       warmup_sets: isWarmup ? cleanWarmupSets(warmupSets) : [],
       exercise_url: exerciseUrl.trim() || null,
+      // indywidualne — wysyłane tylko, gdy włączone (albo było włączone), żeby reszta działała bez migracji
+      ...(individual || exercise.is_individual ? { is_individual: individual } : {}),
       // wariant (1b, 1c...) — wysyłane tylko dla wariantów, żeby zwykłe ćwiczenia działały bez migracji
       ...(exercise.variant_of != null ? { variant_of: exercise.variant_of, variant_athlete_ids: exercise.variant_athlete_ids ?? [] } : {}),
     }
@@ -372,6 +447,11 @@ function ExerciseEditForm({
       data = fallbackResult.data
       error = fallbackResult.error
     }
+    if (error && /is_individual/.test(error.message || '')) {
+      setSaving(false)
+      setSaveError('Aby oznaczać ćwiczenia jako indywidualne, uruchom migrację 202611120001 w Supabase.')
+      return
+    }
     setSaving(false)
     if (error) {
       setSaveError(/variant_of|variant_athlete_ids/.test(error.message || '')
@@ -400,6 +480,10 @@ function ExerciseEditForm({
     if (!savedExercise) {
       setSaveError('Nie udalo sie odswiezyc zapisanego cwiczenia. Sprobuj ponownie.')
       return
+    }
+    if ((individual || exercise.is_individual) && savedExercise.id) {
+      const err = await saveIndividual(savedExercise.id as number)
+      if (err) { onSave(savedExercise as BlockExercise); setSaveError(`Ćwiczenie zapisane, ale nie udało się zapisać parametrów zawodniczek: ${err}`); return }
     }
     onSave(savedExercise as BlockExercise)
     onClose()
@@ -466,6 +550,8 @@ function ExerciseEditForm({
       ? [{ field: 'seconds' as const, label: 'Czas (s)', placeholder: '20' }, { field: 'reps' as const, label: 'Powt.', placeholder: '-' }, { field: 'rest' as const, label: 'Rest (s)', placeholder: '-' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'intensity' as const, label: 'Intens. (%)', placeholder: '%' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }]
       : [{ field: 'seconds' as const, label: 'Czas (s)', placeholder: '20' }, { field: 'reps' as const, label: 'Powt.', placeholder: '-' }, { field: 'rest' as const, label: 'Rest (s)', placeholder: '-' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }])
     : [{ field: 'reps' as const, label: 'Powt.', placeholder: '8-10' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'tempo' as const, label: 'Tempo', placeholder: '3-1-2-0' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }]
+  const timeCols = !iso && timeMode
+  const colLabel = (c: { field: string; label: string }) => (timeCols && c.field === 'reps' ? 'Czas (s)' : c.label)
 
   return (
     <div className="exf">
@@ -535,13 +621,19 @@ function ExerciseEditForm({
         <div className="exf-card-head">
           <span className="exf-card-title">Serie <span className="exf-count">{workSets.length}</span></span>
           <span className="exf-hint">{typeHint}</span>
+          {!iso && (
+            <div className="exf-seg exf-seg-sm" style={{ marginLeft: 'auto' }} title="Powtórzenia albo czas trwania serii (zapisywany jako np. 30'')">
+              <button type="button" className={!timeMode ? 'on' : ''} onClick={() => switchTimeMode(false)}>Powtórzenia</button>
+              <button type="button" className={timeMode ? 'on' : ''} onClick={() => switchTimeMode(true)}>Czas</button>
+            </div>
+          )}
         </div>
         <div className="exf-table-wrap">
           <table className="exf-sets">
             <thead>
               <tr>
                 <th style={{ width: 28 }} />
-                {cols.map(c => <th key={c.field}>{c.label}</th>)}
+                {cols.map(c => <th key={c.field}>{colLabel(c)}</th>)}
                 <th style={{ width: 28 }} />
               </tr>
             </thead>
@@ -553,10 +645,10 @@ function ExerciseEditForm({
                     <td key={c.field}>
                       <input
                         ref={el => { workSetInputRefs.current[`${index}-${colIndex}`] = el }}
-                        value={set[c.field] || ''}
-                        onChange={e => updateWorkSet(index, c.field, e.target.value)}
+                        value={timeCols && c.field === 'reps' ? stripTime(set.reps) : (set[c.field] || '')}
+                        onChange={e => updateWorkSet(index, c.field, timeCols && c.field === 'reps' ? toTime(e.target.value) : e.target.value)}
                         onKeyDown={e => handleWorkSetKeyDown(e, index, colIndex)}
-                        placeholder={c.placeholder}
+                        placeholder={timeCols && c.field === 'reps' ? '30' : c.placeholder}
                       />
                     </td>
                   ))}
@@ -608,6 +700,52 @@ function ExerciseEditForm({
             <button type="button" className="exf-add" onClick={addWarmupSet}>+ Dodaj serię rozgrzewkową</button>
           </>
         )}
+      </section>
+
+      {/* ćwiczenie indywidualne: parametry każdej zawodniczki */}
+      <section className="exf-card">
+        <label className="exf-toggle">
+          <input type="checkbox" checked={individual} onChange={e => setIndividual(e.target.checked)} />
+          <span className="exf-switch" />
+          <span className="exf-card-title">Indywidualne parametry</span>
+          <span className="exf-hint">{individual ? 'Każda zawodniczka ma własne serie / powtórzenia / ciężar — puste pole = jak w seriach powyżej.' : 'wszystkie zawodniczki robią to samo'}</span>
+        </label>
+        {individual && (athletes.length === 0 ? (
+          <div className="exf-hint" style={{ marginTop: 8 }}>Ten plan nie ma przypisanych zawodniczek.</div>
+        ) : (() => {
+          const firstSet = workSets[0] || {}
+          const showTempo = !iso && !ecc
+          return (
+            <div className="exf-table-wrap" style={{ marginTop: 8, maxHeight: 320, overflowY: 'auto' }}>
+              <table className="exf-sets">
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: 'left' }}>Zawodniczka</th>
+                    <th>Serie</th>
+                    <th>{iso ? 'Powt.' : timeMode ? 'Czas (s)' : 'Powt.'}</th>
+                    <th>Ciężar</th>
+                    {showTempo && <th>Tempo</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {athletes.map(a => {
+                    const r = indiv[a.id] || EMPTY_INDIV
+                    const timeReps = !iso && timeMode
+                    return (
+                      <tr key={a.id}>
+                        <td style={{ textAlign: 'left', fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', paddingRight: 8 }}>{a.full_name}</td>
+                        <td><input value={r.sets} onChange={e => updateIndiv(a.id, 'sets', e.target.value)} placeholder={String(workSets.length || 1)} inputMode="numeric" /></td>
+                        <td><input value={timeReps ? stripTime(r.reps) : r.reps} onChange={e => updateIndiv(a.id, 'reps', timeReps ? toTime(e.target.value) : e.target.value)} placeholder={(timeReps ? stripTime(firstSet.reps) : firstSet.reps) || '—'} /></td>
+                        <td><input value={r.weight} onChange={e => updateIndiv(a.id, 'weight', e.target.value)} placeholder={firstSet.weight_kg || 'kg'} /></td>
+                        {showTempo && <td><input value={r.tempo} onChange={e => updateIndiv(a.id, 'tempo', e.target.value)} placeholder={firstSet.tempo || '—'} /></td>}
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )
+        })())}
       </section>
 
       {/* link + komentarz */}
@@ -1178,6 +1316,7 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
       work_sets: ex.work_sets || [],
       iso: !!ex.iso,
       ...(ex.ecc ? { ecc: true } : {}),
+      ...(ex.is_individual ? { is_individual: true } : {}),
       iso_type: ex.iso ? (ex.iso_type || null) : null,
     })
     // warianty (1b, 1c...) kopiujemy z przepiętym variant_of na nowe ćwiczenia bazowe
@@ -1318,6 +1457,7 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
               key={editingExercise.id ?? `new-${editingExercise.block_id}`}
               exercise={editingExercise}
               exercises={exercises}
+              athletes={athletes}
               linkFor={catalog.linkFor}
               onSave={saved => {
                 handleExerciseSave(editingExercise.block_id, saved)
