@@ -178,6 +178,30 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
     return cols
   }), [blocks, extras])
 
+  // Zwinięte bloki (klik w pasek bloku) — jedna wąska kolumna z postępem; pamiętane per plan
+  const collapseKey = `cheer-fill-collapsed-${plan.id}`
+  const [collapsed, setCollapsed] = useState<Set<number>>(new Set())
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try { const raw = localStorage.getItem(collapseKey); if (raw) setCollapsed(new Set(JSON.parse(raw) as number[])) } catch {}
+    }, 0)
+    return () => clearTimeout(t)
+  }, [collapseKey])
+  function toggleBlock(blockId: number) {
+    setCollapsed(prev => {
+      const next = new Set(prev)
+      if (next.has(blockId)) next.delete(blockId); else next.add(blockId)
+      try { localStorage.setItem(collapseKey, JSON.stringify([...next])) } catch {}
+      return next
+    })
+  }
+  type ViewColumn = Column | { kind: 'collapsed'; block: Block; label: string; blockStart: boolean; cols: Column[] }
+  const viewColumns = useMemo(() => blocks.flatMap((b, bi): ViewColumn[] => {
+    const cols = columns.filter(c => c.block.id === b.id)
+    if (!cols.length) return []
+    return collapsed.has(b.id) ? [{ kind: 'collapsed', block: b, label: blockLetter(bi), blockStart: true, cols }] : cols
+  }), [blocks, columns, collapsed])
+
   // Serie rozgrzewkowe z planu (nowy format warmup_sets albo stare pola warmup_reps/weight)
   const planWarmups = (ex: BlockEx): WarmupSet[] =>
     Array.isArray(ex.warmup_sets) && ex.warmup_sets.length ? ex.warmup_sets
@@ -367,7 +391,7 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
       return false
     }
     if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur(); for (let r = row + 1; r < orderedAthletes.length; r++) if (go(r, col, setIdx)) break }
-    else if (e.key === 'ArrowRight' && !go(row, col, setIdx + 1)) { for (let c = col + 1; c < columns.length; c++) if (go(row, c, 0)) break }
+    else if (e.key === 'ArrowRight' && !go(row, col, setIdx + 1)) { for (let c = col + 1; c < viewColumns.length; c++) if (go(row, c, 0)) break }
     else if (e.key === 'ArrowLeft' && setIdx > 0) go(row, col, setIdx - 1)
   }
 
@@ -479,6 +503,24 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
       setError('Nie udało się wygenerować PDF.')
     }
     setExporting(false)
+  }
+
+  // Postęp zawodniczki w zwiniętym bloku: wpisane serie robocze / zaplanowane
+  function blockProgress(athleteId: number, session: Session | undefined, cols: Column[]) {
+    let planned = 0, filled = 0
+    const count = (exId: number, sets: number) => {
+      planned += sets
+      if (!session) return
+      filled += Object.values(logs).filter(l => l.workout_session_id === session.id && l.block_exercise_id === exId && !l.is_warmup && (l.weight != null || l.reps_completed != null)).length
+    }
+    for (const col of cols) {
+      if (col.kind === 'extra') { col.extras.filter(e => e.athlete_id === athleteId).forEach(e => count(e.id, e.sets || 1)); continue }
+      if (!col.isFor(athleteId)) continue
+      const o = ovrMap.get(ovrKey(athleteId, col.ex.id))
+      if (o?.skip) continue
+      count(col.ex.id, o?.sets_override || col.ex.sets || workSets(col.ex).length || 1)
+    }
+    return { planned, filled: Math.min(filled, planned) }
   }
 
   // Pola jednego ćwiczenia w komórce: rozgrzewka (R1…), serie (S1…), ból i notatka
@@ -639,22 +681,37 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                     Zawodniczka
                   </th>
                   {blocks.map((b, bi) => {
-                    const span = columns.filter(c => c.block.id === b.id).length
+                    const span = viewColumns.filter(c => c.block.id === b.id).length
+                    const isCollapsed = collapsed.has(b.id)
                     return span > 0 && (
-                      <th key={b.id} colSpan={span} className="df-block-start" style={{ height: 22, padding: '0 0.5rem', background: 'var(--navy-900)', verticalAlign: 'middle', textAlign: 'left', whiteSpace: 'nowrap' }}>
-                        <span style={{ fontFamily: INTER, fontSize: '0.68rem', fontWeight: 800, color: 'var(--gold)' }}>Blok {blockLetter(bi)}</span>
-                        {b.block_name && <span style={{ fontFamily: INTER, fontSize: '0.62rem', fontWeight: 600, color: '#aeb7cc', marginLeft: 6 }}>{b.block_name}{b.rounds && b.rounds > 1 ? ` · ${b.rounds} rundy` : ''}</span>}
+                      <th key={b.id} colSpan={span} className="df-block-start" onClick={() => toggleBlock(b.id)}
+                        title={isCollapsed ? 'Rozwiń blok' : 'Zwiń blok do jednej kolumny'}
+                        style={{ height: 22, padding: '0 0.5rem', background: 'var(--navy-900)', verticalAlign: 'middle', textAlign: 'left', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}>
+                        <span style={{ fontFamily: INTER, fontSize: '0.6rem', color: '#aeb7cc', marginRight: 5 }}>{isCollapsed ? '▸' : '▾'}</span>
+                        <span style={{ fontFamily: INTER, fontSize: '0.68rem', fontWeight: 800, color: 'var(--gold)' }}>{isCollapsed ? blockLetter(bi) : `Blok ${blockLetter(bi)}`}</span>
+                        {!isCollapsed && b.block_name && <span style={{ fontFamily: INTER, fontSize: '0.62rem', fontWeight: 600, color: '#aeb7cc', marginLeft: 6 }}>{b.block_name}{b.rounds && b.rounds > 1 ? ` · ${b.rounds} rundy` : ''}</span>}
                       </th>
                     )
                   })}
                   <th rowSpan={2} style={{ width: '100%', background: 'var(--bg)', border: 'none' }} />
                 </tr>
                 <tr className="df-ex-row">
-                  {columns.map(col => {
+                  {viewColumns.map(col => {
                     const headStyle: React.CSSProperties = { minWidth: 110, maxWidth: 240, padding: '0.22rem 0.4rem', background: 'var(--bg)', textAlign: 'left' }
                     const pill = (text: string, purple = false) => (
                       <span style={{ flexShrink: 0, minWidth: 26, textAlign: 'center', borderRadius: 6, background: purple ? '#7c3aed' : 'var(--navy-900)', color: purple ? '#ffffff' : 'var(--gold)', fontFamily: INTER, fontSize: '0.6rem', fontWeight: 800, padding: '2px 4px', lineHeight: 1 }}>{text}</span>
                     )
+                    if (col.kind === 'collapsed') {
+                      const n = col.cols.length
+                      return (
+                        <th key={`collapsed-${col.block.id}`} className="df-block-start" onClick={() => toggleBlock(col.block.id)}
+                          title={`Zwinięty blok ${col.label}: ${col.cols.map(c => c.kind === 'ex' ? `${c.label} ${exName(c.ex)}` : 'Dodatkowe').join(', ')} — kliknij, by rozwinąć`}
+                          style={{ ...headStyle, minWidth: 48, maxWidth: 64, textAlign: 'center', cursor: 'pointer' }}>
+                          {pill(col.label)}
+                          <div style={{ marginTop: 3, fontFamily: INTER, fontSize: '0.56rem', fontWeight: 700, color: 'var(--muted)' }}>{n} ćw.</div>
+                        </th>
+                      )
+                    }
                     if (col.kind === 'extra') {
                       return (
                         <th key={`extra-${col.block.id}`} className={col.blockStart ? 'df-block-start' : undefined} style={headStyle}>
@@ -719,9 +776,19 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                           </button>
                         </div>
                       </td>
-                      {columns.map((col, colIdx) => {
+                      {viewColumns.map((col, colIdx) => {
                         const tdClass = col.blockStart ? 'df-block-start' : undefined
                         const tdStyle: React.CSSProperties = { padding: '2px 4px', ...(done ? { background: '#F4FBF6' } : {}), ...(absent ? { opacity: 0.35, pointerEvents: 'none' as const } : {}) }
+                        if (col.kind === 'collapsed') {
+                          const { planned, filled } = blockProgress(athlete.id, session, col.cols)
+                          const full = planned > 0 && filled >= planned
+                          return (
+                            <td key={`collapsed-${col.block.id}`} className={tdClass} onClick={() => toggleBlock(col.block.id)} title="Wpisane serie / zaplanowane — kliknij, by rozwinąć blok"
+                              style={{ ...tdStyle, textAlign: 'center', cursor: 'pointer', fontFamily: INTER, fontSize: '0.62rem', fontWeight: 800, whiteSpace: 'nowrap', color: full ? '#15803d' : filled ? '#c07f1e' : 'var(--muted-light)' }}>
+                              {planned === 0 ? '—' : full ? <><Check size={10} style={{ verticalAlign: '-1px' }} /> {filled}/{planned}</> : `${filled}/${planned}`}
+                            </td>
+                          )
+                        }
                         // numeracja pól w komórce (rozgrzewka + serie, kolejne ćwiczenia) — do nawigacji klawiaturą
                         const nav = { row: rowIdx, col: colIdx, next: 0 }
                         if (col.kind === 'extra') {
