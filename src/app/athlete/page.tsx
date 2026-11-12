@@ -10,6 +10,7 @@ import {
   getAthleteTrainingHistory,
 } from '@/lib/training'
 import AthleteClient from './AthleteClient'
+import { getAthleteGroupTrainings } from '@/lib/athleteGroupTraining'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,9 +52,10 @@ export default async function AthletePage() {
   const todayDateStr = todayStart.toISOString().split('T')[0]
 
   // Wszystkie zapytania równolegle — zamiast sekwencyjnie
-  const [nextTraining, planTrainings, history, { data: todayWellnessLog }, { data: athleteWellnessConfig }, { data: groupWellnessConfig }] = await Promise.all([
+  const [nextTraining, planTrainings, groupTrainings, history, { data: todayWellnessLog }, { data: athleteWellnessConfig }, { data: groupWellnessConfig }] = await Promise.all([
     getNextTrainingForAthlete(athlete.id, athlete.group_id || undefined),
     getPlanTrainingsForAthlete(athlete.id, athlete.group_id || undefined),
+    getAthleteGroupTrainings(athlete.id, athlete.group_id),
     getAthleteTrainingHistory(athlete.id, 5),
     supabase
       .from('wellness_logs')
@@ -115,6 +117,7 @@ export default async function AthletePage() {
       athlete={athlete}
       nextTraining={nextTraining}
       planTrainings={planTrainings}
+      groupTrainings={groupTrainings}
       history={history}
       todayWellness={{
         dateIso: todayStart.toISOString(),

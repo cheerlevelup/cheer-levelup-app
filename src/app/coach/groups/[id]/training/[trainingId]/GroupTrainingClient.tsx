@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { formatDatePl } from '@/lib/groupTraining'
-import { CheckSquare, MessageCircle, Info, AlertTriangle, Pencil, Plus, Check, X, Trash2, PanelLeftClose, PanelLeftOpen, ChevronsLeft, ChevronsRight, Download, Link2, Eraser, Lock, Unlock, Minimize2, Maximize2 } from 'lucide-react'
+import { CheckSquare, MessageCircle, RefreshCw, Info, AlertTriangle, Pencil, Plus, Check, X, Trash2, PanelLeftClose, PanelLeftOpen, ChevronsLeft, ChevronsRight, Download, Link2, Eraser, Lock, Unlock, Minimize2, Maximize2 } from 'lucide-react'
 import { SetPageMeta, usePageMeta } from '@/components/coach/PageMetaContext'
 import { Button } from '@/components/coach/ui'
 import { loadPdf, pl, drawHeaderBar, drawFooter, TABLE_STYLES } from '@/lib/groupPdf'
@@ -772,6 +772,16 @@ export default function GroupTrainingClient({ group, training, athletes, initial
   // Najnowsze serie per komórka — chroni przed zgubieniem ciężaru przy szybkim
   // przechodzeniu między polami (zapis async może nie zdążyć przed kolejnym blur)
   const latestSetsRef = useRef<Map<string, SetRow[]>>(new Map())
+  // Pobranie aktualnych wpisów z bazy — także tych uzupełnionych przez zawodniczki w ich aplikacji
+  const [refreshing, setRefreshing] = useState(false)
+  async function refreshEntries() {
+    setRefreshing(true)
+    const { data, error: err } = await supabase.from('group_training_entries').select('*').eq('training_id', training.id)
+    setRefreshing(false)
+    if (err || !data) { setError(err?.message || 'Nie udało się odświeżyć'); return }
+    latestSetsRef.current.clear()
+    setEntryMap(new Map((data as Entry[]).map(e => [entryKey(e.exercise_id, e.athlete_id), e])))
+  }
   const dragExId = useRef<number | null>(null) // ćwiczenie przeciągane (zmiana kolejności)
   const [dragOverExId, setDragOverExId] = useState<number | null>(null)
 
@@ -1971,6 +1981,9 @@ export default function GroupTrainingClient({ group, training, athletes, initial
             </Button>
             <Button variant="ghost" size="small" onClick={() => router.push(`/coach/groups/${group.id}/feedback`)}>
               <MessageCircle size={13} /> Feedback po treningu
+            </Button>
+            <Button variant="ghost" size="small" onClick={refreshEntries} disabled={refreshing} title="Pobierz wpisy uzupełnione przez zawodniczki w aplikacji">
+              <RefreshCw size={13} /> {refreshing ? 'Odświeżam…' : 'Odśwież'}
             </Button>
             <Button variant="dark" size="small" onClick={exportTrainingPdf} disabled={exportingPdf || sortedExercises.length === 0} style={{ color: 'var(--gold)' }}>
               <Download size={13} /> {exportingPdf ? 'Generuję...' : 'PDF'}

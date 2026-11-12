@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Athlete, WorkoutSession, AthleteWorkoutAssignment, WorkoutDay } from '@/types/workout'
 import type { PlanTrainingItem } from '@/lib/training'
+import type { GroupTrainingListItem } from '@/lib/athleteGroupTraining'
 import WellnessModal from '@/components/WellnessModal'
 import { C, sans, display, shadow, radius } from '@/lib/athleteTheme'
 
@@ -18,6 +19,8 @@ interface Props {
   } | null
   // wszystkie treningi aktywnego planu — zawodniczka może rozpocząć dowolny
   planTrainings: { assignmentId: number; planName: string; trainings: PlanTrainingItem[] } | null
+  // treningi grupy (moduł trenera „Trening grupy") — wpisy wspólne z tabelą trenera
+  groupTrainings: GroupTrainingListItem[]
   history: WorkoutSession[]
   todayWellness: WellnessStatus
   wellnessEnabled: boolean
@@ -42,7 +45,7 @@ function formatLongDate(iso: string): string {
   return new Date(iso).toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' })
 }
 
-export default function AthleteClient({ athlete, nextTraining, planTrainings, history, todayWellness, wellnessEnabled, wellnessFields }: Props) {
+export default function AthleteClient({ athlete, nextTraining, planTrainings, groupTrainings, history, todayWellness, wellnessEnabled, wellnessFields }: Props) {
   const router = useRouter()
   const [wellnessOpen, setWellnessOpen] = useState(false)
   const [wellnessDone, setWellnessDone] = useState(todayWellness.isComplete)
@@ -198,6 +201,41 @@ export default function AthleteClient({ athlete, nextTraining, planTrainings, hi
                       {multiWeek && <div style={{ fontSize: 12, color: C.muted, marginTop: 1 }}>Tydzień {t.week_number}</div>}
                     </div>
                     {status && <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: status.fg, background: status.bg, border: `1px solid ${status.bd}`, borderRadius: 999, padding: '3px 9px' }}>{status.label}</span>}
+                    {!t.absent && <span style={{ flexShrink: 0, color: C.gray, fontSize: 22, lineHeight: 1 }}>›</span>}
+                  </button>
+                )
+              })}
+            </section>
+          )}
+
+          {/* ── TRENINGI GRUPY ── */}
+          {groupTrainings.length > 0 && (
+            <section style={{ background: C.white, border: `1px solid ${C.grayLight}`, borderRadius: radius, boxShadow: shadow, overflow: 'hidden' }}>
+              <div style={{ padding: '14px 16px 8px' }}>
+                <div className="ath-eyebrow" style={{ color: C.muted, fontSize: 10 }}>Treningi grupy</div>
+                <div className="ath-display" style={{ fontSize: 20, color: C.ink, marginTop: 2 }}>Uzupełnij wyniki</div>
+              </div>
+              {groupTrainings.map(t => {
+                const complete = t.exercises > 0 && t.filled >= t.exercises
+                const chip = t.absent ? { label: 'nieobecność', fg: '#b42318', bg: '#fdecec', bd: '#f6c9c9' }
+                  : complete ? { label: '✓ uzupełniony', fg: '#1f9d68', bg: '#ecfaf3', bd: '#bfe9d3' }
+                  : t.filled > 0 ? { label: `${t.filled}/${t.exercises}`, fg: '#a8650f', bg: '#fdf3e2', bd: '#f3d9a8' }
+                  : null
+                const d = new Date(`${t.training_date}T12:00:00`)
+                return (
+                  <button key={t.id} className={t.absent ? undefined : 'ath-card'} disabled={t.absent}
+                    onClick={() => !t.absent && router.push(`/athlete/group-training/${t.id}`)}
+                    title={t.absent ? 'Trener zaznaczył nieobecność na tym treningu' : undefined}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, minHeight: 56, padding: '10px 16px', border: 'none', borderTop: `1px solid ${C.grayLight}`, background: C.white, textAlign: 'left', opacity: t.absent ? 0.6 : 1, cursor: t.absent ? 'not-allowed' : 'pointer' }}>
+                    <div style={{ width: 40, flexShrink: 0, textAlign: 'center', lineHeight: 1 }}>
+                      <div style={{ fontFamily: display, fontWeight: 700, fontSize: 20, color: C.navy }}>{d.getDate()}</div>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: C.muted, textTransform: 'uppercase', marginTop: 2 }}>{d.toLocaleDateString('pl-PL', { month: 'short' }).replace('.', '')}</div>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 15, color: C.ink }}>Trening grupy</div>
+                      <div style={{ fontSize: 12, color: C.muted, marginTop: 1, textTransform: 'capitalize' }}>{d.toLocaleDateString('pl-PL', { weekday: 'long' })} · {t.exercises} ćw.</div>
+                    </div>
+                    {chip && <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: chip.fg, background: chip.bg, border: `1px solid ${chip.bd}`, borderRadius: 999, padding: '3px 9px' }}>{chip.label}</span>}
                     {!t.absent && <span style={{ flexShrink: 0, color: C.gray, fontSize: 22, lineHeight: 1 }}>›</span>}
                   </button>
                 )
