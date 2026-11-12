@@ -825,9 +825,11 @@ function WellnessExpanded({ sessionId, athleteId, existingWellness, preFields, o
 
 // ─── EXERCISE CARD ────────────────────────────────────────────────────────────
 
-function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, prevWeight, blockLetter }: {
+function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, onLogSaved, prevWeight, blockLetter }: {
   exercise: TrainingExercise; sessionId: number; athleteId: number
   setLogs: SetLog[]; onSetsChange: (delta: number) => void; prevWeight?: number | null
+  // zapisany wpis serii — przekazywany wyżej, żeby podsumowanie przed wysłaniem raportu miało aktualne ciężary
+  onLogSaved?: (log: SetLog) => void
   blockLetter?: string
 }) {
   const supabase = createClient()
@@ -846,6 +848,7 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
       const without = prev.filter(l => setLogKey(l) !== key)
       return [...without, log]
     })
+    onLogSaved?.(log)
   }
   const [tempoOpen, setTempoOpen] = useState(false)
   const [videoOpen, setVideoOpen] = useState(false)
@@ -1841,6 +1844,11 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
   const [doneSetsCount, setDoneSetsCount] = useState(() => dedupeSetLogs(existingSetLogs).filter(l => l.completed && !l.is_warmup).length)
   const progress = totalSets > 0 ? Math.round((doneSetsCount / totalSets) * 100) : 0
 
+  // Wpisy z kart ćwiczeń — aktualne dane dla okna podsumowania (Zakończ i wyślij)
+  const handleLogSaved = useCallback((log: SetLog) => {
+    setSetLogs(prev => [...prev.filter(l => setLogKey(l) !== setLogKey(log)), log])
+  }, [])
+
   const handleSetsChange = useCallback((delta: number) => {
     setDoneSetsCount(prev => Math.max(0, prev + delta))
   }, [])
@@ -2019,6 +2027,7 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
                   athleteId={athlete.id}
                   setLogs={setLogs}
                   onSetsChange={handleSetsChange}
+                  onLogSaved={handleLogSaved}
                   prevWeight={null}
                   blockLetter={`${block.block_name?.split(/\s+/).pop() || ''}${exIdx + 1}`}
                 />
