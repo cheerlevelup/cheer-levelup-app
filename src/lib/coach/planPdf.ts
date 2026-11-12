@@ -27,24 +27,62 @@ type PdfDay = { id: number; day_name: string; day_order: number }
 export type PdfFonts = { regular: string; bold: string }
 
 type RGB = [number, number, number]
-const NAVY: RGB = [13, 27, 42]
-const GOLD: RGB = [232, 168, 56]
-const INK: RGB = [24, 36, 52]
-const BODY: RGB = [70, 84, 104]
-const MUTED: RGB = [138, 150, 168]
-const FAINT: RGB = [196, 204, 216]
-const RULE: RGB = [228, 233, 240]
-const SECTION_BG: RGB = [246, 248, 251]
-const VALUE_BG: RGB = [250, 251, 253]
+
+// Motywy wyglądu PDF — kolory + układ nagłówka strony, sekcji bloków i pasków wierszy
+export type PdfTheme = 'jasny' | 'sportowy' | 'minimalny' | 'swiezy'
+type ThemeDef = {
+  navy: RGB; gold: RGB; ink: RGB; body: RGB; muted: RGB; faint: RGB; rule: RGB
+  sectionBg: RGB; valueBg: RGB | null; zebra: RGB | null
+  headerBand: RGB | null            // pełny pasek nagłówka strony (null = jasny nagłówek z akcentem)
+  section: 'light' | 'solid' | 'line'
+  sectionSolid: RGB                 // tło sekcji bloku przy 'solid'
+  circleBg: RGB; circleFg: RGB
+  headRule: RGB
+}
+const THEMES: Record<PdfTheme, ThemeDef> = {
+  jasny: {
+    navy: [13, 27, 42], gold: [232, 168, 56], ink: [24, 36, 52], body: [70, 84, 104], muted: [138, 150, 168], faint: [196, 204, 216], rule: [228, 233, 240],
+    sectionBg: [246, 248, 251], valueBg: [250, 251, 253], zebra: null, headerBand: null, section: 'light', sectionSolid: [13, 27, 42],
+    circleBg: [13, 27, 42], circleFg: [232, 168, 56], headRule: [13, 27, 42],
+  },
+  sportowy: {
+    navy: [15, 30, 54], gold: [242, 183, 5], ink: [22, 32, 48], body: [72, 84, 102], muted: [130, 143, 162], faint: [190, 199, 212], rule: [224, 229, 237],
+    sectionBg: [240, 243, 248], valueBg: null, zebra: [246, 248, 251], headerBand: [15, 30, 54], section: 'solid', sectionSolid: [28, 47, 79],
+    circleBg: [242, 183, 5], circleFg: [15, 30, 54], headRule: [242, 183, 5],
+  },
+  minimalny: {
+    navy: [28, 28, 32], gold: [28, 28, 32], ink: [24, 24, 28], body: [88, 88, 96], muted: [140, 140, 148], faint: [205, 205, 210], rule: [232, 232, 236],
+    sectionBg: [255, 255, 255], valueBg: null, zebra: [249, 249, 250], headerBand: null, section: 'line', sectionSolid: [28, 28, 32],
+    circleBg: [28, 28, 32], circleFg: [255, 255, 255], headRule: [28, 28, 32],
+  },
+  swiezy: {
+    navy: [15, 52, 67], gold: [13, 148, 136], ink: [20, 42, 52], body: [70, 92, 102], muted: [126, 148, 158], faint: [190, 208, 214], rule: [222, 234, 238],
+    sectionBg: [236, 247, 246], valueBg: [247, 251, 251], zebra: null, headerBand: null, section: 'light', sectionSolid: [15, 52, 67],
+    circleBg: [13, 148, 136], circleFg: [255, 255, 255], headRule: [13, 148, 136],
+  },
+}
+let TH: ThemeDef = THEMES.jasny
+let NAVY: RGB = TH.navy
+let GOLD: RGB = TH.gold
+let INK: RGB = TH.ink
+let BODY: RGB = TH.body
+let MUTED: RGB = TH.muted
+let FAINT: RGB = TH.faint
+let RULE: RGB = TH.rule
+let SECTION_BG: RGB = TH.sectionBg
 const VARIANT: RGB = [124, 58, 237]
 const VARIANT_BG: RGB = [251, 249, 255]
 const LINK: RGB = [30, 90, 200]
 const WARM: RGB = [168, 106, 18]
+function applyTheme(name: PdfTheme) {
+  TH = THEMES[name] || THEMES.jasny
+  ;({ navy: NAVY, gold: GOLD, ink: INK, body: BODY, muted: MUTED, faint: FAINT, rule: RULE, sectionBg: SECTION_BG } = TH)
+}
 
 const BADGE: Record<string, { bg: RGB; fg: RGB }> = {
   ECC: { bg: [253, 236, 222], fg: [154, 52, 18] },
-  HIMA: { bg: [232, 236, 243], fg: NAVY },
-  PIMA: { bg: [232, 236, 243], fg: NAVY },
+  HIMA: { bg: [232, 236, 243], fg: [13, 27, 42] },
+  PIMA: { bg: [232, 236, 243], fg: [13, 27, 42] },
   INDYW: { bg: [224, 247, 250], fg: [14, 116, 144] },
 }
 
@@ -65,8 +103,10 @@ export async function buildPlanPdf(opts: {
   blocks: PdfBlock[]
   athletes: { id: number; full_name: string }[]
   fonts?: PdfFonts | null
+  theme?: PdfTheme
 }): Promise<JsPDF> {
   const { plan, blocks, athletes, fonts } = opts
+  applyTheme(opts.theme ?? 'jasny')
   const { jsPDF } = await import('jspdf')
   const { default: autoTable } = await import('jspdf-autotable')
 
@@ -188,7 +228,7 @@ function drawDay(
   const head = wCols > 0 ? [head1, head2] : [head1]
 
   // ── wiersze
-  type RowMeta = { kind: 'block'; letter: string; name: string } | { kind: 'ex'; url?: string; badges: string[]; variant: boolean; name: string; who: string; last: boolean }
+  type RowMeta = { kind: 'block'; letter: string; name: string } | { kind: 'ex'; url?: string; badges: string[]; variant: boolean; name: string; who: string; last: boolean; odd: boolean }
   const meta: RowMeta[] = []
   const body: any[][] = []
 
@@ -238,7 +278,7 @@ function drawDay(
         t(powt), t(kg), t(tempo), t(rir),
       ])
       const badges = [ex.iso ? (ex.iso_type || 'ISO') : ex.ecc ? 'ECC' : '', ex.is_individual ? 'INDYW' : ''].filter(Boolean)
-      meta.push({ kind: 'ex', url: ex.exercise_url || undefined, variant: ex.variant_of != null, name, who: t(who), badges, last: i === exs.length - 1 })
+      meta.push({ kind: 'ex', url: ex.exercise_url || undefined, variant: ex.variant_of != null, name, who: t(who), badges, last: i === exs.length - 1, odd: i % 2 === 1 })
     })
   })
 
@@ -276,6 +316,7 @@ function drawDay(
       }
       if (row?.kind !== 'ex') return
       const col = data.column.index
+      if (TH.zebra && row.odd) c.styles.fillColor = TH.zebra
       if (row.variant) c.styles.fillColor = VARIANT_BG
       if (col === 0) { c.styles.textColor = row.variant ? VARIANT : MUTED; c.styles.fontStyle = 'bold'; c.styles.fontSize = fs * 0.9 }
       if (col === 1) {
@@ -287,7 +328,7 @@ function drawDay(
       if (col === 2) { c.styles.textColor = BODY; c.styles.fontSize = fs * 0.92 }
       if (col >= firstWarm && col < firstSerie) { c.styles.textColor = WARM; c.styles.fontSize = fs * 0.92 }
       if (col >= firstSerie) {
-        if (!row.variant) c.styles.fillColor = VALUE_BG
+        if (!row.variant && TH.valueBg && !(TH.zebra && row.odd)) c.styles.fillColor = TH.valueBg
         c.styles.fontStyle = col === firstSerie || col === firstSerie + 1 ? 'bold' : 'normal'
         if (c.raw === '—') { c.styles.textColor = FAINT; c.styles.fontStyle = 'normal' }
       }
@@ -306,7 +347,7 @@ function drawDay(
       const c = data.cell
       if (data.section === 'head') {
         // jedna linia pod nagłówkiem tabeli
-        if (data.row.index === head.length - 1 || c.rowSpan > 1) { doc.setDrawColor(...NAVY); doc.setLineWidth(0.4); doc.line(c.x, c.y + c.height, c.x + c.width, c.y + c.height) }
+        if (data.row.index === head.length - 1 || c.rowSpan > 1) { doc.setDrawColor(...TH.headRule); doc.setLineWidth(0.5); doc.line(c.x, c.y + c.height, c.x + c.width, c.y + c.height) }
         return
       }
       const row = meta[data.row.index]
@@ -314,21 +355,22 @@ function drawDay(
         // sekcja bloku: litera w złotym kółku + nazwa, pod spodem cienka linia
         const y = c.y + sectionPadTop
         const h = c.height - sectionPadTop
-        doc.setFillColor(...SECTION_BG); doc.rect(c.x, y, c.width, h, 'F')
+        const solid = TH.section === 'solid'
+        if (TH.section !== 'line') { doc.setFillColor(...(solid ? TH.sectionSolid : SECTION_BG)); doc.rect(c.x, y, c.width, h, 'F') }
         const r = 2.7 * s
         const cx = c.x + 2 + r, cy = y + h / 2
-        doc.setFillColor(...NAVY); doc.circle(cx, cy, r, 'F')
-        doc.setFont(font, 'bold'); doc.setFontSize(fs * 1.05); doc.setTextColor(...GOLD)
+        doc.setFillColor(...TH.circleBg); doc.circle(cx, cy, r, 'F')
+        doc.setFont(font, 'bold'); doc.setFontSize(fs * 1.05); doc.setTextColor(...TH.circleFg)
         doc.text(row.letter, cx, cy + 0.1, { align: 'center', baseline: 'middle' })
-        doc.setFontSize(fs * 1.05); doc.setTextColor(...NAVY)
+        doc.setTextColor(...(solid ? [255, 255, 255] as RGB : NAVY))
         const title = `Blok ${row.letter}`
         doc.text(title, cx + r + 2.5, cy + 0.1, { baseline: 'middle' })
         if (row.name) {
           const tw = doc.getTextWidth(title)
-          doc.setFont(font, 'normal'); doc.setTextColor(...MUTED)
+          doc.setFont(font, 'normal'); doc.setTextColor(...(solid ? [175, 190, 212] as RGB : MUTED))
           doc.text(row.name, cx + r + 2.5 + tw + 2.5, cy + 0.1, { baseline: 'middle' })
         }
-        doc.setDrawColor(...GOLD); doc.setLineWidth(0.5); doc.line(c.x, y + h, c.x + c.width, y + h)
+        if (!solid) { doc.setDrawColor(...(TH.section === 'line' ? NAVY : GOLD)); doc.setLineWidth(TH.section === 'line' ? 0.6 : 0.5); doc.line(c.x, y + h, c.x + c.width, y + h) }
         return
       }
       if (row?.kind !== 'ex') return
@@ -362,7 +404,21 @@ function drawDay(
       }
     },
     didDrawPage: () => {
-      // nagłówek strony: nazwa treningu, plan, akcent w kolorze złota
+      // nagłówek strony: nazwa treningu i plan — pełny pasek albo jasny z akcentem
+      if (TH.headerBand) {
+        doc.setFillColor(...TH.headerBand); doc.rect(0, 0, pageW, headerH - 2, 'F')
+        doc.setFillColor(...GOLD); doc.rect(0, headerH - 2, pageW, 0.9, 'F')
+        doc.setFont(font, 'bold'); doc.setFontSize(17); doc.setTextColor(255, 255, 255)
+        doc.text(t(day.day_name), m, 12.6)
+        const dw = doc.getTextWidth(t(day.day_name))
+        doc.setFont(font, 'normal'); doc.setFontSize(10); doc.setTextColor(...GOLD)
+        doc.text(t(plan.name), m + dw + 4, 12.6)
+        doc.setFont(font, 'bold'); doc.setFontSize(8); doc.setTextColor(255, 255, 255)
+        doc.text('CHEER LEVELUP', pageW - m, 10.6, { align: 'right' })
+        doc.setFont(font, 'normal'); doc.setFontSize(7); doc.setTextColor(160, 178, 204)
+        doc.text(t('plan treningowy'), pageW - m, 14.2, { align: 'right' })
+        return
+      }
       doc.setFillColor(...GOLD); doc.rect(m, 9.5, 1.4, 8, 'F')
       doc.setFont(font, 'bold'); doc.setFontSize(17); doc.setTextColor(...NAVY)
       doc.text(t(day.day_name), m + 4, 15.6)
