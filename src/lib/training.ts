@@ -34,6 +34,7 @@ export type PlanTrainingItem = {
   day_order: number
   completed: boolean   // ma ukończoną sesję
   inProgress: boolean  // ma rozpoczętą, niezakończoną sesję
+  completedSessionId: number | null  // ostatnia ukończona sesja — do edycji wpisów (bez powtórki treningu)
 }
 
 // Aktywny plan zawodniczki (indywidualny, potem grupowy) z treningami i statusem sesji
@@ -84,13 +85,17 @@ async function loadAthletePlan(athleteId: number, groupId?: number) {
   // Sesje zawodniczki dla dni planu — ukończone i rozpoczęte
   const { data: sessions } = await supabase
     .from('workout_sessions')
-    .select('workout_day_id, completed')
+    .select('id, workout_day_id, completed, date_completed, created_at')
     .eq('athlete_id', athleteId)
     .in('workout_day_id', days.map((d: any) => d.id))
+    .order('created_at', { ascending: false })
 
   const completedDayIds = new Set((sessions || []).filter((s: any) => s.completed).map((s: any) => s.workout_day_id))
   const inProgressDayIds = new Set((sessions || []).filter((s: any) => !s.completed).map((s: any) => s.workout_day_id))
-  return { assignment, days, completedDayIds, inProgressDayIds }
+  // najnowsza ukończona sesja każdego dnia (sesje posortowane od najnowszej)
+  const completedSessionByDay = new Map<number, number>()
+  for (const s of (sessions || []) as any[]) if (s.completed && !completedSessionByDay.has(s.workout_day_id)) completedSessionByDay.set(s.workout_day_id, s.id)
+  return { assignment, days, completedDayIds, inProgressDayIds, completedSessionByDay }
 }
 
 export async function getNextTrainingForAthlete(
@@ -123,7 +128,7 @@ export async function getPlanTrainingsForAthlete(
 ): Promise<{ assignmentId: number; planName: string; trainings: PlanTrainingItem[] } | null> {
   const plan = await loadAthletePlan(athleteId, groupId)
   if (!plan) return null
-  const { assignment, days, completedDayIds, inProgressDayIds } = plan
+  const { assignment, days, completedDayIds, inProgressDayIds, completedSessionByDay } = plan
   return {
     assignmentId: assignment.id,
     planName: (assignment as any).plan?.name || 'Plan treningowy',
@@ -134,8 +139,24 @@ export async function getPlanTrainingsForAthlete(
       day_order: d.day_order,
       completed: completedDayIds.has(d.id),
       inProgress: inProgressDayIds.has(d.id),
+      completedSessionId: completedSessionByDay.get(d.id) ?? null,
     })),
   }
+}
+
+// Ukończony trening nie jest powtarzany: jeśli dzień ma ukończoną sesję i żadnej
+// rozpoczętej, zwraca id ukończonej (do edycji wpisów w historii), inaczej null
+export async function getCompletedSessionToEdit(athleteId: number, dayId: number): Promise<number | null> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('workout_sessions')
+    .select('id, completed')
+    .eq('athlete_id', athleteId)
+    .eq('workout_day_id', dayId)
+    .order('created_at', { ascending: false })
+  const rows = (data || []) as { id: number; completed: boolean }[]
+  if (rows.some(r => !r.completed)) return null
+  return rows.find(r => r.completed)?.id ?? null
 }
 
 export async function getOrCreateWorkoutSession(

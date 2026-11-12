@@ -49,7 +49,12 @@ export default function AthleteClient({ athlete, nextTraining, planTrainings, hi
   const [showAll, setShowAll] = useState(false)
   const trainings = planTrainings?.trainings || []
   const multiWeek = new Set(trainings.map(t => t.week_number)).size > 1
-  const startTraining = (dayId: number) => planTrainings && router.push(`/athlete/training?day=${dayId}&assignment=${planTrainings.assignmentId}`)
+  // ukończony trening (bez rozpoczętej sesji) — edycja wpisów w historii, nie powtórka
+  const startTraining = (t: PlanTrainingItem) => {
+    if (!planTrainings) return
+    if (t.completed && !t.inProgress && t.completedSessionId) router.push(`/athlete/history/${t.completedSessionId}`)
+    else router.push(`/athlete/training?day=${t.id}&assignment=${planTrainings.assignmentId}`)
+  }
   // domyślnie: rozpoczęte i do zrobienia; ukończone po „pokaż wszystkie"
   const visibleTrainings = showAll ? trainings : trainings.filter(t => !t.completed || t.inProgress)
 
@@ -173,15 +178,15 @@ export default function AthleteClient({ athlete, nextTraining, planTrainings, hi
                 )}
               </div>
               {visibleTrainings.length === 0 ? (
-                <div style={{ padding: '6px 16px 16px', fontSize: 13, color: C.muted }}>Wszystkie treningi ukończone — możesz powtórzyć dowolny po „Pokaż wszystkie”.</div>
+                <div style={{ padding: '6px 16px 16px', fontSize: 13, color: C.muted }}>Wszystkie treningi ukończone — wpisy możesz poprawić po „Pokaż wszystkie”.</div>
               ) : visibleTrainings.map(t => {
                 const isNext = nextTraining?.day.id === t.id
                 const status = t.inProgress ? { label: 'w trakcie', fg: '#a8650f', bg: '#fdf3e2', bd: '#f3d9a8' }
-                  : t.completed ? { label: '✓ ukończony', fg: '#1f9d68', bg: '#ecfaf3', bd: '#bfe9d3' }
+                  : t.completed ? { label: '✓ ukończony · edytuj', fg: '#1f9d68', bg: '#ecfaf3', bd: '#bfe9d3' }
                   : isNext ? { label: 'następny', fg: C.navy, bg: '#fdf3e2', bd: C.gold }
                   : null
                 return (
-                  <button key={t.id} className="ath-card" onClick={() => startTraining(t.id)}
+                  <button key={t.id} className="ath-card" onClick={() => startTraining(t)}
                     style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, minHeight: 56, padding: '10px 16px', border: 'none', borderTop: `1px solid ${C.grayLight}`, background: isNext ? '#fffaf0' : C.white, textAlign: 'left' }}>
                     <div style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: t.completed && !t.inProgress ? '#ecfaf3' : isNext ? C.gold : C.offWhite, color: t.completed && !t.inProgress ? '#1f9d68' : C.navy, fontFamily: display, fontWeight: 700, fontSize: 16 }}>
                       {t.completed && !t.inProgress ? '✓' : t.day_order}

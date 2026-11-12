@@ -8,6 +8,7 @@ import {
   getWorkoutDayWithBlocks,
   getOrCreateWorkoutSession,
   getNextTrainingForAthlete,
+  getCompletedSessionToEdit,
 } from '@/lib/training'
 import TrainingClient from './TrainingClient'
 
@@ -35,6 +36,10 @@ export default async function TrainingPage({ searchParams }: Props) {
     assignmentId = next.assignment.id
     redirect(`/athlete/training?day=${dayId}&assignment=${assignmentId}`)
   }
+
+  // Ukończonego treningu nie powtarzamy — otwieramy go do edycji wpisów
+  const completedId = await getCompletedSessionToEdit(athlete.id, dayId)
+  if (completedId) redirect(`/athlete/history/${completedId}`)
 
   // Pobierz lub utwórz sesję
   const session = await getOrCreateWorkoutSession(athlete.id, dayId, assignmentId)
