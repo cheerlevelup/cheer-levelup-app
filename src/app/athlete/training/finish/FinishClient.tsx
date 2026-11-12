@@ -4,9 +4,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
+import { sans, mono } from '@/lib/athleteTheme'
 
-const sans = "'Space Grotesk', sans-serif"
-const mono = "'Space Mono', monospace"
 
 const FEELING_OPTIONS = [
   { value: 'swietnie', label: '💪 Świetnie' },
@@ -95,7 +94,7 @@ export default function FinishClient({ athlete, session, setLogs, wellness, pain
   if (done) {
     return (
       <>
-        <style>{`@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap'); * { box-sizing: border-box; margin: 0; padding: 0; }`}</style>
+        <style>{`* { box-sizing: border-box; margin: 0; padding: 0; }`}</style>
         <div style={{
           minHeight: '100vh', background: '#F0EEE9',
           fontFamily: sans, display: 'flex', flexDirection: 'column',
@@ -140,7 +139,7 @@ export default function FinishClient({ athlete, session, setLogs, wellness, pain
 
   return (
     <>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap'); * { box-sizing: border-box; margin: 0; padding: 0; } body { background: #F0EEE9; }`}</style>
+      <style>{`* { box-sizing: border-box; margin: 0; padding: 0; } body { background: #F0EEE9; }`}</style>
       <div style={{ minHeight: '100vh', background: '#F0EEE9', fontFamily: sans, color: '#111' }}>
 
         {/* Header */}
@@ -192,7 +191,7 @@ export default function FinishClient({ athlete, session, setLogs, wellness, pain
               type="range" min={0} max={10} step={1}
               value={rpe}
               onChange={e => setRpe(parseInt(e.target.value))}
-              style={{ width: '100%', accentColor: '#F5C842' }}
+              style={{ width: '100%', accentColor: '#e8a33d' }}
             />
             <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: mono, fontSize: '0.65rem', color: '#888', marginTop: 4 }}>
               <span>0 — brak wysiłku</span>

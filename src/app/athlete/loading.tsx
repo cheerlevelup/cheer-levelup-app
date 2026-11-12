@@ -1,9 +1,9 @@
 // src/app/athlete/loading.tsx
-const C = { navy: '#0D1B2A', offWhite: '#F4F6F9', grayLight: '#E8ECF2', navyBorder: '#243652' }
 
+import { C } from '@/lib/athleteTheme'
 function Skeleton({ w = '100%', h = 16, r = 8 }: { w?: string | number; h?: number; r?: number }) {
   return (
-    <div style={{ width: w, height: h, borderRadius: r, background: 'linear-gradient(90deg, #E8ECF2 25%, #F4F6F9 50%, #E8ECF2 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.4s infinite' }} />
+    <div style={{ width: w, height: h, borderRadius: r, background: 'linear-gradient(90deg, #e7e9ef 25%, #f2f3f6 50%, #e7e9ef 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.4s infinite' }} />
   )
 }
 
@@ -15,7 +15,7 @@ export default function AthleteLoading() {
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: ${C.offWhite}; }
       `}</style>
-      <div style={{ minHeight: '100vh', background: C.offWhite, fontFamily: "'Space Grotesk', sans-serif" }}>
+      <div style={{ minHeight: '100vh', background: C.offWhite, fontFamily: "var(--font-inter), system-ui, sans-serif" }}>
         {/* Header skeleton */}
         <div style={{ background: C.navy, padding: '1rem 1.25rem 1.25rem' }}>
           <div style={{ maxWidth: 520, margin: '0 auto' }}>

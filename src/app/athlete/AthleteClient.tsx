@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Athlete, WorkoutSession, AthleteWorkoutAssignment, WorkoutDay } from '@/types/workout'
 import WellnessModal from '@/components/WellnessModal'
+import { C, sans, display, shadow, radius } from '@/lib/athleteTheme'
 
 interface Props {
   athlete: Athlete
@@ -27,21 +28,6 @@ type WellnessStatus = {
   isComplete: boolean
 }
 
-const C = {
-  navy: '#0D1B2A',
-  navyLight: '#1A2E45',
-  navyBorder: '#243652',
-  gold: '#F5C842',
-  white: '#FFFFFF',
-  offWhite: '#F4F6F9',
-  gray: '#8A9BB0',
-  grayLight: '#E8ECF2',
-  green: '#22C55E',
-  red: '#EF4444',
-}
-
-const sans = "'Space Grotesk', sans-serif"
-const mono = "'Space Mono', monospace"
 const trainerName = 'Urszula Papka'
 const contentMaxWidth = 520
 
@@ -87,219 +73,134 @@ export default function AthleteClient({ athlete, nextTraining, history, todayWel
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: ${C.offWhite}; }
         button { cursor: pointer; font-family: inherit; }
-        .action-card { transition: transform 0.12s, box-shadow 0.12s; }
-        .action-card:active { transform: scale(0.985); }
+        .ath-card { transition: transform 0.12s, box-shadow 0.12s; }
+        .ath-card:active { transform: scale(0.985); }
+        .ath-eyebrow { font-family: ${sans}; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+        .ath-display { font-family: ${display}; font-weight: 700; letter-spacing: .01em; line-height: 1.05; }
       `}</style>
 
-      <div style={{ minHeight: '100vh', background: C.offWhite, fontFamily: sans, color: C.navy }}>
+      <div style={{ minHeight: '100vh', background: C.offWhite, fontFamily: sans, color: C.ink }}>
 
-        {/* ── HEADER ── */}
-        <header style={{ background: C.navy, padding: '1rem 1.25rem 1.25rem', position: 'sticky', top: 0, zIndex: 10 }}>
+        {/* ── NAGŁÓWEK: logo, zawodniczka, trener, postęp planu ── */}
+        <header style={{ background: C.navy, padding: 'calc(env(safe-area-inset-top) + 14px) 16px 18px', position: 'sticky', top: 0, zIndex: 10, borderBottom: `2px solid ${C.gold}` }}>
           <div style={{ maxWidth: contentMaxWidth, margin: '0 auto' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.875rem', position: 'relative' }}>
-              <button onClick={() => router.push('/athlete')} style={{ width: 52, height: 52, borderRadius: '50%', overflow: 'hidden', border: `2px solid ${C.navyBorder}`, background: 'none', padding: 0, flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button onClick={() => router.push('/athlete')} aria-label="Panel główny" style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', border: 'none', background: C.white, padding: 0, flexShrink: 0 }}>
                 <img src="/level up.jpg" alt="Level Up" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </button>
-              <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', textAlign: 'center', pointerEvents: 'none' }}>
-                <div style={{ fontWeight: 800, fontSize: '1rem', color: C.white }}>{athlete.full_name}</div>
-                <div style={{ fontSize: '0.72rem', color: C.gold, marginTop: 2, fontWeight: 700 }}>Trener: {trainerName}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="ath-eyebrow" style={{ color: C.goldLight, fontSize: 10 }}>Trener: {trainerName}</div>
+                <div className="ath-display" style={{ fontSize: 22, color: C.white, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{athlete.full_name}</div>
               </div>
-              <div style={{ width: 52, height: 52, borderRadius: '50%', overflow: 'hidden', border: `2px solid ${C.navyBorder}`, background: C.navyLight }}>
-                <img src="/unique.png" alt="Unique" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 2, background: C.white }} />
+              <div style={{ width: 40, height: 40, borderRadius: '50%', overflow: 'hidden', background: C.white, flexShrink: 0 }}>
+                <img src="/unique.png" alt="Unique" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 2 }} />
               </div>
             </div>
 
-            {/* Pasek postępu planu */}
             {nextTraining ? (
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <span style={{ fontFamily: mono, fontSize: '0.66rem', color: C.gray, letterSpacing: '0.04em' }}>Postęp planu</span>
-                  <span style={{ fontFamily: mono, fontSize: '0.7rem', fontWeight: 700, color: C.gold }}>{nextTraining.completedCount}/{nextTraining.totalCount} · {pct}%</span>
+              <div style={{ marginTop: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                  <span className="ath-eyebrow" style={{ color: C.gray, fontSize: 10 }}>Postęp planu · {planName}</span>
+                  <span style={{ fontFamily: display, fontSize: 15, fontWeight: 700, color: C.gold }}>{nextTraining.completedCount}/{nextTraining.totalCount} <span style={{ color: C.gray, fontWeight: 600 }}>· {pct}%</span></span>
                 </div>
-                <div style={{ height: 5, background: C.navyBorder, borderRadius: 3, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${pct}%`, background: C.gold, borderRadius: 3 }} />
+                <div style={{ height: 6, background: C.navyLight, borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${pct}%`, background: C.gold, borderRadius: 3, transition: 'width .4s' }} />
                 </div>
               </div>
             ) : (
-              <div style={{ fontFamily: mono, fontSize: '0.72rem', color: C.green, textAlign: 'center', fontWeight: 700 }}>✓ Wszystkie treningi wykonane</div>
+              <div className="ath-eyebrow" style={{ marginTop: 12, color: C.green, textAlign: 'center' }}>✓ Wszystkie treningi wykonane</div>
             )}
           </div>
         </header>
 
-        <main style={{ maxWidth: contentMaxWidth, margin: '0 auto', padding: '1rem 1rem 7rem' }}>
-
-          {/* ── WELLNESS ── */}
-          {wellnessEnabled && <button
-            className="action-card"
-            onClick={() => setWellnessOpen(true)}
-            style={{ width: '100%', border: 'none', background: 'none', padding: 0, marginBottom: '0.75rem', textAlign: 'left' }}
-          >
-            <div style={{
-              background: wellnessDone ? '#F0FDF4' : C.white,
-              border: `1.5px solid ${wellnessDone ? '#86EFAC' : C.grayLight}`,
-              borderRadius: 16,
-              padding: '1rem 1.25rem',
-              boxShadow: '0 2px 12px rgba(13,27,42,0.06)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 14,
-            }}>
-              <div style={{
-                width: 52, height: 52, borderRadius: 14, flexShrink: 0,
-                background: wellnessDone ? C.green : C.navy,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '1.5rem',
-              }}>
-                {wellnessDone ? '✓' : '🩺'}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: mono, fontSize: '0.6rem', color: wellnessDone ? '#16A34A' : C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 3, fontWeight: 700 }}>
-                  Monitoring wellness · {formatDate(todayWellness.dateIso)}
-                </div>
-                <div style={{ fontWeight: 800, fontSize: '1rem', color: wellnessDone ? '#15803D' : C.navy }}>
-                  {wellnessDone ? 'Wypełniony ✓' : 'Dzienny monitoring wellness'}
-                </div>
-                {!wellnessDone && (
-                  <div style={{ fontSize: '0.78rem', color: C.gray, marginTop: 2 }}>
-                    {formatLongDate(todayWellness.dateIso)}
-                  </div>
-                )}
-              </div>
-              <div style={{ flexShrink: 0, fontFamily: mono, fontSize: '0.8rem', color: wellnessDone ? '#16A34A' : C.gold, fontWeight: 800 }}>
-                {wellnessDone ? '' : '›'}
-              </div>
-            </div>
-          </button>}
+        <main style={{ maxWidth: contentMaxWidth, margin: '0 auto', padding: '16px 16px calc(env(safe-area-inset-bottom) + 32px)', display: 'flex', flexDirection: 'column', gap: 12 }}>
 
           {/* ── TRENING ── */}
           {nextTraining ? (
             <button
-              className="action-card"
+              className="ath-card"
               onClick={() => router.push(`/athlete/training?day=${nextTraining.day.id}&assignment=${nextTraining.assignment.id}`)}
-              style={{ width: '100%', border: 'none', background: 'none', padding: 0, marginBottom: '0.75rem', textAlign: 'left' }}
+              style={{ width: '100%', border: 'none', padding: 0, textAlign: 'left', background: C.navy, borderRadius: 18, overflow: 'hidden', boxShadow: '0 8px 24px rgba(11,18,32,.22)' }}
             >
-              <div style={{
-                background: C.navy,
-                borderRadius: 16,
-                padding: '1.25rem',
-                boxShadow: '0 4px 20px rgba(13,27,42,0.18)',
-              }}>
-                {/* Nagłówek */}
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                  <div>
-                    <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>Dzisiejszy trening</div>
-                    <div style={{ fontWeight: 900, fontSize: '1.3rem', color: C.white, lineHeight: 1.1 }}>{nextTrainingLabel}</div>
-                    <div style={{ fontSize: '0.8rem', color: C.gray, marginTop: 4 }}>{planName}</div>
-                  </div>
-                  <div style={{ width: 48, height: 48, borderRadius: 12, background: C.gold, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <span style={{ fontSize: '1.4rem' }}>🏋️</span>
-                  </div>
+              <div style={{ padding: '18px 18px 16px', position: 'relative' }}>
+                <div style={{ position: 'absolute', top: 0, right: 0, width: 120, height: 120, background: `radial-gradient(circle at top right, ${C.gold}33, transparent 70%)` }} />
+                <div className="ath-eyebrow" style={{ color: C.gold }}>Dzisiejszy trening</div>
+                <div className="ath-display" style={{ fontSize: 34, color: C.white, marginTop: 6 }}>{nextTrainingLabel}</div>
+                <div style={{ fontSize: 14, color: C.gray, marginTop: 4 }}>{nextTraining.day.day_name && nextTraining.day.day_name !== nextTrainingLabel ? `${nextTraining.day.day_name} · ` : ''}{planName}</div>
+                <div style={{ marginTop: 16, minHeight: 52, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 12, background: C.gold, color: C.navy, fontFamily: display, fontWeight: 700, fontSize: 20, letterSpacing: '.02em' }}>
+                  Rozpocznij trening <span style={{ fontSize: 22 }}>→</span>
                 </div>
-
-                {/* Pasek postępu */}
-                <div style={{ marginBottom: '1rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                    <span style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray }}>Postęp planu</span>
-                    <span style={{ fontFamily: mono, fontSize: '0.65rem', color: C.gold, fontWeight: 700 }}>{nextTraining.completedCount}/{nextTraining.totalCount}</span>
-                  </div>
-                  <div style={{ height: 5, background: C.navyBorder, borderRadius: 3, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${pct}%`, background: C.gold, borderRadius: 3 }} />
-                  </div>
-                </div>
-
-                {/* Przycisk CTA */}
-                <div style={{ padding: '0.875rem', borderRadius: 12, background: C.gold, color: C.navy, textAlign: 'center', fontWeight: 900, fontSize: '0.95rem' }}>
-                  Rozpocznij trening →
-                </div>
-
-                {/* Status ostatniego raportu */}
-                {lastSession && (
-                  <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                    {reportSent ? (
-                      <>
-                        <span style={{ fontSize: '0.75rem' }}>📋</span>
-                        <span style={{ fontFamily: mono, fontSize: '0.62rem', color: C.green, fontWeight: 700 }}>
-                          Raport z ostatniego treningu wysłany do trenera ✓
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <span style={{ fontSize: '0.7rem' }}>⚠️</span>
-                        <span style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray }}>
-                          Ostatni trening bez raportu — wyślij po kolejnym
-                        </span>
-                      </>
-                    )}
-                  </div>
-                )}
               </div>
+              {lastSession && (
+                <div style={{ padding: '10px 18px', borderTop: `1px solid ${C.navyLight}`, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: reportSent ? C.green : C.gray }}>
+                  {reportSent ? '✓ Raport z ostatniego treningu wysłany do trenera' : '⚠️ Ostatni trening bez raportu — wyślij po kolejnym'}
+                </div>
+              )}
             </button>
           ) : (
-            <div style={{ background: C.navy, borderRadius: 16, padding: '1.5rem', marginBottom: '0.75rem', textAlign: 'center', boxShadow: '0 4px 20px rgba(13,27,42,0.18)' }}>
-              <div style={{ fontSize: '2rem', marginBottom: 8 }}>🏆</div>
-              <div style={{ fontWeight: 800, color: C.white, fontSize: '1.1rem', marginBottom: 4 }}>Wszystkie treningi wykonane!</div>
-              <div style={{ fontSize: '0.85rem', color: C.gray }}>Trener wkrótce przypisze nowy plan.</div>
-              {reportSent && (
-                <div style={{ marginTop: '0.75rem', fontFamily: mono, fontSize: '0.62rem', color: C.green }}>📋 Ostatni raport wysłany ✓</div>
-              )}
+            <div style={{ background: C.navy, borderRadius: 18, padding: '24px 18px', textAlign: 'center', boxShadow: '0 8px 24px rgba(11,18,32,.22)' }}>
+              <div style={{ fontSize: 34, marginBottom: 6 }}>🏆</div>
+              <div className="ath-display" style={{ color: C.white, fontSize: 26 }}>Wszystkie treningi wykonane!</div>
+              <div style={{ fontSize: 14, color: C.gray, marginTop: 6 }}>Trener wkrótce przypisze nowy plan.</div>
+              {reportSent && <div style={{ marginTop: 10, fontSize: 12, fontWeight: 600, color: C.green }}>✓ Ostatni raport wysłany</div>}
             </div>
           )}
 
-          {/* ── KAFELKI HISTORIA / STATYSTYKI ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: '0.75rem' }}>
+          {/* ── WELLNESS ── */}
+          {wellnessEnabled && (
             <button
-              className="action-card"
-              onClick={() => router.push('/athlete/history')}
-              style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, padding: '1rem', textAlign: 'left', boxShadow: '0 2px 8px rgba(13,27,42,0.04)' }}
+              className="ath-card"
+              onClick={() => setWellnessOpen(true)}
+              style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 14, padding: 16, borderRadius: radius, background: wellnessDone ? '#ecfaf3' : C.white, border: `1px solid ${wellnessDone ? '#bfe9d3' : C.grayLight}`, boxShadow: shadow }}
             >
-              <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Historia</div>
-              <div style={{ fontFamily: mono, fontSize: '1.8rem', fontWeight: 900, color: C.navy, lineHeight: 1 }}>{history.length}</div>
-              <div style={{ color: C.gray, fontSize: '0.75rem', marginTop: 4 }}>ukończonych treningów</div>
+              <div style={{ width: 46, height: 46, borderRadius: 12, flexShrink: 0, background: wellnessDone ? C.green : C.offWhite, color: wellnessDone ? C.white : C.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
+                {wellnessDone ? '✓' : '🩺'}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="ath-eyebrow" style={{ color: wellnessDone ? '#1f9d68' : C.muted, fontSize: 10 }}>Wellness · {formatDate(todayWellness.dateIso)}</div>
+                <div className="ath-display" style={{ fontSize: 20, color: wellnessDone ? '#167a52' : C.ink, marginTop: 3 }}>{wellnessDone ? 'Wypełniony' : 'Dzienny monitoring'}</div>
+                {!wellnessDone && <div style={{ fontSize: 13, color: C.muted, marginTop: 2 }}>{formatLongDate(todayWellness.dateIso)}</div>}
+              </div>
+              {!wellnessDone && <span style={{ flexShrink: 0, color: C.gold, fontSize: 24, fontWeight: 700 }}>›</span>}
             </button>
+          )}
 
-            <button
-              className="action-card"
-              onClick={() => router.push('/athlete/stats')}
-              style={{ background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, padding: '1rem', textAlign: 'left', boxShadow: '0 2px 8px rgba(13,27,42,0.04)' }}
-            >
-              <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Statystyki</div>
-              <div style={{ fontFamily: mono, fontSize: '1.8rem', fontWeight: 900, color: C.gold, lineHeight: 1 }}>↗</div>
-              <div style={{ color: C.gray, fontSize: '0.75rem', marginTop: 4 }}>wellness i tonaż</div>
+          {/* ── HISTORIA / STATYSTYKI ── */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <button className="ath-card" onClick={() => router.push('/athlete/history')}
+              style={{ textAlign: 'left', padding: 16, borderRadius: radius, background: C.white, border: `1px solid ${C.grayLight}`, boxShadow: shadow, minHeight: 112 }}>
+              <div className="ath-eyebrow" style={{ color: C.muted, fontSize: 10 }}>Historia</div>
+              <div className="ath-display" style={{ fontSize: 40, color: C.ink, marginTop: 8 }}>{history.length}</div>
+              <div style={{ fontSize: 13, color: C.muted, marginTop: 2 }}>ukończonych treningów</div>
+            </button>
+            <button className="ath-card" onClick={() => router.push('/athlete/stats')}
+              style={{ textAlign: 'left', padding: 16, borderRadius: radius, background: C.white, border: `1px solid ${C.grayLight}`, boxShadow: shadow, minHeight: 112 }}>
+              <div className="ath-eyebrow" style={{ color: C.muted, fontSize: 10 }}>Statystyki</div>
+              <div className="ath-display" style={{ fontSize: 40, color: C.gold, marginTop: 8 }}>↗</div>
+              <div style={{ fontSize: 13, color: C.muted, marginTop: 2 }}>wellness i tonaż</div>
             </button>
           </div>
 
           {/* ── OSTATNI TRENING ── */}
           {lastSession && (
-            <button
-              className="action-card"
-              onClick={() => router.push(`/athlete/history/${lastSession.id}`)}
-              style={{ width: '100%', background: C.white, border: `1.5px solid ${C.grayLight}`, borderRadius: 14, padding: '1rem 1.25rem', marginBottom: '0.75rem', textAlign: 'left', boxShadow: '0 2px 8px rgba(13,27,42,0.04)' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div>
-                  <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>Ostatni trening</div>
-                  <div style={{ fontWeight: 700, fontSize: '0.95rem', color: C.navy }}>{lastSession.workout_day?.day_name || 'Trening'}</div>
-                  {lastSession.date_completed && (
-                    <div style={{ fontFamily: mono, fontSize: '0.68rem', color: C.gray, marginTop: 2 }}>{formatDate(lastSession.date_completed)}</div>
-                  )}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {reportSent && <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.green, background: '#F0FDF4', border: `1px solid #86EFAC`, borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>📋 wysłany</span>}
-                  <span style={{ color: C.gray, fontSize: '1rem' }}>›</span>
-                </div>
+            <button className="ath-card" onClick={() => router.push(`/athlete/history/${lastSession.id}`)}
+              style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 12, padding: 16, borderRadius: radius, background: C.white, border: `1px solid ${C.grayLight}`, boxShadow: shadow }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="ath-eyebrow" style={{ color: C.muted, fontSize: 10 }}>Ostatni trening</div>
+                <div className="ath-display" style={{ fontSize: 20, color: C.ink, marginTop: 3 }}>{lastSession.workout_day?.day_name || 'Trening'}</div>
+                {lastSession.date_completed && <div style={{ fontSize: 13, color: C.muted, marginTop: 2 }}>{formatDate(lastSession.date_completed)}</div>}
               </div>
+              {reportSent && <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: '#1f9d68', background: '#ecfaf3', border: '1px solid #bfe9d3', borderRadius: 999, padding: '3px 10px' }}>raport wysłany</span>}
+              <span style={{ flexShrink: 0, color: C.gray, fontSize: 22 }}>›</span>
             </button>
           )}
 
           {/* ── WYLOGUJ ── */}
-          <button
-            onClick={handleLogout}
-            style={{ width: '100%', padding: '0.875rem', borderRadius: 12, border: `1.5px solid ${C.grayLight}`, background: C.white, color: C.gray, fontWeight: 700, fontSize: '0.88rem' }}
-          >
+          <button onClick={handleLogout}
+            style={{ marginTop: 8, width: '100%', minHeight: 48, borderRadius: 12, border: 'none', background: 'transparent', color: C.muted, fontWeight: 600, fontSize: 14 }}>
             Wyloguj się
           </button>
         </main>

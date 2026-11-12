@@ -6,24 +6,11 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import type { Athlete, TrainingView, SetLog, WorkoutBlockExercise } from '@/types/workout'
+import { C, sans, mono } from '@/lib/athleteTheme'
 
 // ─── STAŁE ────────────────────────────────────────────────────────────────────
 
-const C = {
-  navy: '#0D1B2A',
-  navyLight: '#1A2E45',
-  navyBorder: '#243652',
-  gold: '#F5C842',
-  white: '#FFFFFF',
-  offWhite: '#F4F6F9',
-  gray: '#8A9BB0',
-  grayLight: '#E8ECF2',
-  green: '#22C55E',
-  red: '#EF4444',
-}
 
-const sans = "'Space Grotesk', sans-serif"
-const mono = "'Space Mono', monospace"
 const trainerName = 'Urszula Papka'
 const contentMaxWidth = 520
 
@@ -224,10 +211,10 @@ function RirModal({ rir, onClose }: { rir: number; onClose: () => void }) {
             </thead>
             <tbody>
               {rows.map(r => (
-                <tr key={r.rir} style={{ background: r.rir === rir ? C.navy + '18' : r.rir % 2 === 0 ? '#F4F6F9' : '#fff', fontWeight: r.rir === rir ? 800 : 400 }}>
-                  <td style={{ padding: '0.5rem 0.75rem', fontFamily: '"Space Mono",monospace', fontWeight: 900, color: r.rir === rir ? C.gold : C.navy, textAlign: 'center', borderBottom: '1px solid #E8ECF2', fontSize: '1rem' }}>{r.rir}</td>
-                  <td style={{ padding: '0.5rem 0.75rem', color: C.navy, borderBottom: '1px solid #E8ECF2' }}>{r.reserve}</td>
-                  <td style={{ padding: '0.5rem 0.75rem', color: C.gray, borderBottom: '1px solid #E8ECF2' }}>{r.intensity}</td>
+                <tr key={r.rir} style={{ background: r.rir === rir ? C.navy + '18' : r.rir % 2 === 0 ? '#f2f3f6' : '#fff', fontWeight: r.rir === rir ? 800 : 400 }}>
+                  <td style={{ padding: '0.5rem 0.75rem', fontFamily: '"Space Mono",monospace', fontWeight: 900, color: r.rir === rir ? C.gold : C.navy, textAlign: 'center', borderBottom: '1px solid #e7e9ef', fontSize: '1rem' }}>{r.rir}</td>
+                  <td style={{ padding: '0.5rem 0.75rem', color: C.navy, borderBottom: '1px solid #e7e9ef' }}>{r.reserve}</td>
+                  <td style={{ padding: '0.5rem 0.75rem', color: C.gray, borderBottom: '1px solid #e7e9ef' }}>{r.intensity}</td>
                 </tr>
               ))}
             </tbody>
@@ -1209,7 +1196,7 @@ function rpeLabel(rpe: number) {
 
 function rpeColor(rpe: number) {
   if (rpe <= 4) return '#22C55E'
-  if (rpe <= 6) return '#F5C842'
+  if (rpe <= 6) return '#e8a33d'
   if (rpe <= 8) return '#F97316'
   return '#EF4444'
 }
@@ -1473,7 +1460,7 @@ function PostWorkoutSection({ sessionId, athleteId, wellnessFilled, onFinish, in
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {FEELING_OPTIONS.map(opt => (
             <button key={opt.value} onClick={() => setFeeling(opt.value)}
-              style={{ padding: '0.5rem 0.875rem', background: feeling === opt.value ? C.navy : '#F4F6F9', border: feeling === opt.value ? 'none' : `1.5px solid ${C.grayLight}`, borderRadius: 10, fontFamily: sans, fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, fontWeight: feeling === opt.value ? 700 : 400, color: feeling === opt.value ? C.gold : C.navy, transition: 'all 0.15s' }}>
+              style={{ padding: '0.5rem 0.875rem', background: feeling === opt.value ? C.navy : '#f2f3f6', border: feeling === opt.value ? 'none' : `1.5px solid ${C.grayLight}`, borderRadius: 10, fontFamily: sans, fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, fontWeight: feeling === opt.value ? 700 : 400, color: feeling === opt.value ? C.gold : C.navy, transition: 'all 0.15s' }}>
               <span>{opt.emoji}</span><span>{opt.label}</span>
             </button>
           ))}
@@ -1533,8 +1520,8 @@ function CoachIntroCard({ intro, trainerName }: { intro: string; trainerName: st
       marginBottom: '1rem',
       borderRadius: 16,
       overflow: 'hidden',
-      background: `linear-gradient(135deg, ${C.navy} 0%, #1A2E45 100%)`,
-      border: `1.5px solid #F5C84230`,
+      background: `linear-gradient(135deg, ${C.navy} 0%, #1b2740 100%)`,
+      border: `1.5px solid #e8a33d30`,
       boxShadow: '0 4px 24px rgba(13,27,42,0.18)',
     }}>
       {/* Złoty pasek na górze */}
@@ -1547,7 +1534,7 @@ function CoachIntroCard({ intro, trainerName }: { intro: string; trainerName: st
             width: 40, height: 40, borderRadius: '50%',
             background: C.gold, display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: '1.25rem', flexShrink: 0,
-            boxShadow: `0 0 0 3px ${C.navy}, 0 0 0 5px #F5C84250`,
+            boxShadow: `0 0 0 3px ${C.navy}, 0 0 0 5px #e8a33d50`,
           }}>
             📣
           </div>
@@ -1962,7 +1949,6 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
         input[type=range] { cursor: pointer; }

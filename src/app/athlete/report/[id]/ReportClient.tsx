@@ -2,14 +2,8 @@
 // src/app/athlete/report/[id]/ReportClient.tsx
 
 import { useRouter } from 'next/navigation'
+import { C, sans, mono } from '@/lib/athleteTheme'
 
-const C = {
-  navy: '#0D1B2A', navyLight: '#1A2E45', navyBorder: '#243652',
-  gold: '#F5C842', white: '#FFFFFF', offWhite: '#F4F6F9',
-  gray: '#8A9BB0', grayLight: '#E8ECF2', green: '#22C55E', red: '#EF4444',
-}
-const sans = "'Space Grotesk', sans-serif"
-const mono = "'Space Mono', monospace"
 
 function rpeColor(rpe: number) {
   if (rpe <= 4) return C.green
@@ -120,7 +114,6 @@ export default function ReportClient({ session, athlete, setLogs, wellness, pain
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: ${C.offWhite}; }
         @media print {

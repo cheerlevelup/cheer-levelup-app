@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import type { Athlete } from '@/types/workout'
+import { C, sans, mono } from '@/lib/athleteTheme'
 
 type WellnessLog = {
   id?: number
@@ -66,15 +67,7 @@ type Props = {
   onSaved: () => void
 }
 
-const C = {
-  navy: '#0D1B2A', navyLight: '#1A2E45', navyBorder: '#243652',
-  gold: '#F5C842', white: '#FFFFFF', offWhite: '#F4F6F9',
-  gray: '#8A9BB0', grayLight: '#E8ECF2', green: '#22C55E', red: '#EF4444',
-  orange: '#F97316', blue: '#60A5FA', violet: '#A78BFA', mint: '#34D399', cyan: '#22D3EE',
-}
 
-const sans = "'Space Grotesk', sans-serif"
-const mono = "'Space Mono', monospace"
 const tabs = ['Basic', 'Aktywnosci', 'Bol', 'Suplementy'] as const
 type Tab = typeof tabs[number]
 
@@ -109,7 +102,7 @@ const activityTypes = [
   { label: 'silownia', color: '#F97316', bg: '#FFF7ED' },
   { label: 'kondycyjny', color: '#F97316', bg: '#FFF7ED' },
   { label: 'zawody', color: '#EF4444', bg: '#FEF2F2' },
-  { label: 'inne', color: '#8A9BB0', bg: '#F4F6F9' },
+  { label: 'inne', color: '#8A9BB0', bg: '#f2f3f6' },
 ]
 
 type SupplementItem = { id: string; name: string; dose: string; emoji?: string; info?: string }
@@ -139,7 +132,7 @@ const cyclePhases = [
 const motivationOptions = [
   { value: 1, label: 'Zerowa', emoji: '😴', color: '#60A5FA', bg: '#EFF6FF' },
   { value: 2, label: 'Niska', emoji: '🙄', color: '#F97316', bg: '#FFF7ED' },
-  { value: 3, label: 'Srednia', emoji: '😐', color: '#8A9BB0', bg: '#F4F6F9' },
+  { value: 3, label: 'Srednia', emoji: '😐', color: '#8A9BB0', bg: '#f2f3f6' },
   { value: 4, label: 'Wysoka', emoji: '💪', color: '#F59E0B', bg: '#FFFBEB' },
   { value: 5, label: 'Ogien!', emoji: '🔥', color: '#EF4444', bg: '#FEF2F2' },
 ]
@@ -147,7 +140,7 @@ const motivationOptions = [
 const feelingAfterOptions = [
   { value: 'swietnie', label: 'Swietnie', emoji: '🤩', color: '#A78BFA', bg: '#F5F3FF' },
   { value: 'dobrze', label: 'Dobrze', emoji: '😊', color: '#22C55E', bg: '#F0FDF4' },
-  { value: 'ok', label: 'OK', emoji: '😐', color: '#8A9BB0', bg: '#F4F6F9' },
+  { value: 'ok', label: 'OK', emoji: '😐', color: '#8A9BB0', bg: '#f2f3f6' },
   { value: 'zmeczona', label: 'Zmeczona', emoji: '😓', color: '#F97316', bg: '#FFF7ED' },
   { value: 'slabo', label: 'Slabo', emoji: '😞', color: '#EF4444', bg: '#FEF2F2' },
 ]

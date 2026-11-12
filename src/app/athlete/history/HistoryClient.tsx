@@ -4,6 +4,7 @@
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Athlete, WorkoutSession } from '@/types/workout'
+import { C, sans, mono } from '@/lib/athleteTheme'
 
 interface Props {
   athlete: Athlete
@@ -13,15 +14,6 @@ interface Props {
   painLogs: any[]
 }
 
-const C = {
-  navy: '#0D1B2A', navyLight: '#1A2E45', navyBorder: '#243652',
-  gold: '#F5C842', white: '#FFFFFF', offWhite: '#F4F6F9',
-  gray: '#8A9BB0', grayLight: '#E8ECF2', green: '#22C55E',
-  blue: '#3B82F6', blueDark: '#1D4ED8', red: '#EF4444', orange: '#F97316',
-  purple: '#A855F7', teal: '#14B8A6',
-}
-const sans = "'Space Grotesk', sans-serif"
-const mono = "'Space Mono', monospace"
 const trainerName = 'Urszula Papka'
 
 const FEELING_LABELS: Record<string, string> = {
@@ -81,7 +73,7 @@ function wellnessColor(score: number): string {
   // score 0-10, higher = better readiness
   if (score >= 8) return '#22C55E'   // great
   if (score >= 6.5) return '#84CC16' // good
-  if (score >= 5) return '#F5C842'   // ok
+  if (score >= 5) return '#e8a33d'   // ok
   if (score >= 3.5) return '#F97316' // below average
   return '#EF4444'                    // poor
 }
@@ -263,7 +255,6 @@ export default function HistoryClient({ athlete, history, feedbacks, wellnessLog
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: ${C.offWhite}; }
         button { cursor: pointer; font-family: inherit; }
@@ -577,7 +568,7 @@ export default function HistoryClient({ athlete, history, feedbacks, wellnessLog
                     {[
                       { bg: '#22C55E', label: 'Świetna' },
                       { bg: '#84CC16', label: 'Dobra' },
-                      { bg: '#F5C842', label: 'Przeciętna' },
+                      { bg: '#e8a33d', label: 'Przeciętna' },
                       { bg: '#F97316', label: 'Słaba' },
                       { bg: '#EF4444', label: 'Zła' },
                     ].map(l => (
