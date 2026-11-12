@@ -35,6 +35,8 @@ type Day = {
   coach_intro?: string | null
   coach_outro?: string | null
   coach_closing?: string | null
+  // data treningu (migracja 202611120003)
+  training_date?: string | null
 }
 
 type ExerciseLibraryItem = {
@@ -1023,6 +1025,17 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
     }
   }
 
+  async function setDayDate(dayId: number, date: string | null) {
+    const apply = (list: Day[]) => list.map(day => day.id === dayId ? { ...day, training_date: date } : day)
+    setLocalDays(apply)
+    const { error } = await supabase.from('workout_days').update({ training_date: date }).eq('id', dayId)
+    if (error) {
+      showError(/training_date/.test(error.message) ? 'Aby ustawiać daty treningów, uruchom migrację 202611120003 w Supabase.' : `Nie udało się zapisać daty: ${error.message}`)
+      return
+    }
+    setTargetDays(apply)
+  }
+
   async function renameDay(dayId: number, newName: string) {
     const nextName = newName.trim() || 'Trening'
     const { error } = await supabase.from('workout_days').update({ day_name: nextName }).eq('id', dayId)
@@ -1487,6 +1500,7 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
           onAddWeek={addWeek}
           onAddDay={addDay}
           onRenameDay={renameDay}
+          onSetDayDate={setDayDate}
           onDeleteDay={deleteDay}
           onSaveDayMessage={(dayId, field, value) => field === 'coach_intro' ? saveCoachIntro(dayId, value) : saveCoachClosing(dayId, value)}
           onAddBlock={addBlock}

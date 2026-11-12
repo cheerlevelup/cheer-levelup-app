@@ -36,6 +36,7 @@ export type PlanTrainingItem = {
   inProgress: boolean  // ma rozpoczętą, niezakończoną sesję
   completedSessionId: number | null  // ostatnia ukończona sesja — do edycji wpisów (bez powtórki treningu)
   absent: boolean      // trener zaznaczył nieobecność — trening zablokowany
+  training_date: string | null  // data treningu z edytora planu (YYYY-MM-DD)
 }
 
 // Nieobecność zawodniczki na treningu planu (workout_days.absent_athlete_ids, zaznacza trener)
@@ -149,6 +150,7 @@ export async function getPlanTrainingsForAthlete(
       inProgress: inProgressDayIds.has(d.id),
       completedSessionId: completedSessionByDay.get(d.id) ?? null,
       absent: absentDayIds.has(d.id),
+      training_date: d.training_date ?? null,
     })),
   }
 }

@@ -118,6 +118,7 @@ export default async function AthletePage() {
       nextTraining={nextTraining}
       planTrainings={planTrainings}
       groupTrainings={groupTrainings}
+      today={new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' })}
       history={history}
       todayWellness={{
         dateIso: todayStart.toISOString(),

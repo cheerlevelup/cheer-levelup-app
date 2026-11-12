@@ -21,6 +21,8 @@ interface Props {
   planTrainings: { assignmentId: number; planName: string; trainings: PlanTrainingItem[] } | null
   // treningi grupy (moduł trenera „Trening grupy") — wpisy wspólne z tabelą trenera
   groupTrainings: GroupTrainingListItem[]
+  // dzisiejsza data (YYYY-MM-DD, czas polski) — „Dzisiejszy trening" to trening planu z tą datą
+  today: string
   history: WorkoutSession[]
   todayWellness: WellnessStatus
   wellnessEnabled: boolean
@@ -45,7 +47,7 @@ function formatLongDate(iso: string): string {
   return new Date(iso).toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' })
 }
 
-export default function AthleteClient({ athlete, nextTraining, planTrainings, groupTrainings, history, todayWellness, wellnessEnabled, wellnessFields }: Props) {
+export default function AthleteClient({ athlete, nextTraining, planTrainings, groupTrainings, today, history, todayWellness, wellnessEnabled, wellnessFields }: Props) {
   const router = useRouter()
   const [wellnessOpen, setWellnessOpen] = useState(false)
   const [wellnessDone, setWellnessDone] = useState(todayWellness.isComplete)
@@ -59,6 +61,9 @@ export default function AthleteClient({ athlete, nextTraining, planTrainings, gr
     else router.push(`/athlete/training?day=${t.id}&assignment=${planTrainings.assignmentId}`)
   }
   // domyślnie: rozpoczęte i do zrobienia; ukończone po „pokaż wszystkie"
+  // trening z dzisiejszą datą (z edytora planu); brak — karta się nie pokazuje
+  const todayTraining = trainings.find(t => t.training_date === today && !t.absent) || null
+  const shortDate = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString('pl-PL', { weekday: 'short', day: 'numeric', month: 'numeric' })
   const visibleTrainings = showAll ? trainings : trainings.filter(t => (!t.completed || t.inProgress) && !t.absent)
 
   // Prefetch kluczowych tras przy ładowaniu panelu
@@ -71,7 +76,6 @@ export default function AthleteClient({ athlete, nextTraining, planTrainings, gr
   })
 
   const planName = nextTraining?.assignment.plan?.name || history[0]?.workout_day?.week?.plan?.name || 'Plan treningowy'
-  const nextTrainingLabel = nextTraining ? `Trening ${nextTraining.completedCount + 1}` : ''
   const lastSession = history[0] as any
   const reportSent = lastSession?.report_sent === true
 
@@ -136,19 +140,19 @@ export default function AthleteClient({ athlete, nextTraining, planTrainings, gr
         <main style={{ maxWidth: contentMaxWidth, margin: '0 auto', padding: '16px 16px calc(env(safe-area-inset-bottom) + 32px)', display: 'flex', flexDirection: 'column', gap: 12 }}>
 
           {/* ── TRENING ── */}
-          {nextTraining ? (
+          {todayTraining && (
             <button
               className="ath-card"
-              onClick={() => router.push(`/athlete/training?day=${nextTraining.day.id}&assignment=${nextTraining.assignment.id}`)}
+              onClick={() => startTraining(todayTraining)}
               style={{ width: '100%', border: 'none', padding: 0, textAlign: 'left', background: C.navy, borderRadius: 18, overflow: 'hidden', boxShadow: '0 8px 24px rgba(11,18,32,.22)' }}
             >
               <div style={{ padding: '18px 18px 16px', position: 'relative' }}>
                 <div style={{ position: 'absolute', top: 0, right: 0, width: 120, height: 120, background: `radial-gradient(circle at top right, ${C.gold}33, transparent 70%)` }} />
-                <div className="ath-eyebrow" style={{ color: C.gold }}>Dzisiejszy trening</div>
-                <div className="ath-display" style={{ fontSize: 34, color: C.white, marginTop: 6 }}>{nextTrainingLabel}</div>
-                <div style={{ fontSize: 14, color: C.gray, marginTop: 4 }}>{nextTraining.day.day_name && nextTraining.day.day_name !== nextTrainingLabel ? `${nextTraining.day.day_name} · ` : ''}{planName}</div>
-                <div style={{ marginTop: 16, minHeight: 52, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 12, background: C.gold, color: C.navy, fontFamily: display, fontWeight: 700, fontSize: 20, letterSpacing: '.02em' }}>
-                  Rozpocznij trening <span style={{ fontSize: 22 }}>→</span>
+                <div className="ath-eyebrow" style={{ color: C.gold }}>Dzisiejszy trening · {shortDate(todayTraining.training_date as string)}</div>
+                <div className="ath-display" style={{ fontSize: 34, color: C.white, marginTop: 6 }}>{todayTraining.day_name}</div>
+                <div style={{ fontSize: 14, color: C.gray, marginTop: 4 }}>{planTrainings?.planName || planName}</div>
+                <div style={{ marginTop: 16, minHeight: 52, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 12, background: todayTraining.completed && !todayTraining.inProgress ? C.green : C.gold, color: C.navy, fontFamily: display, fontWeight: 700, fontSize: 20, letterSpacing: '.02em' }}>
+                  {todayTraining.completed && !todayTraining.inProgress ? '✓ Ukończony · popraw wpisy' : todayTraining.inProgress ? 'Kontynuuj trening' : 'Rozpocznij trening'} <span style={{ fontSize: 22 }}>→</span>
                 </div>
               </div>
               {lastSession && (
@@ -157,17 +161,10 @@ export default function AthleteClient({ athlete, nextTraining, planTrainings, gr
                 </div>
               )}
             </button>
-          ) : (
-            <div style={{ background: C.navy, borderRadius: 18, padding: '24px 18px', textAlign: 'center', boxShadow: '0 8px 24px rgba(11,18,32,.22)' }}>
-              <div style={{ fontSize: 34, marginBottom: 6 }}>🏆</div>
-              <div className="ath-display" style={{ color: C.white, fontSize: 26 }}>Wszystkie treningi wykonane!</div>
-              <div style={{ fontSize: 14, color: C.gray, marginTop: 6 }}>Trener wkrótce przypisze nowy plan.</div>
-              {reportSent && <div style={{ marginTop: 10, fontSize: 12, fontWeight: 600, color: C.green }}>✓ Ostatni raport wysłany</div>}
-            </div>
           )}
 
           {/* ── WSZYSTKIE TRENINGI PLANU: dowolny do rozpoczęcia ── */}
-          {trainings.length > 1 && (
+          {trainings.length > 0 && (
             <section style={{ background: C.white, border: `1px solid ${C.grayLight}`, borderRadius: radius, boxShadow: shadow, overflow: 'hidden' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '14px 16px 8px' }}>
                 <div>
@@ -184,9 +181,11 @@ export default function AthleteClient({ athlete, nextTraining, planTrainings, gr
                 <div style={{ padding: '6px 16px 16px', fontSize: 13, color: C.muted }}>Wszystkie treningi ukończone — wpisy możesz poprawić po „Pokaż wszystkie”.</div>
               ) : visibleTrainings.map(t => {
                 const isNext = nextTraining?.day.id === t.id
+                const isToday = t.training_date === today
                 const status = t.absent ? { label: 'nieobecność', fg: '#b42318', bg: '#fdecec', bd: '#f6c9c9' }
                   : t.inProgress ? { label: 'w trakcie', fg: '#a8650f', bg: '#fdf3e2', bd: '#f3d9a8' }
                   : t.completed ? { label: '✓ ukończony · edytuj', fg: '#1f9d68', bg: '#ecfaf3', bd: '#bfe9d3' }
+                  : isToday ? { label: 'dziś', fg: C.navy, bg: '#fdf3e2', bd: C.gold }
                   : isNext ? { label: 'następny', fg: C.navy, bg: '#fdf3e2', bd: C.gold }
                   : null
                 return (
@@ -198,7 +197,7 @@ export default function AthleteClient({ athlete, nextTraining, planTrainings, gr
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 600, fontSize: 15, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.day_name}</div>
-                      {multiWeek && <div style={{ fontSize: 12, color: C.muted, marginTop: 1 }}>Tydzień {t.week_number}</div>}
+                      {(t.training_date || multiWeek) && <div style={{ fontSize: 12, color: C.muted, marginTop: 1 }}>{[t.training_date ? shortDate(t.training_date) : '', multiWeek ? `Tydzień ${t.week_number}` : ''].filter(Boolean).join(' · ')}</div>}
                     </div>
                     {status && <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: status.fg, background: status.bg, border: `1px solid ${status.bd}`, borderRadius: 999, padding: '3px 9px' }}>{status.label}</span>}
                     {!t.absent && <span style={{ flexShrink: 0, color: C.gray, fontSize: 22, lineHeight: 1 }}>›</span>}

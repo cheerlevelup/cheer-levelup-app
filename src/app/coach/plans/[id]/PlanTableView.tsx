@@ -41,7 +41,7 @@ type Block = {
   id: number; day_id: number; block_name: string; block_order: number; rounds: number
   workout_block_exercises?: BlockExercise[]
 }
-type Day = { id: number; week_id: number; day_name: string; day_order: number; coach_intro?: string | null; coach_closing?: string | null }
+type Day = { id: number; week_id: number; day_name: string; day_order: number; coach_intro?: string | null; coach_closing?: string | null; training_date?: string | null }
 type Week = { id: number; plan_id: number; week_number: number; name?: string | null }
 type Plan = { id: number; name: string; group_id?: number | null }
 
@@ -317,6 +317,8 @@ interface Props {
   onAddWeek: () => Promise<void>
   onAddDay: (weekId: number) => Promise<void>
   onRenameDay: (dayId: number, name: string) => void
+  // data treningu — u zawodniczki „Dzisiejszy trening" tylko w ten dzień
+  onSetDayDate: (dayId: number, date: string | null) => void
   onDeleteDay: (dayId: number) => void
   onSaveDayMessage: (dayId: number, field: 'coach_intro' | 'coach_closing', value: string) => void
   onAddBlock: (dayId: number) => Promise<void>
@@ -566,6 +568,15 @@ export default function PlanTableView(props: Props) {
                         <div className="coach-training-pill-name" style={{ minWidth: 160 }}>
                           <EditCell value={day.day_name} onCommit={v => props.onRenameDay(day.id, v)} align="left" placeholder="nazwa treningu" />
                         </div>
+                        <label title="Data treningu — zawodniczka zobaczy go jako „Dzisiejszy trening” tego dnia" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-inter),sans-serif', fontSize: 11, fontWeight: 600, color: day.training_date ? 'var(--ink)' : 'var(--muted)' }}>
+                          📅
+                          <input
+                            type="date"
+                            value={day.training_date || ''}
+                            onChange={e => props.onSetDayDate(day.id, e.target.value || null)}
+                            style={{ border: `1px solid ${day.training_date ? 'var(--gold)' : 'var(--border)'}`, borderRadius: 7, padding: '3px 6px', fontFamily: 'var(--font-inter),sans-serif', fontSize: 12, color: 'var(--ink)', background: '#fff', outline: 'none' }}
+                          />
+                        </label>
                         <button className="coach-btn coach-btn-ghost coach-btn-small" onClick={() => onAddBlock(day.id)}>+ Blok</button>
                         {groupId != null && (
                           <Link href={fillHref(groupId, plan.id, day.id)} className="coach-btn coach-btn-gold coach-btn-small" style={{ textDecoration: 'none' }} title="Wpisuj wyniki zawodniczek w tym treningu">📝 Wpisuj wyniki</Link>
