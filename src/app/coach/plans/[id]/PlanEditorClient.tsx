@@ -1457,7 +1457,14 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
               key={editingExercise.id ?? `new-${editingExercise.block_id}`}
               exercise={editingExercise}
               exercises={exercises}
-              athletes={athletes}
+              athletes={(() => {
+                // wariant: tylko jego zawodniczki; ćwiczenie z wariantami (a): reszta grupy
+                const ex = editingExercise
+                if (ex.variant_of != null) return athletes.filter(a => (ex.variant_athlete_ids || []).includes(a.id))
+                const siblings = (localBlocks.find(b => b.id === ex.block_id)?.workout_block_exercises || []).filter(v => ex.id != null && v.variant_of === ex.id)
+                const taken = new Set(siblings.flatMap(v => v.variant_athlete_ids || []))
+                return athletes.filter(a => !taken.has(a.id))
+              })()}
               linkFor={catalog.linkFor}
               onSave={saved => {
                 handleExerciseSave(editingExercise.block_id, saved)
