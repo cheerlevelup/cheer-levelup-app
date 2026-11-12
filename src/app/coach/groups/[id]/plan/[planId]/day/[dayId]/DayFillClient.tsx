@@ -433,8 +433,8 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
       const s = nav.next++
       return (
         <div key={`${warmup ? 'w' : 's'}${setNum}_${val}`}>
-          <div style={{ fontFamily: INTER, fontSize: '0.5rem', color: warmup ? '#c07f1e' : 'var(--muted-light)', textAlign: 'center', marginBottom: 1 }}>{label}</div>
           <input
+            title={warmup ? `Rozgrzewka ${label}` : `Seria ${label.slice(1)}`}
             defaultValue={val} placeholder={placeholder} inputMode="decimal"
             className={`df-w${val ? ' filled' : ''}`}
             style={warmup ? { borderStyle: 'dashed' } : undefined}
@@ -448,7 +448,7 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
 
     return (
       <>
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
           {Array.from({ length: nWarm }, (_, i) => {
             const w = item.warmups[i]
             return input(`R${i + 1}`, i + 1, true, w?.weight_kg != null && w.weight_kg !== '' ? String(w.weight_kg) : 'kg')
@@ -504,6 +504,7 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
       <style>{`
         .df-table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; }
         .df-table th, .df-table td { border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); vertical-align: top; }
+        .df-table tbody td { vertical-align: middle; }
         .df-sticky { position: sticky; left: 0; z-index: 2; background: #ffffff; box-shadow: 3px 0 8px rgba(13,27,42,0.05); }
         .df-table thead th { position: sticky; top: 0; z-index: 4; }
         .df-table thead tr.df-ex-row th { top: 30px; }
@@ -511,7 +512,8 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
         .df-block-start { border-left: 2px solid var(--navy-900) !important; }
         .df-row:nth-child(even) td, .df-row:nth-child(even) .df-sticky { background: #FBFCFE; }
         .df-row:hover td, .df-row:hover .df-sticky { background: #EFF4FB; }
-        .df-w { width: 40px; border: 1.5px solid #DBE2EB; border-radius: 6px; background: #FAFBFC; font-family: var(--font-inter), sans-serif; font-size: 0.7rem; color: var(--navy-900); padding: 0.26rem 0.15rem; outline: none; text-align: center; }
+        .df-w { width: 40px; border: 1.5px solid #DBE2EB; border-radius: 6px; background: #FAFBFC; font-family: var(--font-inter), sans-serif; font-size: 0.7rem; color: var(--navy-900); padding: 0.2rem 0.15rem; outline: none; text-align: center; }
+        .df-w::placeholder { color: #B8C2D0; }
         .df-w.filled { border-color: var(--border); background: #ffffff; font-weight: 700; }
         .df-w:focus { border-color: var(--gold); background: #ffffff; }
       `}</style>
@@ -576,7 +578,7 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                 </tr>
                 <tr className="df-ex-row">
                   {columns.map(col => {
-                    const headStyle: React.CSSProperties = { width: 280, minWidth: 280, maxWidth: 280, padding: '0.45rem 0.55rem', background: 'var(--bg)', textAlign: 'left' }
+                    const headStyle: React.CSSProperties = { minWidth: 170, maxWidth: 300, padding: '0.3rem 0.45rem', background: 'var(--bg)', textAlign: 'left' }
                     const pill = (text: string, purple = false) => (
                       <span style={{ flexShrink: 0, minWidth: 26, textAlign: 'center', borderRadius: 6, background: purple ? '#7c3aed' : 'var(--navy-900)', color: purple ? '#ffffff' : 'var(--gold)', fontFamily: INTER, fontSize: '0.66rem', fontWeight: 800, padding: '3px 5px', lineHeight: 1 }}>{text}</span>
                     )
@@ -625,9 +627,20 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                   const absent = absentIds.has(athlete.id)
                   return (
                     <tr key={athlete.id} className="df-row">
-                      <td className="df-sticky" style={{ padding: '0.45rem 0.5rem' }}>
+                      <td className="df-sticky" style={{ padding: '0.22rem 0.45rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <div style={{ fontWeight: 700, fontSize: '0.78rem', color: absent ? 'var(--muted-light)' : 'var(--navy-900)', textDecoration: absent ? 'line-through' : 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 150 }}>{athlete.full_name}</div>
+                          {absent ? (
+                            <span title="Nieobecna na tym treningu" style={{ flexShrink: 0, width: 18, height: 18, borderRadius: '50%', border: '1.5px solid #F4B5B5', background: '#FDEDED', color: '#c23b3b', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: INTER, fontSize: '0.55rem', fontWeight: 800 }}>N</span>
+                          ) : (
+                            <button
+                              onClick={() => toggleCompleted(athlete.id)}
+                              title={done ? 'Zakończony — kliknij, by cofnąć (zawodniczka znów będzie mogła dokończyć trening)' : `${session ? 'W trakcie' : 'Nie rozpoczęty'} — kliknij, by oznaczyć jako zakończony (wyśle raport mailem)`}
+                              style={{ flexShrink: 0, width: 18, height: 18, padding: 0, borderRadius: '50%', border: `1.5px solid ${done ? '#15803d' : session ? '#c07f1e' : 'var(--border)'}`, background: done ? '#15803d' : session ? '#FFF6E5' : '#ffffff', color: done ? '#ffffff' : '#c07f1e', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', outline: 'none', cursor: 'pointer' }}
+                            >
+                              {done ? <Check size={11} /> : session ? <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#c07f1e' }} /> : null}
+                            </button>
+                          )}
+                          <div title={athlete.full_name} style={{ fontWeight: 700, fontSize: '0.76rem', color: absent ? 'var(--muted-light)' : 'var(--navy-900)', textDecoration: absent ? 'line-through' : 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140 }}>{athlete.full_name}</div>
                           <button
                             onClick={() => toggleAbsent(athlete.id)}
                             title={absent ? 'Przywróć — była na treningu' : 'Zaznacz nieobecność na tym treningu'}
@@ -636,21 +649,10 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                             {absent ? '↩' : '✕'}
                           </button>
                         </div>
-                        {absent ? (
-                          <span style={{ display: 'inline-block', marginTop: 4, border: '1.5px solid #F4B5B5', background: '#FDEDED', color: '#c23b3b', borderRadius: 6, padding: '2px 7px', fontFamily: INTER, fontSize: '0.6rem', fontWeight: 700 }}>nieobecna</span>
-                        ) : (
-                        <button
-                          onClick={() => toggleCompleted(athlete.id)}
-                          title={done ? 'Kliknij, by cofnąć — zawodniczka znów będzie mogła dokończyć trening' : 'Oznacz trening jako zakończony (wyśle raport mailem)'}
-                          style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 4, border: `1.5px solid ${done ? '#15803d' : 'var(--border)'}`, background: done ? '#EEF8F1' : '#ffffff', color: done ? '#15803d' : 'var(--muted)', borderRadius: 6, padding: '2px 7px', fontFamily: INTER, fontSize: '0.6rem', fontWeight: 700, outline: 'none' }}
-                        >
-                          {done ? <><Check size={11} /> zakończony</> : session ? 'w trakcie · zakończ' : 'nie rozpoczęty · zakończ'}
-                        </button>
-                        )}
                       </td>
                       {columns.map((col, colIdx) => {
                         const tdClass = col.blockStart ? 'df-block-start' : undefined
-                        const tdStyle: React.CSSProperties = { padding: '0.4rem 0.5rem', ...(done ? { background: '#F4FBF6' } : {}), ...(absent ? { opacity: 0.35, pointerEvents: 'none' as const } : {}) }
+                        const tdStyle: React.CSSProperties = { padding: '0.22rem 0.4rem', ...(done ? { background: '#F4FBF6' } : {}), ...(absent ? { opacity: 0.35, pointerEvents: 'none' as const } : {}) }
                         // numeracja pól w komórce (rozgrzewka + serie, kolejne ćwiczenia) — do nawigacji klawiaturą
                         const nav = { row: rowIdx, col: colIdx, next: 0 }
                         if (col.kind === 'extra') {
@@ -687,7 +689,7 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                         return (
                           <td key={col.ex.id} className={tdClass} style={tdStyle}>
                             {col.variants.length > 0 && (
-                              <div style={{ fontFamily: INTER, fontSize: '0.62rem', fontWeight: 800, color: '#7c3aed', marginBottom: 3 }}>
+                              <div style={{ fontFamily: INTER, fontSize: '0.58rem', fontWeight: 800, color: '#7c3aed', marginBottom: 1, whiteSpace: 'nowrap' }}>
                                 {col.label}{String.fromCharCode(97 + variantIdx + 1)} · {exName(ex, o)}
                               </div>
                             )}
