@@ -847,19 +847,14 @@ export default function PlanTableView(props: Props) {
                         </table>
                       </div>
 
-                      {/* add block button below table */}
-                      <div style={{ marginTop: 6 }}>
+                      {/* pod tabelą: nowy blok w tym treningu / nowy trening w tym tygodniu */}
+                      <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                         <button className="coach-btn coach-btn-ghost coach-btn-small" onClick={() => onAddBlock(day.id)}>+ Blok do {day.day_name}</button>
+                        <button className="coach-btn coach-btn-dark coach-btn-small" onClick={() => onAddDay(week.id)}>+ Trening</button>
                       </div>
                     </div>
                   )
                 })}
-
-                {weekDays.length > 0 && (
-                  <div>
-                    <button className="coach-btn coach-btn-ghost coach-btn-small" onClick={() => onAddDay(week.id)}>+ Trening do tygodnia {week.week_number}</button>
-                  </div>
-                )}
 
                 {weekDays.length === 0 && (
                   <div style={{ color: 'var(--muted)', fontFamily: 'var(--font-inter),sans-serif', fontSize: 12, padding: '0.5rem 0' }}>
