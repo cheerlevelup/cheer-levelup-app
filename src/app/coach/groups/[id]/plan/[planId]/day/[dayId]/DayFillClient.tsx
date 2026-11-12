@@ -43,7 +43,7 @@ type Extra = {
 type CellExercise = { id: number; name: string; sets: number; reps: string; weight: number | null; warmups: WarmupSet[]; bw?: boolean[]; info?: string; infoTitle?: string }
 type Block = { id: number; block_name: string | null; block_order: number; rounds?: number | null; workout_block_exercises: BlockEx[] }
 type Session = { id: number; athlete_id: number; workout_day_id: number; assignment_id: number | null; completed: boolean; report_sent?: boolean | null; date_completed?: string | null; created_at?: string }
-type SetLog = { id: number; workout_session_id: number; block_exercise_id: number; athlete_id: number; set_number: number; weight: number | null; reps_completed: number | null; completed: boolean; is_warmup: boolean; athlete_note?: string | null }
+type SetLog = { id: number; workout_session_id: number; block_exercise_id: number; athlete_id: number; set_number: number; weight: number | null; reps_completed: number | null; completed: boolean; is_warmup: boolean; athlete_note?: string | null; skipped?: boolean }
 type PainLog = { id: number; workout_session_id: number; vas_score: number | null; pain_comment: string | null; pain_location: string | null }
 type Override = { athlete_id: number; block_exercise_id: number; sets_override?: number | null; reps_override?: string | null; tempo_override?: string | null; weight_override?: number | null; skip?: boolean | null; exercise_code_override?: string | null; is_substitution?: boolean | null; warmup_sets_override?: WarmupSet[] | null }
 
@@ -267,6 +267,7 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
         workout_session_id: s.id, block_exercise_id: exId, athlete_id: athleteId, set_number: setNum, is_warmup: warmup,
         [field]: num, [other]: warmup ? null : (prev?.[other] ?? null),
         completed: num != null || (!warmup && prev?.[other] != null),
+        ...(prev?.skipped && num != null ? { skipped: false } : {}),
       }
       let id = prev?.id
       if (!id) {
@@ -279,6 +280,34 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
         : await supabase.from('set_logs').insert(payload).select().single()
       if (res.error || !res.data) { setError(res.error?.message || 'Błąd zapisu serii'); return }
       setLogs(m => ({ ...m, [logKey(s.id, exId, setNum, warmup)]: res.data as SetLog }))
+    })())
+  }
+
+  // Ćwiczenie niewykonane (wszystkie serie) albo cofnięcie — jak przycisk ✕ u zawodniczki
+  async function toggleExerciseSkipped(athleteId: number, exId: number, nSets: number, skip: boolean) {
+    setError('')
+    await track((async () => {
+      const s = await ensureSession(athleteId)
+      if (!s) return
+      for (let n = 1; n <= nSets; n++) {
+        const key = logKey(s.id, exId, n, false)
+        const prev = logs[key]
+        const payload = { workout_session_id: s.id, block_exercise_id: exId, athlete_id: athleteId, set_number: n, is_warmup: false, weight: null, reps_completed: null, completed: false, skipped: skip }
+        let id = prev?.id
+        if (!id) {
+          const { data: found } = await supabase.from('set_logs').select('id').eq('workout_session_id', s.id).eq('block_exercise_id', exId)
+            .eq('set_number', n).eq('is_warmup', false).order('created_at', { ascending: false }).limit(1).maybeSingle()
+          id = found?.id
+        }
+        const res = id
+          ? await supabase.from('set_logs').update(payload).eq('id', id).select().single()
+          : await supabase.from('set_logs').insert(payload).select().single()
+        if (res.error || !res.data) {
+          setError(/skipped/.test(res.error?.message || '') ? 'Aby oznaczać ćwiczenia jako niewykonane, uruchom migrację 202611120004.' : (res.error?.message || 'Błąd zapisu'))
+          return
+        }
+        setLogs(m => ({ ...m, [key]: res.data as SetLog }))
+      }
     })())
   }
 
@@ -342,7 +371,7 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
     for (const t of targets) {
       const key = logKey(s.id, t.exId, t.setNum, t.warmup)
       const prev = logs[key]
-      if (prev?.weight != null) continue
+      if (prev?.weight != null || prev?.skipped) continue
       const res = prev
         ? await supabase.from('set_logs').update({ weight: 0, completed: true }).eq('id', prev.id).select().single()
         : await supabase.from('set_logs').insert({ workout_session_id: s.id, block_exercise_id: t.exId, athlete_id: athleteId, set_number: t.setNum, is_warmup: t.warmup, weight: 0, reps_completed: null, completed: true }).select().single()
@@ -511,7 +540,7 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
     const count = (exId: number, sets: number) => {
       planned += sets
       if (!session) return
-      filled += Object.values(logs).filter(l => l.workout_session_id === session.id && l.block_exercise_id === exId && !l.is_warmup && (l.weight != null || l.reps_completed != null)).length
+      filled += Object.values(logs).filter(l => l.workout_session_id === session.id && l.block_exercise_id === exId && !l.is_warmup && (l.weight != null || l.reps_completed != null || l.skipped)).length
     }
     for (const col of cols) {
       if (col.kind === 'extra') { col.extras.filter(e => e.athlete_id === athleteId).forEach(e => count(e.id, e.sets || 1)); continue }
@@ -541,14 +570,15 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
       const logged = log?.[f] != null ? String(log[f]) : ''
       // ciężar „BW” w planie — od razu 0 kg (zapisze się po wyjściu z pola albo przy zakończeniu treningu)
       const bw = f === 'weight' && !logged && (warmup ? isBW(item.warmups[setNum - 1]?.weight_kg) : !!item.bw?.[setNum - 1])
-      const val = logged || (bw ? '0' : '')
+      const skippedSet = !warmup && !!log?.skipped
+      const val = logged || (bw && !skippedSet ? '0' : '')
       const s = nav.next++
       return (
-        <div key={`${warmup ? 'w' : 's'}${setNum}_${val}`}>
+        <div key={`${warmup ? 'w' : 's'}${setNum}_${val}_${skippedSet ? 'x' : ''}`}>
           <input
-            title={`${warmup ? `Rozgrzewka ${label}` : `Seria ${label.slice(1)}`}${bw ? ' — BW (0 kg)' : ''}`}
-            defaultValue={val} placeholder={placeholder} inputMode="decimal"
-            className={`df-w${val ? ' filled' : ''}`}
+            title={skippedSet ? `Seria ${label.slice(1)} — nie wykonana (wpisz wartość, by cofnąć)` : `${warmup ? `Rozgrzewka ${label}` : `Seria ${label.slice(1)}`}${bw ? ' — BW (0 kg)' : ''}`}
+            defaultValue={val} placeholder={skippedSet ? '✕' : placeholder} inputMode="decimal"
+            className={`df-w${val ? ' filled' : ''}${skippedSet ? ' skipped' : ''}`}
             style={warmup ? { borderStyle: 'dashed' } : undefined}
             data-r={nav.row} data-c={nav.col} data-s={s}
             onBlur={e => saveSet(athlete.id, item.id, setNum, f, e.target.value, warmup)}
@@ -570,6 +600,18 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
           })}
           {nWarm > 0 && <span style={{ width: 1, alignSelf: 'stretch', background: 'var(--border)', margin: '0 2px' }} />}
           {Array.from({ length: nSets }, (_, i) => input(`S${i + 1}`, i + 1, false, amrap ? 'powt.' : item.weight != null ? String(item.weight) : 'kg'))}
+          {(() => {
+            const allSkipped = nSets > 0 && Array.from({ length: nSets }, (_, i) => !!workLogs.find(l => l.set_number === i + 1)?.skipped).every(Boolean)
+            return (
+              <button
+                onClick={() => toggleExerciseSkipped(athlete.id, item.id, nSets, !allSkipped)}
+                title={allSkipped ? 'Ćwiczenie nie wykonane — kliknij, by cofnąć' : 'Oznacz ćwiczenie jako niewykonane'}
+                style={allSkipped ? { ...qiBtn, border: '1.5px solid #c23b3b', background: '#c23b3b', color: '#fff' } : { ...qiBtn, color: '#c25454' }}
+              >
+                <X size={10} />
+              </button>
+            )
+          })()}
           <button
             onClick={() => setCellEdit(prev => prev?.key === cellKey && prev.type === 'pain' ? null : { key: cellKey, type: 'pain' })}
             title={pain ? `Ból ${pain.vas_score ?? ''}/10${pain.pain_comment ? `: ${pain.pain_comment}` : ''}` : 'Zaznacz ból'}
@@ -631,6 +673,8 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
         .df-w::placeholder { color: #B8C2D0; }
         .df-w.filled { border-color: var(--border); background: #ffffff; font-weight: 700; }
         .df-w:focus { border-color: var(--gold); background: #ffffff; }
+        .df-w.skipped { background: #fdecec; border-color: #f1c4c4; }
+        .df-w.skipped::placeholder { color: #c23b3b; font-weight: 800; }
       `}</style>
       <div className="coach-content" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>

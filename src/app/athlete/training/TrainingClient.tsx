@@ -14,6 +14,8 @@ const isBW = (v: unknown) => typeof v === 'string' && /^\s*bw\s*$/i.test(v)
 const isNumericWeight = (v: string) => /^[\d.,\s/–-]+$/.test(v)
 // wspólny wygląd pól i przycisku „zrobione" w wierszu serii
 const setInput = (done: boolean): React.CSSProperties => ({ width: '100%', height: 34, padding: '0 6px', border: `1px solid ${done ? '#9fdcbc' : '#d9dfe9'}`, borderRadius: 8, fontFamily: sans, fontSize: 16, fontWeight: 600, color: C.navy, background: '#fff', outline: 'none', textAlign: 'center' })
+const skipBtn = (skipped: boolean): React.CSSProperties => ({ width: 34, height: 34, borderRadius: 8, background: skipped ? C.red : '#fff', border: `1.5px solid ${skipped ? C.red : '#e3c2c2'}`, color: skipped ? '#fff' : '#c25454', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.95rem', fontWeight: 800 })
+const SKIP_MIGRATION_MSG = 'Aby oznaczać serie jako niewykonane, trener musi uruchomić migrację 202611120004.'
 const doneBtn = (done: boolean): React.CSSProperties => ({ width: 34, height: 34, borderRadius: 8, background: done ? C.green : '#fff', border: `1.5px solid ${done ? C.green : '#cfd6e2'}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 0.15s' })
 
 // ─── STAŁE ────────────────────────────────────────────────────────────────────
@@ -544,6 +546,9 @@ function SetRow({ setNum, reps, plannedWeight, isAmrap, prevWeight, existingLog,
   const [weight, setWeight] = useState(existingLog?.weight?.toString() || (!isAmrap && isBW(plannedWeight) ? '0' : ''))
   const [actualReps, setActualReps] = useState(existingLog?.reps_completed?.toString() || '')
   const [done, setDone] = useState(!!existingLog?.completed)
+  const [skipped, setSkipped] = useState(!!existingLog?.skipped)
+  // czy w bazie seria jest oznaczona jako niewykonana — wtedy przy zapisie trzeba to zdjąć
+  const savedSkippedRef = React.useRef(!!existingLog?.skipped)
   const [saveError, setSaveError] = useState('')
   const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   // Cache ID po pierwszym zapisie, żeby uniknąć wyścigu INSERT vs INSERT
@@ -561,7 +566,7 @@ function SetRow({ setNum, reps, plannedWeight, isAmrap, prevWeight, existingLog,
     return data?.id ?? null
   }
 
-  async function doSaveSet(nextDone: boolean, currentWeight: string, currentReps: string) {
+  async function doSaveSet(nextDone: boolean, currentWeight: string, currentReps: string, nextSkipped = false) {
     setSaveError('')
     const payload = {
       workout_session_id: sessionId, block_exercise_id: blockExerciseId,
@@ -569,7 +574,11 @@ function SetRow({ setNum, reps, plannedWeight, isAmrap, prevWeight, existingLog,
       weight: currentWeight ? parseFloat(currentWeight.replace(',', '.')) : null,
       reps_completed: currentReps ? parseInt(currentReps) : null,
       is_warmup: false, completed: nextDone,
+      // kolumna skipped tylko gdy potrzebna — bez migracji zwykły zapis serii dalej działa
+      ...(nextSkipped || savedSkippedRef.current ? { skipped: nextSkipped } : {}),
     }
+    const onErr = (msg: string) => setSaveError(/skipped/.test(msg) ? SKIP_MIGRATION_MSG : msg)
+    if ('skipped' in payload) savedSkippedRef.current = nextSkipped
 
     // Mamy ID (z cache albo z bazy) — zwykły UPDATE
     const knownId = savedLogIdRef.current ?? await findExistingLogId()
@@ -577,7 +586,7 @@ function SetRow({ setNum, reps, plannedWeight, isAmrap, prevWeight, existingLog,
       savedLogIdRef.current = knownId
       const { error } = await supabase.from('set_logs').update(payload).eq('id', knownId)
       if (!error) onLogSaved?.({ ...payload, id: knownId, created_at: new Date().toISOString() } as SetLog)
-      else setSaveError(error.message)
+      else onErr(error.message)
       return
     }
 
@@ -596,15 +605,15 @@ function SetRow({ setNum, reps, plannedWeight, isAmrap, prevWeight, existingLog,
       savedLogIdRef.current = raceId
       const { error: upErr } = await supabase.from('set_logs').update(payload).eq('id', raceId)
       if (!upErr) onLogSaved?.({ ...payload, id: raceId, created_at: new Date().toISOString() } as SetLog)
-      else setSaveError(upErr.message)
+      else onErr(upErr.message)
     } else if (error) {
-      setSaveError(error.message)
+      onErr(error.message)
     }
   }
 
   // Wszystkie zapisy tej serii idą po kolei (jeden po drugim)
-  function saveSet(nextDone: boolean, currentWeight: string, currentReps: string = actualReps) {
-    const run = () => doSaveSet(nextDone, currentWeight, currentReps)
+  function saveSet(nextDone: boolean, currentWeight: string, currentReps: string = actualReps, nextSkipped = false) {
+    const run = () => doSaveSet(nextDone, currentWeight, currentReps, nextSkipped)
     saveChainRef.current = saveChainRef.current.then(run, run)
     return saveChainRef.current
   }
@@ -612,8 +621,22 @@ function SetRow({ setNum, reps, plannedWeight, isAmrap, prevWeight, existingLog,
   async function toggle() {
     const newDone = !done
     setDone(newDone)
+    if (newDone) setSkipped(false)
     onComplete(newDone)
     await saveSet(newDone, weight)
+  }
+
+  // Seria niewykonana — zamiast „zrobione" (wpisany ciężar znika)
+  async function toggleSkip() {
+    const newSkipped = !skipped
+    setSkipped(newSkipped)
+    if (newSkipped) {
+      if (done) { setDone(false); onComplete(false) }
+      setWeight(''); setActualReps('')
+      await saveSet(false, '', '', true)
+    } else {
+      await saveSet(false, '', '', false)
+    }
   }
 
   function handleWeightChange(val: string) {
@@ -621,7 +644,8 @@ function SetRow({ setNum, reps, plannedWeight, isAmrap, prevWeight, existingLog,
     setWeight(cleaned)
     const hasWeight = cleaned.trim() !== ''
 
-    // Natychmiastowa zmiana stanu UI
+    // Natychmiastowa zmiana stanu UI (wpis ciężaru zdejmuje „nie wykonana")
+    if (hasWeight && skipped) setSkipped(false)
     if (hasWeight && !done) {
       setDone(true)
       onComplete(true)
@@ -643,6 +667,7 @@ function SetRow({ setNum, reps, plannedWeight, isAmrap, prevWeight, existingLog,
     setActualReps(val)
     const hasReps = val.trim() !== ''
 
+    if (hasReps && skipped) setSkipped(false)
     if (hasReps && !done) { setDone(true); onComplete(true) }
     else if (!hasReps && done) { setDone(false); onComplete(false) }
 
@@ -659,10 +684,10 @@ function SetRow({ setNum, reps, plannedWeight, isAmrap, prevWeight, existingLog,
   const planLine = isBW(plannedWeight) ? 'BW · 0 kg' : planW ? `plan: ${planW}${isNumericWeight(planW) ? ' kg' : ''}` : prevWeight ? `poprzednio: ${prevWeight} kg` : null
 
   return (
-    <div style={{ padding: '4px 6px 4px 10px', background: done ? '#effaf4' : '#fff', borderRadius: 10, marginBottom: 4, border: `1px solid ${done ? '#bfe9d3' : C.grayLight}`, transition: 'all 0.2s', fontFamily: sans }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontWeight: 700, fontSize: '0.78rem', color: done ? C.green : C.gold, minWidth: 22 }}>S{setNum}</span>
-        <div style={{ flex: 1, minWidth: 0, lineHeight: 1.2 }}>
+    <div style={{ padding: '4px 6px 4px 10px', background: skipped ? '#fdf3f3' : done ? '#effaf4' : '#fff', borderRadius: 10, marginBottom: 4, border: `1px solid ${skipped ? '#f1c4c4' : done ? '#bfe9d3' : C.grayLight}`, transition: 'all 0.2s', fontFamily: sans }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontWeight: 700, fontSize: '0.78rem', color: skipped ? C.red : done ? C.green : C.gold, minWidth: 22 }}>S{setNum}</span>
+        <div style={{ flex: 1, minWidth: 0, lineHeight: 1.2, ...(skipped ? { opacity: 0.55, textDecoration: 'line-through' } : {}) }}>
           <span style={{ fontWeight: 700, fontSize: repsStr.length > 14 ? '0.8rem' : '0.92rem', color: C.navy }}>{repsStr}</span>
           {repsStr.length <= 14 && !isTime && repsStr !== '—' && <span style={{ fontSize: '0.66rem', color: C.gray, marginLeft: 3 }}>powt.</span>}
           {planLine && <div style={{ fontSize: '0.66rem', color: C.gray, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{planLine}</div>}
@@ -674,7 +699,8 @@ function SetRow({ setNum, reps, plannedWeight, isAmrap, prevWeight, existingLog,
             <input inputMode="decimal" placeholder={planW && isNumericWeight(planW) ? planW : 'kg'} value={weight} onChange={e => handleWeightChange(e.target.value)} style={setInput(done)} />
           )}
         </div>
-        <button onClick={toggle} aria-label="Zrobione" style={doneBtn(done)}>
+        <button onClick={toggleSkip} aria-label="Nie wykonana" title="Seria nie wykonana" style={skipBtn(skipped)}>✕</button>
+        <button onClick={toggle} aria-label="Zrobione" title="Seria zrobiona" style={doneBtn(done)}>
           {done && <span style={{ color: '#fff', fontSize: '1rem', fontWeight: 800 }}>✓</span>}
         </button>
       </div>
@@ -930,6 +956,31 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, o
   )
   const completedSets = localCompleted
   const allDone = completedSets >= effectiveSets
+  // wszystkie serie oznaczone jako niewykonane
+  const workLog = (n: number) => exSetLogs.find(l => l.set_number === n && !l.is_warmup)
+  const allSkipped = effectiveSets > 0 && Array.from({ length: effectiveSets }, (_, i) => !!workLog(i + 1)?.skipped).every(Boolean)
+  const [rowsVersion, setRowsVersion] = useState(0)
+  const [skipError, setSkipError] = useState('')
+  async function setAllSkipped(skip: boolean) {
+    setSkipError('')
+    for (let n = 1; n <= effectiveSets; n++) {
+      const payload = { workout_session_id: sessionId, block_exercise_id: exercise.id, athlete_id: athleteId, set_number: n, is_warmup: false, completed: false, weight: null, reps_completed: null, skipped: skip }
+      let id = workLog(n)?.id ?? null
+      if (!id) {
+        const { data } = await supabase.from('set_logs').select('id').eq('workout_session_id', sessionId).eq('block_exercise_id', exercise.id)
+          .eq('set_number', n).eq('is_warmup', false).order('created_at', { ascending: false }).limit(1).maybeSingle()
+        id = data?.id ?? null
+      }
+      const res = id
+        ? await supabase.from('set_logs').update(payload).eq('id', id).select('id').single()
+        : await supabase.from('set_logs').insert(payload).select('id').single()
+      if (res.error || !res.data) { setSkipError(/skipped/.test(res.error?.message || '') ? SKIP_MIGRATION_MSG : (res.error?.message || 'Błąd zapisu')); return }
+      handleLogSaved({ ...payload, weight: undefined, reps_completed: undefined, id: res.data.id, created_at: new Date().toISOString() } as SetLog)
+    }
+    if (completedSets > 0) onSetsChange(-completedSets)
+    setLocalCompleted(0)
+    setRowsVersion(v => v + 1)  // wiersze serii od nowa z zapisanego stanu
+  }
   const isAmrap = isFailureReps(effectiveReps)
   const exerciseName = getEffectiveName()
 
@@ -1016,7 +1067,8 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, o
               <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: i < completedSets ? C.green : C.grayLight, transition: 'background 0.2s' }} />
             ))}
           </div>
-          {allDone && <span style={{ fontSize: '0.9rem', marginLeft: 4 }}>✅</span>}
+          {allSkipped ? <span style={{ fontSize: '0.66rem', fontWeight: 700, color: C.red, background: '#fdecec', border: '1px solid #f6c9c9', borderRadius: 999, padding: '1px 7px', marginLeft: 2, whiteSpace: 'nowrap' }}>nie wykonane</span>
+            : allDone && <span style={{ fontSize: '0.9rem', marginLeft: 4 }}>✅</span>}
           <span style={{ color: C.gray, fontSize: '0.75rem', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', marginLeft: 4 }}>▼</span>
         </div>
 
@@ -1055,7 +1107,7 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, o
 
             {Array.from({ length: effectiveSets }, (_, i) => (
               <SetRow
-                key={i}
+                key={`${rowsVersion}-${i}`}
                 setNum={i + 1}
                 reps={setReps(i)}
                 plannedWeight={setWeight(i)}
@@ -1072,6 +1124,15 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, o
                 onLogSaved={handleLogSaved}
               />
             ))}
+
+            {/* całe ćwiczenie niewykonane (albo cofnięcie) */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 2 }}>
+              <button onClick={() => setAllSkipped(!allSkipped)}
+                style={{ border: 'none', background: 'none', padding: '4px 2px', fontFamily: sans, fontSize: '0.78rem', fontWeight: 600, color: allSkipped ? C.muted : '#c25454', cursor: 'pointer' }}>
+                {allSkipped ? '↩ Cofnij „nie wykonane”' : '✕ Całe ćwiczenie nie wykonane'}
+              </button>
+            </div>
+            {skipError && <div style={{ fontSize: '0.72rem', color: C.red, marginBottom: 4 }}>❌ {skipError}</div>}
 
             {/* Notatka do ćwiczenia (jedna, zapisuje do first set_log) */}
             <div style={{ marginTop: 6, display: 'flex', gap: 6, alignItems: 'flex-start' }}>
@@ -1772,15 +1833,16 @@ function FinishModal({ doneSets, totalSets, wellnessFilled, feedbackFilled, well
                         {Array.from({ length: effectiveSets }, (_, i) => {
                           const log = sets.find(s => s.set_number === i + 1)
                           const done = log?.completed
+                          const skipped = !!log?.skipped
                           const w = log?.weight
                           return (
                             <div key={i} style={{
                               padding: '0.2rem 0.5rem', borderRadius: 6, fontFamily: mono, fontSize: '0.72rem', fontWeight: 700,
-                              background: done ? '#F0FDF4' : C.offWhite,
-                              color: done ? '#166534' : C.gray,
-                              border: `1px solid ${done ? '#86EFAC' : C.grayLight}`,
+                              background: skipped ? '#fdecec' : done ? '#F0FDF4' : C.offWhite,
+                              color: skipped ? C.red : done ? '#166534' : C.gray,
+                              border: `1px solid ${skipped ? '#f6c9c9' : done ? '#86EFAC' : C.grayLight}`,
                             }}>
-                              S{i + 1} {done ? (w ? `${w}kg` : '✓') : '—'}
+                              S{i + 1} {skipped ? '✕ nie' : done ? (w != null ? `${w}kg` : log?.reps_completed != null ? `${log.reps_completed}×` : '✓') : '—'}
                             </div>
                           )
                         })}
@@ -1862,6 +1924,16 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
     const missing: string[] = []
     if (!wellnessSaved) missing.push('Gotowość przed treningiem')
     if (!postFeedbackSaved) missing.push('Feedback po treningu')
+    // każda seria każdego ćwiczenia: zrobiona albo „nie wykonana"
+    const unmarked = blocks.flatMap(b => (b.exercises || []) as TrainingExercise[]).filter(ex => {
+      const n = ex.override?.sets_override || ex.sets
+      return Array.from({ length: n }, (_, i) => setLogs.find(l => l.block_exercise_id === ex.id && !l.is_warmup && l.set_number === i + 1))
+        .some(l => !l || (!l.completed && !l.skipped))
+    })
+    if (unmarked.length) {
+      const names = unmarked.map(ex => ex.override?.exercise_code_override || formatExerciseName(ex.exercise?.name || ex.exercise_code || 'Ćwiczenie'))
+      missing.push(`Oznacz każdą serię jako zrobioną ✓ albo niewykonaną ✕: ${names.slice(0, 4).join(', ')}${names.length > 4 ? ` i ${names.length - 4} więcej` : ''}`)
+    }
     if (missing.length > 0) {
       setFinishBlockMsg(`Uzupełnij przed zakończeniem:\n• ${missing.join('\n• ')}`)
       setTimeout(() => setFinishBlockMsg(null), 5000)

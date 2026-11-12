@@ -123,6 +123,8 @@ export interface SetLog {
   athlete_note?: string | null
   duration_seconds?: number
   completed: boolean
+  // seria niewykonana (migracja 202611120004)
+  skipped?: boolean
   is_warmup: boolean
   athlete_id: number
   created_at: string
