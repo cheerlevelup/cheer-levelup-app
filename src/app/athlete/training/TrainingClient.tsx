@@ -7,6 +7,14 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import type { Athlete, TrainingView, SetLog, WorkoutBlockExercise } from '@/types/workout'
 import { C, sans, mono } from '@/lib/athleteTheme'
+import { fmtRange, isoPowtLines, type PlanWorkSet } from '@/lib/coach/planFormat'
+
+// „BW" (masa ciała) w ciężarze planu = 0 kg — pole od razu z 0, jak u trenera
+const isBW = (v: unknown) => typeof v === 'string' && /^\s*bw\s*$/i.test(v)
+const isNumericWeight = (v: string) => /^[\d.,\s/–-]+$/.test(v)
+// wspólny wygląd pól i przycisku „zrobione" w wierszu serii
+const setInput = (done: boolean): React.CSSProperties => ({ width: '100%', height: 34, padding: '0 6px', border: `1px solid ${done ? '#9fdcbc' : '#d9dfe9'}`, borderRadius: 8, fontFamily: sans, fontSize: '0.95rem', fontWeight: 600, color: C.navy, background: '#fff', outline: 'none', textAlign: 'center' })
+const doneBtn = (done: boolean): React.CSSProperties => ({ width: 34, height: 34, borderRadius: 8, background: done ? C.green : '#fff', border: `1.5px solid ${done ? C.green : '#cfd6e2'}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 0.15s' })
 
 // ─── STAŁE ────────────────────────────────────────────────────────────────────
 
@@ -449,7 +457,7 @@ function WarmupSetRow({ warmup, setNum, existingLog, sessionId, athleteId, block
   onLogSaved?: (log: SetLog) => void
 }) {
   const supabase = createClient()
-  const [weight, setWeight] = useState(existingLog?.weight?.toString() || '')
+  const [weight, setWeight] = useState(existingLog?.weight?.toString() || (isBW(warmup.weight_kg) ? '0' : ''))
   const [done, setDone] = useState(!!existingLog?.completed)
   const savedIdRef = React.useRef<number | null>(existingLog?.id ?? null)
   // Kolejkujemy zapisy, by szybkie dwukrotne kliknięcie nie zrobiło dwóch INSERT-ów
@@ -503,32 +511,20 @@ function WarmupSetRow({ warmup, setNum, existingLog, sessionId, athleteId, block
   // Notatka dla zawodniczki: powtórzenia, ciężar (bez słowa "ref" i zduplikowanego "kg"), treść notatki
   const noteText = [
     warmup.reps ? `${warmup.reps} powt.` : null,
-    warmup.weight_kg ? String(warmup.weight_kg).replace(/\s*kg\s*$/i, '') + ' kg' : null,
+    warmup.weight_kg ? (isBW(warmup.weight_kg) ? 'BW' : String(warmup.weight_kg).replace(/\s*kg\s*$/i, '') + ' kg') : null,
     warmup.note || null,
   ].filter(Boolean).join(' · ')
 
   return (
-    <div style={{ padding: '0.6rem 0.875rem', background: done ? '#F0FDF4' : '#FAFBFC', borderRadius: 10, marginBottom: 6, border: `1.5px solid ${done ? '#86EFAC' : C.grayLight}`, fontFamily: sans }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontFamily: mono, fontSize: '0.7rem', fontWeight: 800, color: C.gray, minWidth: 40 }}>
-          Rozg{setNum > 1 ? ` ${setNum}` : ''}
-        </span>
-        <div style={{ flex: 1 }}>
-          <input
-            inputMode="decimal" placeholder=""
-            value={weight} onChange={e => setWeight(e.target.value.replace(',', '.'))}
-            style={{ width: '100%', padding: '0.4rem 0.5rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.9rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center' }}
-          />
-        </div>
-        <button onClick={toggle} style={{ width: 36, height: 36, borderRadius: 8, background: done ? C.green : C.grayLight, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          {done && <span style={{ color: '#fff', fontSize: '1rem', fontWeight: 800 }}>✓</span>}
-        </button>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px 4px 10px', background: done ? '#effaf4' : '#fffbf3', borderRadius: 10, marginBottom: 4, border: `1px dashed ${done ? '#9fdcbc' : '#f0d9ae'}`, fontFamily: sans }}>
+      <span style={{ fontWeight: 700, fontSize: '0.74rem', color: done ? C.green : '#b77a14', minWidth: 22 }}>R{setNum}</span>
+      <div style={{ flex: 1, minWidth: 0, fontSize: '0.8rem', fontWeight: 600, color: C.navy, lineHeight: 1.25 }}>{noteText || 'rozgrzewka'}</div>
+      <div style={{ width: 70, flexShrink: 0 }}>
+        <input inputMode="decimal" placeholder="kg" value={weight} onChange={e => setWeight(e.target.value.replace(',', '.'))} style={setInput(done)} />
       </div>
-      {noteText && (
-        <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.gray, marginTop: 4, paddingLeft: 48 }}>
-          {noteText}
-        </div>
-      )}
+      <button onClick={toggle} aria-label="Zrobione" style={doneBtn(done)}>
+        {done && <span style={{ color: '#fff', fontSize: '1rem', fontWeight: 800 }}>✓</span>}
+      </button>
     </div>
   )
 }
@@ -539,13 +535,13 @@ const isFailureReps = (r: unknown) => typeof r === 'string' && /(amrap|maks|max|
 
 // ─── SET ROW ──────────────────────────────────────────────────────────────────
 
-function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, athleteId, blockExerciseId, onComplete, onLogSaved }: {
-  setNum: number; reps: string | number; isAmrap: boolean; prevWeight?: number | null
+function SetRow({ setNum, reps, plannedWeight, isAmrap, prevWeight, existingLog, sessionId, athleteId, blockExerciseId, onComplete, onLogSaved }: {
+  setNum: number; reps: string | number; plannedWeight?: string | null; isAmrap: boolean; prevWeight?: number | null
   existingLog?: SetLog; sessionId: number; athleteId: number; blockExerciseId: number
   onComplete: (done: boolean) => void; onLogSaved?: (log: SetLog) => void
 }) {
   const supabase = createClient()
-  const [weight, setWeight] = useState(existingLog?.weight?.toString() || '')
+  const [weight, setWeight] = useState(existingLog?.weight?.toString() || (!isAmrap && isBW(plannedWeight) ? '0' : ''))
   const [actualReps, setActualReps] = useState(existingLog?.reps_completed?.toString() || '')
   const [done, setDone] = useState(!!existingLog?.completed)
   const [saveError, setSaveError] = useState('')
@@ -657,90 +653,31 @@ function SetRow({ setNum, reps, isAmrap, prevWeight, existingLog, sessionId, ath
     }, 350)
   }
 
-  // Sprawdź czy reps to długi opis (>12 znaków) — wtedy układ 2-rzędowy
   const repsStr = String(reps || '—')
-  const isLongReps = repsStr.length > 12
+  const isTime = /(''|"|s)\s*$/i.test(repsStr)
+  const planW = plannedWeight && !isBW(plannedWeight) ? plannedWeight : null
+  const planLine = isBW(plannedWeight) ? 'BW · 0 kg' : planW ? `plan: ${planW}${isNumericWeight(planW) ? ' kg' : ''}` : prevWeight ? `poprzednio: ${prevWeight} kg` : null
 
   return (
-    <div style={{
-      padding: '0.625rem 0.875rem',
-      background: done ? '#F0FDF4' : '#FAFBFC',
-      borderRadius: 10, marginBottom: 6,
-      border: `1.5px solid ${done ? '#86EFAC' : C.grayLight}`,
-      transition: 'all 0.2s', fontFamily: sans,
-    }}>
-      {/* Górny rząd: numer serii + opis powtórzeń */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: isLongReps ? 8 : 0 }}>
-        <span style={{ fontWeight: 800, fontSize: '0.82rem', color: done ? C.green : C.gold, minWidth: 24, fontFamily: mono, paddingTop: 1 }}>
-          S{setNum}
-        </span>
-        <span style={{ display: 'flex', alignItems: 'baseline', gap: 3, flex: 1, lineHeight: 1.4 }}>
-          <span style={{
-            fontWeight: isLongReps ? 600 : 700,
-            fontSize: isLongReps ? '0.82rem' : '0.95rem',
-            color: C.navy,
-          }}>
-            {repsStr}
-          </span>
-          {!isLongReps && !repsStr.includes("'") && (
-            <span style={{ fontFamily: mono, fontSize: '0.58rem', color: C.gray, fontWeight: 500 }}>powt.</span>
-          )}
-        </span>
-        {/* Na krótkich repsach — inputy i przycisk w tym samym rzędzie */}
-        {!isLongReps && (
-          <>
-            {isAmrap ? (
-              <div style={{ width: 72 }}>
-                <input type="number" inputMode="numeric" placeholder="ile?" value={actualReps}
-                  onChange={e => handleRepsChange(e.target.value)}
-                  style={{ width: '100%', padding: '0.4rem 0.5rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.9rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center' }} />
-              </div>
-            ) : (
-              <div style={{ width: 72 }}>
-                <input inputMode="decimal" placeholder="kg" value={weight}
-                  onChange={e => handleWeightChange(e.target.value)}
-                  style={{ width: '100%', padding: '0.4rem 0.5rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.9rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center' }} />
-              </div>
-            )}
-            <button onClick={toggle} style={{ width: 36, height: 36, borderRadius: 8, background: done ? C.green : C.grayLight, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s', flexShrink: 0 }}>
-              {done && <span style={{ color: '#fff', fontSize: '1rem', fontWeight: 800 }}>✓</span>}
-            </button>
-          </>
-        )}
-      </div>
-
-      {/* Dolny rząd: inputy na pełną szerokość (tylko przy długim opisie) */}
-      {isLongReps && (
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {isAmrap ? (
-            <div style={{ flex: 1 }}>
-              <input type="number" inputMode="numeric" placeholder="ile powtórzeń wykonała?" value={actualReps}
-                onChange={e => handleRepsChange(e.target.value)}
-                style={{ width: '100%', padding: '0.55rem 0.75rem', border: `1.5px solid ${done ? '#86EFAC' : '#E0E8F0'}`, borderRadius: 8, fontFamily: sans, fontSize: '1rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center', fontWeight: 700 }} />
-            </div>
-          ) : (
-            <div style={{ flex: 1 }}>
-              <input inputMode="decimal" placeholder="wpisz ciężar (kg)" value={weight}
-                onChange={e => handleWeightChange(e.target.value)}
-                style={{ width: '100%', padding: '0.55rem 0.75rem', border: `1.5px solid ${done ? '#86EFAC' : '#E0E8F0'}`, borderRadius: 8, fontFamily: sans, fontSize: '1rem', color: C.navy, background: '#fff', outline: 'none', textAlign: 'center', fontWeight: 700 }} />
-              {prevWeight && !weight && (
-                <div style={{ fontSize: '0.6rem', color: C.gray, textAlign: 'center', marginTop: 2 }}>poprzednio: {prevWeight} kg</div>
-              )}
-            </div>
-          )}
-          <button onClick={toggle} style={{
-            width: 48, height: 44, borderRadius: 10,
-            background: done ? C.green : C.navy,
-            border: 'none', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'background 0.15s', flexShrink: 0,
-          }}>
-            <span style={{ color: done ? '#fff' : C.gold, fontSize: '1.1rem', fontWeight: 800 }}>
-              {done ? '✓' : '○'}
-            </span>
-          </button>
+    <div style={{ padding: '4px 6px 4px 10px', background: done ? '#effaf4' : '#fff', borderRadius: 10, marginBottom: 4, border: `1px solid ${done ? '#bfe9d3' : C.grayLight}`, transition: 'all 0.2s', fontFamily: sans }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontWeight: 700, fontSize: '0.78rem', color: done ? C.green : C.gold, minWidth: 22 }}>S{setNum}</span>
+        <div style={{ flex: 1, minWidth: 0, lineHeight: 1.2 }}>
+          <span style={{ fontWeight: 700, fontSize: repsStr.length > 14 ? '0.8rem' : '0.92rem', color: C.navy }}>{repsStr}</span>
+          {repsStr.length <= 14 && !isTime && repsStr !== '—' && <span style={{ fontSize: '0.66rem', color: C.gray, marginLeft: 3 }}>powt.</span>}
+          {planLine && <div style={{ fontSize: '0.66rem', color: C.gray, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{planLine}</div>}
         </div>
-      )}
+        <div style={{ width: 70, flexShrink: 0 }}>
+          {isAmrap ? (
+            <input type="number" inputMode="numeric" placeholder="ile?" value={actualReps} onChange={e => handleRepsChange(e.target.value)} style={setInput(done)} />
+          ) : (
+            <input inputMode="decimal" placeholder={planW && isNumericWeight(planW) ? planW : 'kg'} value={weight} onChange={e => handleWeightChange(e.target.value)} style={setInput(done)} />
+          )}
+        </div>
+        <button onClick={toggle} aria-label="Zrobione" style={doneBtn(done)}>
+          {done && <span style={{ color: '#fff', fontSize: '1rem', fontWeight: 800 }}>✓</span>}
+        </button>
+      </div>
       {saveError && (
         <div style={{ marginTop: 4, fontSize: '0.65rem', color: C.red, background: '#FEF2F2', borderRadius: 6, padding: '2px 8px' }}>
           ❌ {saveError}
@@ -942,7 +879,23 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
   })
 
   const effectiveSets = exercise.override?.sets_override || exercise.sets
-  const effectiveReps = exercise.override?.reps_override || exercise.reps || '—'
+  // osobne wartości serii z planu (work_sets) i ISO — jak w edytorze trenera
+  const ex = exercise as typeof exercise & { work_sets?: PlanWorkSet[] | null; iso?: boolean | null }
+  const ws: PlanWorkSet[] = Array.isArray(ex.work_sets) ? ex.work_sets : []
+  const isIso = !!ex.iso
+  const planReps = isIso && ws.length ? isoPowtLines(ex).join(' / ') : ws.length ? fmtRange(ws.map(w => w.reps)) : ''
+  const effectiveReps = exercise.override?.reps_override || exercise.reps || (planReps && planReps !== '—' ? planReps : '—')
+  const setReps = (i: number): string => {
+    if (exercise.override?.reps_override) return exercise.override.reps_override
+    const w = ws[i]
+    if (isIso && w) return `${w.reps && w.reps !== '1' ? `${w.reps}× ` : ''}${w.seconds ? `${w.seconds}''` : ''}` || effectiveReps
+    return w?.reps?.trim() || effectiveReps
+  }
+  const setWeight = (i: number): string | null => {
+    const o = exercise.override?.weight_override
+    if (o != null) return String(o)
+    return ws[i]?.weight_kg?.trim() || (exercise.weight_kg != null ? String(exercise.weight_kg) : null)
+  }
   const effectiveTempo = exercise.override?.tempo_override || exercise.tempo
   const effectiveTempoNote = exercise.override?.coach_note_override || exercise.coach_comment
   const effectiveRir = exercise.override?.rir ?? exercise.rir ?? null
@@ -1013,18 +966,18 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
       {videoOpen && <VideoModal exerciseName={exerciseName} exerciseUrl={effectiveUrl} onClose={() => setVideoOpen(false)} />}
       {rirOpen && effectiveRir != null && <RirModal rir={effectiveRir} onClose={() => setRirOpen(false)} />}
 
-      <div style={{ background: '#fff', borderRadius: 14, border: allDone ? '1.5px solid #86EFAC' : `1.5px solid ${C.grayLight}`, marginBottom: 10, overflow: 'hidden', boxShadow: expanded ? '0 4px 20px rgba(13,27,42,0.08)' : 'none', transition: 'all 0.2s', fontFamily: sans }}>
+      <div style={{ background: '#fff', borderRadius: 14, border: allDone ? '1px solid #9fdcbc' : `1px solid ${C.grayLight}`, marginBottom: 8, overflow: 'hidden', boxShadow: expanded ? '0 4px 20px rgba(13,27,42,0.08)' : 'none', transition: 'all 0.2s', fontFamily: sans }}>
 
         {/* Nagłówek */}
-        <div onClick={() => setExpanded(!expanded)} style={{ width: '100%', padding: '1rem', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', textAlign: 'left' }}>
-          <div style={{ width: 36, height: 36, borderRadius: 9, background: C.navyLight, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <div onClick={() => setExpanded(!expanded)} style={{ width: '100%', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', textAlign: 'left' }}>
+          <div style={{ width: 32, height: 32, borderRadius: 8, background: C.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <span style={{ fontWeight: 800, fontSize: '0.7rem', color: C.gold, fontFamily: mono }}>{blockLetter || exercise.exercise_order || '—'}</span>
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
               {isExtra && <span style={{ fontFamily: mono, fontSize: '0.55rem', background: C.green, color: C.white, borderRadius: 4, padding: '1px 5px', fontWeight: 800 }}>+DODANE</span>}
               {isSubstituted && <span style={{ fontFamily: mono, fontSize: '0.55rem', background: '#F97316', color: C.white, borderRadius: 4, padding: '1px 5px', fontWeight: 800 }}>ZAMIANA</span>}
-              <span style={{ fontWeight: 700, fontSize: '0.95rem', color: C.navy }}>{exerciseName}</span>
+              <span style={{ fontWeight: 700, fontSize: '0.92rem', color: C.navy, lineHeight: 1.2 }}>{exerciseName}</span>
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
               {effectiveTempo && (
@@ -1033,7 +986,7 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
                   ⏱ {effectiveTempo}
                 </button>
               )}
-              <span style={{ padding: '2px 8px', background: C.grayLight, borderRadius: 6, fontSize: '0.7rem', color: C.gray, fontWeight: 500 }}>
+              <span style={{ padding: '1px 7px', background: C.offWhite, border: `1px solid ${C.grayLight}`, borderRadius: 6, fontSize: '0.7rem', color: C.navy, fontWeight: 600 }}>
                 {effectiveSets}×{effectiveReps}
               </span>
               {effectiveRir != null && (
@@ -1057,7 +1010,7 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
           {/* Kropki serii */}
           <div style={{ display: 'flex', gap: 3, alignItems: 'center', marginLeft: 2 }}>
             {Array.from({ length: effectiveSets }, (_, i) => (
-              <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: i < completedSets ? C.green : C.grayLight, transition: 'background 0.2s' }} />
+              <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: i < completedSets ? C.green : C.grayLight, transition: 'background 0.2s' }} />
             ))}
           </div>
           {allDone && <span style={{ fontSize: '0.9rem', marginLeft: 4 }}>✅</span>}
@@ -1065,29 +1018,23 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
         </div>
 
         {expanded && (
-          <div style={{ padding: '0 1rem 1rem' }}>
+          <div style={{ padding: '0 10px 10px' }}>
             {(effectiveTempoNote || exercise.coach_comment) && (
               <div style={{
-                margin: '0.5rem 0 1rem',
-                padding: '0.75rem 0.875rem',
+                margin: '0 0 8px',
+                padding: '6px 10px',
                 background: 'linear-gradient(135deg, #FFFBEB 0%, #FFF8E1 100%)',
                 borderLeft: `3px solid ${C.gold}`,
                 borderRadius: '0 10px 10px 0',
               }}>
-                <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#92660A', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 5 }}>
-                  💬 Wskazówka trenera
-                </div>
-                <p style={{ fontSize: '0.86rem', color: C.navy, lineHeight: 1.6, margin: 0, fontWeight: 500 }}>
-                  {effectiveTempoNote || exercise.coach_comment}
+                <p style={{ fontSize: '0.8rem', color: C.navy, lineHeight: 1.45, margin: 0, fontWeight: 500, whiteSpace: 'pre-line' }}>
+                  <span style={{ fontWeight: 700, color: '#92660A' }}>💬 </span>{effectiveTempoNote || exercise.coach_comment}
                 </p>
               </div>
             )}
 
-            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: C.gray, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.5rem', fontFamily: mono }}>Serie</div>
-
             {visibleWarmupSets.length > 0 && (
-              <div style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: '0.64rem', fontWeight: 700, color: C.gray, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.35rem', fontFamily: mono }}>Rozgrzewka</div>
+              <div style={{ marginBottom: 6 }}>
                 {visibleWarmupSets.map((warmup, index) => (
                   <WarmupSetRow
                     key={`warmup-${index}`}
@@ -1107,7 +1054,8 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
               <SetRow
                 key={i}
                 setNum={i + 1}
-                reps={effectiveReps}
+                reps={setReps(i)}
+                plannedWeight={setWeight(i)}
                 isAmrap={isAmrap}
                 prevWeight={prevWeight}
                 existingLog={exSetLogs.find(l => l.set_number === i + 1 && !l.is_warmup)}
@@ -1123,10 +1071,9 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
             ))}
 
             {/* Notatka do ćwiczenia (jedna, zapisuje do first set_log) */}
-            <div style={{ marginTop: 10, marginBottom: 8 }}>
-              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: C.gray, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 5, fontFamily: mono }}>Notatka do ćwiczenia</div>
+            <div style={{ marginTop: 6, display: 'flex', gap: 6, alignItems: 'flex-start' }}>
               <textarea
-                placeholder="Jak poszło? Uwagi do następnego razu, co poprawić..."
+                placeholder="📝 Notatka: jak poszło, co poprawić…"
                 value={exerciseNote}
                 onChange={e => setExerciseNote(e.target.value)}
                 onBlur={async () => {
@@ -1139,20 +1086,17 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, p
                     await supabase.from('set_logs').update({ athlete_note: exerciseNote.trim() || null }).eq('id', firstLog.id)
                   }
                 }}
-                rows={2}
-                style={{ width: '100%', padding: '0.625rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.85rem', color: C.navy, resize: 'none', outline: 'none', background: '#FAFBFC', boxSizing: 'border-box' }}
+                rows={exerciseNote ? 2 : 1}
+                style={{ flex: 1, minWidth: 0, minHeight: 36, padding: '8px 10px', border: `1px solid ${C.grayLight}`, borderRadius: 8, fontFamily: sans, fontSize: '0.82rem', color: C.navy, resize: 'none', outline: 'none', background: '#fafbfc', boxSizing: 'border-box', lineHeight: 1.35 }}
               />
+              {/* Ból */}
+              <button onClick={() => setFeelingOpen(!feelingOpen)}
+                style={{ flexShrink: 0, height: 36, padding: '0 10px', background: painSaved ? '#fff4ec' : feelingOpen ? '#FFF7ED' : '#fafbfc', border: `1px solid ${painSaved || feelingOpen ? '#FED7AA' : C.grayLight}`, borderRadius: 8, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontFamily: sans, fontWeight: 600, fontSize: '0.8rem', color: painSaved ? '#c2410c' : C.navy }}>
+                🩹 {painSaved && vas > 0 ? `Ból ${vas}/10` : 'Ból'}
+              </button>
             </div>
-
-            {/* Ból */}
-            <button onClick={() => setFeelingOpen(!feelingOpen)}
-              style={{ width: '100%', padding: '0.75rem 1rem', background: feelingOpen ? '#FFF7ED' : C.grayLight, border: feelingOpen ? '1.5px solid #FED7AA' : `1.5px solid ${C.grayLight}`, borderRadius: 10, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontFamily: sans, transition: 'all 0.15s' }}>
-              <span style={{ fontSize: '1.1rem' }}>🩹</span>
-              <span style={{ fontWeight: 600, fontSize: '0.88rem', color: C.navy }}>Ból / dyskomfort</span>
-              <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: C.gray }}>{feelingOpen ? '▲' : '▼'}</span>
-            </button>
             {feelingOpen && (
-              <div style={{ marginTop: 6, padding: '1rem', background: '#FAFBFC', borderRadius: 10, border: `1.5px solid ${C.grayLight}` }}>
+              <div style={{ marginTop: 6, padding: '10px 12px', background: '#FAFBFC', borderRadius: 10, border: `1px solid ${C.grayLight}` }}>
                 <div style={{ fontSize: '0.68rem', fontWeight: 700, color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.5rem', fontFamily: mono }}>Skala bólu VAS — {vas}/10</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                   <span style={{ fontSize: '0.75rem', color: C.green, fontWeight: 600 }}>0</span>
@@ -2138,29 +2082,26 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
         )}
 
         {/* ── BOTTOM BUTTONS ── */}
-        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: C.white, borderTop: `1.5px solid ${C.grayLight}`, padding: '0.75rem 1rem', zIndex: 20 }}>
-          <div style={{ display: 'flex', gap: 7, maxWidth: 520, margin: '0 auto' }}>
+        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: C.white, borderTop: `1px solid ${C.grayLight}`, padding: '8px 12px calc(env(safe-area-inset-bottom) + 8px)', zIndex: 20 }}>
+          <div style={{ display: 'flex', gap: 6, maxWidth: 520, margin: '0 auto' }}>
 
-            {/* Powrót — nie zapisuje */}
-            <button onClick={() => router.push('/athlete')}
-              style={{ flex: 1, padding: '0.75rem 0.5rem', background: C.white, color: C.gray, border: `1.5px solid ${C.grayLight}`, borderRadius: 12, fontFamily: sans, fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', textAlign: 'center', lineHeight: 1.3 }}>
-              ← Powrót<br />
-              <span style={{ fontSize: '0.62rem', fontWeight: 400 }}>do panelu</span>
+            {/* Powrót — dane są zapisywane na bieżąco */}
+            <button onClick={() => router.push('/athlete')} title="Powrót do panelu"
+              style={{ flex: 1, height: 44, background: C.white, color: C.muted, border: `1px solid ${C.grayLight}`, borderRadius: 10, fontFamily: sans, fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer' }}>
+              ← Panel
             </button>
 
-            {/* Zapisz — dane już auto-zapisane, wraca do panelu */}
-            <button onClick={saveLocal}
-              style={{ flex: 1.2, padding: '0.75rem 0.5rem', background: savedLocal ? '#F0FDF4' : C.offWhite, color: savedLocal ? C.green : C.navy, border: `1.5px solid ${savedLocal ? '#86EFAC' : C.grayLight}`, borderRadius: 12, fontFamily: sans, fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', textAlign: 'center', lineHeight: 1.3, transition: 'all 0.2s' }}>
-              {savedLocal ? '✓ Zapisano!' : '💾 Zapisz'}<br />
-              <span style={{ fontSize: '0.62rem', fontWeight: 400, color: savedLocal ? C.green : C.gray }}>można kontynuować</span>
+            {/* Zapisz — dane już auto-zapisane, można kontynuować */}
+            <button onClick={saveLocal} title="Wpisy zapisują się na bieżąco — możesz wrócić później"
+              style={{ flex: 1.1, height: 44, background: savedLocal ? '#effaf4' : C.offWhite, color: savedLocal ? C.green : C.navy, border: `1px solid ${savedLocal ? '#9fdcbc' : C.grayLight}`, borderRadius: 10, fontFamily: sans, fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', transition: 'all 0.2s' }}>
+              {savedLocal ? '✓ Zapisano' : '💾 Zapisz'}
             </button>
 
             {/* Zakończ i wyślij raport */}
             <div style={{ flex: 2, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <button onClick={tryOpenFinish}
-                style={{ width: '100%', padding: '0.75rem 0.5rem', background: C.navy, color: C.gold, border: 'none', borderRadius: 12, fontFamily: sans, fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer', textAlign: 'center', lineHeight: 1.3 }}>
-                🏁 Zakończ<br />
-                <span style={{ fontSize: '0.62rem', fontWeight: 500, color: '#8A9BB0' }}>wyślij raport do trenera</span>
+              <button onClick={tryOpenFinish} title="Zakończ trening i wyślij raport do trenera"
+                style={{ width: '100%', height: 44, background: C.navy, color: C.gold, border: 'none', borderRadius: 10, fontFamily: sans, fontWeight: 700, fontSize: '0.88rem', cursor: 'pointer' }}>
+                🏁 Zakończ i wyślij
               </button>
               {finishBlockMsg && (
                 <div style={{ background: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 10, padding: '0.5rem 0.75rem', fontSize: '0.72rem', color: C.red, fontWeight: 600, whiteSpace: 'pre-line', lineHeight: 1.5 }}>
