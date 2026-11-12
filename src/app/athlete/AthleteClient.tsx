@@ -51,12 +51,12 @@ export default function AthleteClient({ athlete, nextTraining, planTrainings, hi
   const multiWeek = new Set(trainings.map(t => t.week_number)).size > 1
   // ukończony trening (bez rozpoczętej sesji) — edycja wpisów w historii, nie powtórka
   const startTraining = (t: PlanTrainingItem) => {
-    if (!planTrainings) return
+    if (!planTrainings || t.absent) return
     if (t.completed && !t.inProgress && t.completedSessionId) router.push(`/athlete/history/${t.completedSessionId}`)
     else router.push(`/athlete/training?day=${t.id}&assignment=${planTrainings.assignmentId}`)
   }
   // domyślnie: rozpoczęte i do zrobienia; ukończone po „pokaż wszystkie"
-  const visibleTrainings = showAll ? trainings : trainings.filter(t => !t.completed || t.inProgress)
+  const visibleTrainings = showAll ? trainings : trainings.filter(t => (!t.completed || t.inProgress) && !t.absent)
 
   // Prefetch kluczowych tras przy ładowaniu panelu
   useState(() => {
@@ -171,9 +171,9 @@ export default function AthleteClient({ athlete, nextTraining, planTrainings, hi
                   <div className="ath-eyebrow" style={{ color: C.muted, fontSize: 10 }}>Treningi planu</div>
                   <div className="ath-display" style={{ fontSize: 20, color: C.ink, marginTop: 2 }}>Wybierz trening</div>
                 </div>
-                {trainings.some(t => t.completed && !t.inProgress) && (
+                {trainings.some(t => (t.completed && !t.inProgress) || t.absent) && (
                   <button onClick={() => setShowAll(v => !v)} style={{ flexShrink: 0, border: `1px solid ${C.grayLight}`, background: C.offWhite, color: C.muted, borderRadius: 999, padding: '6px 12px', fontSize: 12, fontWeight: 600 }}>
-                    {showAll ? 'Ukryj ukończone' : `Pokaż wszystkie (${trainings.length})`}
+                    {showAll ? 'Pokaż tylko do zrobienia' : `Pokaż wszystkie (${trainings.length})`}
                   </button>
                 )}
               </div>
@@ -181,22 +181,24 @@ export default function AthleteClient({ athlete, nextTraining, planTrainings, hi
                 <div style={{ padding: '6px 16px 16px', fontSize: 13, color: C.muted }}>Wszystkie treningi ukończone — wpisy możesz poprawić po „Pokaż wszystkie”.</div>
               ) : visibleTrainings.map(t => {
                 const isNext = nextTraining?.day.id === t.id
-                const status = t.inProgress ? { label: 'w trakcie', fg: '#a8650f', bg: '#fdf3e2', bd: '#f3d9a8' }
+                const status = t.absent ? { label: 'nieobecność', fg: '#b42318', bg: '#fdecec', bd: '#f6c9c9' }
+                  : t.inProgress ? { label: 'w trakcie', fg: '#a8650f', bg: '#fdf3e2', bd: '#f3d9a8' }
                   : t.completed ? { label: '✓ ukończony · edytuj', fg: '#1f9d68', bg: '#ecfaf3', bd: '#bfe9d3' }
                   : isNext ? { label: 'następny', fg: C.navy, bg: '#fdf3e2', bd: C.gold }
                   : null
                 return (
-                  <button key={t.id} className="ath-card" onClick={() => startTraining(t)}
-                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, minHeight: 56, padding: '10px 16px', border: 'none', borderTop: `1px solid ${C.grayLight}`, background: isNext ? '#fffaf0' : C.white, textAlign: 'left' }}>
+                  <button key={t.id} className={t.absent ? undefined : 'ath-card'} onClick={() => startTraining(t)} disabled={t.absent}
+                    title={t.absent ? 'Trener zaznaczył nieobecność na tym treningu — nie można go uzupełnić' : undefined}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, minHeight: 56, padding: '10px 16px', border: 'none', borderTop: `1px solid ${C.grayLight}`, background: isNext ? '#fffaf0' : C.white, textAlign: 'left', opacity: t.absent ? 0.6 : 1, cursor: t.absent ? 'not-allowed' : 'pointer' }}>
                     <div style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: t.completed && !t.inProgress ? '#ecfaf3' : isNext ? C.gold : C.offWhite, color: t.completed && !t.inProgress ? '#1f9d68' : C.navy, fontFamily: display, fontWeight: 700, fontSize: 16 }}>
-                      {t.completed && !t.inProgress ? '✓' : t.day_order}
+                      {t.absent ? '✕' : t.completed && !t.inProgress ? '✓' : t.day_order}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 600, fontSize: 15, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.day_name}</div>
                       {multiWeek && <div style={{ fontSize: 12, color: C.muted, marginTop: 1 }}>Tydzień {t.week_number}</div>}
                     </div>
                     {status && <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: status.fg, background: status.bg, border: `1px solid ${status.bd}`, borderRadius: 999, padding: '3px 9px' }}>{status.label}</span>}
-                    <span style={{ flexShrink: 0, color: C.gray, fontSize: 22, lineHeight: 1 }}>›</span>
+                    {!t.absent && <span style={{ flexShrink: 0, color: C.gray, fontSize: 22, lineHeight: 1 }}>›</span>}
                   </button>
                 )
               })}

@@ -35,7 +35,12 @@ export type PlanTrainingItem = {
   completed: boolean   // ma ukończoną sesję
   inProgress: boolean  // ma rozpoczętą, niezakończoną sesję
   completedSessionId: number | null  // ostatnia ukończona sesja — do edycji wpisów (bez powtórki treningu)
+  absent: boolean      // trener zaznaczył nieobecność — trening zablokowany
 }
+
+// Nieobecność zawodniczki na treningu planu (workout_days.absent_athlete_ids, zaznacza trener)
+const isAbsentOn = (day: { absent_athlete_ids?: unknown } | null | undefined, athleteId: number) =>
+  Array.isArray(day?.absent_athlete_ids) && (day!.absent_athlete_ids as unknown[]).map(Number).includes(athleteId)
 
 // Aktywny plan zawodniczki (indywidualny, potem grupowy) z treningami i statusem sesji
 async function loadAthletePlan(athleteId: number, groupId?: number) {
@@ -95,7 +100,8 @@ async function loadAthletePlan(athleteId: number, groupId?: number) {
   // najnowsza ukończona sesja każdego dnia (sesje posortowane od najnowszej)
   const completedSessionByDay = new Map<number, number>()
   for (const s of (sessions || []) as any[]) if (s.completed && !completedSessionByDay.has(s.workout_day_id)) completedSessionByDay.set(s.workout_day_id, s.id)
-  return { assignment, days, completedDayIds, inProgressDayIds, completedSessionByDay }
+  const absentDayIds = new Set(days.filter((d: any) => isAbsentOn(d, athleteId)).map((d: any) => d.id))
+  return { assignment, days, completedDayIds, inProgressDayIds, completedSessionByDay, absentDayIds }
 }
 
 export async function getNextTrainingForAthlete(
@@ -109,15 +115,17 @@ export async function getNextTrainingForAthlete(
 } | null> {
   const plan = await loadAthletePlan(athleteId, groupId)
   if (!plan) return null
-  const { assignment, days, completedDayIds } = plan
-  const nextDay = days.find((d: any) => !completedDayIds.has(d.id))
+  const { assignment, days, completedDayIds, absentDayIds } = plan
+  // treningi z nieobecnością nie są proponowane i nie liczą się do postępu planu
+  const activeDays = days.filter((d: any) => !absentDayIds.has(d.id))
+  const nextDay = activeDays.find((d: any) => !completedDayIds.has(d.id))
   if (!nextDay) return null
 
   return {
     assignment,
     day: nextDay as WorkoutDay,
-    completedCount: completedDayIds.size,
-    totalCount: days.length,
+    completedCount: activeDays.filter((d: any) => completedDayIds.has(d.id)).length,
+    totalCount: activeDays.length,
   }
 }
 
@@ -128,7 +136,7 @@ export async function getPlanTrainingsForAthlete(
 ): Promise<{ assignmentId: number; planName: string; trainings: PlanTrainingItem[] } | null> {
   const plan = await loadAthletePlan(athleteId, groupId)
   if (!plan) return null
-  const { assignment, days, completedDayIds, inProgressDayIds, completedSessionByDay } = plan
+  const { assignment, days, completedDayIds, inProgressDayIds, completedSessionByDay, absentDayIds } = plan
   return {
     assignmentId: assignment.id,
     planName: (assignment as any).plan?.name || 'Plan treningowy',
@@ -140,8 +148,16 @@ export async function getPlanTrainingsForAthlete(
       completed: completedDayIds.has(d.id),
       inProgress: inProgressDayIds.has(d.id),
       completedSessionId: completedSessionByDay.get(d.id) ?? null,
+      absent: absentDayIds.has(d.id),
     })),
   }
+}
+
+// Czy trener zaznaczył zawodniczce nieobecność na tym treningu (wtedy trening jest zablokowany)
+export async function isAthleteAbsentOnDay(athleteId: number, dayId: number): Promise<boolean> {
+  const supabase = await createClient()
+  const { data } = await supabase.from('workout_days').select('*').eq('id', dayId).maybeSingle()
+  return isAbsentOn(data as { absent_athlete_ids?: unknown } | null, athleteId)
 }
 
 // Ukończony trening nie jest powtarzany: jeśli dzień ma ukończoną sesję i żadnej
