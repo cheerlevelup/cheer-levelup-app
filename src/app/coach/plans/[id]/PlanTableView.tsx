@@ -317,7 +317,6 @@ interface Props {
   onSaveDayMessage: (dayId: number, field: 'coach_intro' | 'coach_closing', value: string) => void
   onAddBlock: (dayId: number) => Promise<void>
   onRenameBlock: (blockId: number, name: string) => void
-  onCopyBlock: (block: Block) => void
   // schowek kopiuj / wklej (blok albo ćwiczenia z wariantami)
   clipboard: { kind: 'block'; name: string } | { kind: 'exercises'; count: number } | null
   onCopyBlockToClipboard: (block: Block) => void
@@ -636,7 +635,6 @@ export default function PlanTableView(props: Props) {
                                           <button style={{ ...iconBtn, color: 'var(--gold)', fontWeight: 700 }} title="Wklej skopiowane ćwiczenia na koniec tego bloku (Ctrl+V)" onClick={() => pasteInto(day.id, block.id)}>📋 wklej {props.clipboard.count} {exWord(props.clipboard.count)}</button>
                                         )}
                                         <button style={iconBtn} title="Kopiuj blok — potem „wklej blok” przy dowolnym treningu (też w innym planie)" onClick={() => { props.onCopyBlockToClipboard(block); notify(`Skopiowano blok „${block.block_name}” — kliknij trening i wklej (Ctrl+V)`) }}>⧉ kopiuj</button>
-                                        <button style={iconBtn} title="Kopiuj blok do wszystkich pozostałych treningów" onClick={() => props.onCopyBlock(block)}>⧉ do wszystkich treningów</button>
                                         <button style={{ ...iconBtn, color: '#c23b3b' }} title="Usuń blok z ćwiczeniami" onClick={() => props.onDeleteBlock(block.id)}>✕ usuń</button>
                                       </div>
                                     </div>

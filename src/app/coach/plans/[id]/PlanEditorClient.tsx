@@ -8,7 +8,7 @@ import { ClipboardList, X, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import PlanTableView, { type ExercisePatch } from './PlanTableView'
 import PlanWellnessConfig from '@/components/PlanWellnessConfig'
 import { SetPageMeta, usePageMeta } from '@/components/coach/PageMetaContext'
-import { Modal, Button, Field } from '@/components/coach/ui'
+import { Modal, Button } from '@/components/coach/ui'
 import { useExerciseCatalog, linkAfterRename, ExerciseCatalogDatalist, EXERCISE_CATALOG_LIST_ID } from '@/lib/exerciseCatalog'
 import { insertExercisesWithVariants, sortWithVariants, variantLabels } from '@/lib/exerciseVariants'
 import { moveExercise, moveBlock } from '@/lib/planReorder'
@@ -250,7 +250,7 @@ function exercisePayloadWithoutIso<T extends { iso?: boolean; iso_type?: string 
   return rest
 }
 
-// Inline ćwiczenie edit form — osadzony w bloku (mockup: .coach-exercise-edit-form), nie modal.
+// Formularz ćwiczenia (w oknie edytora planu) — style .exf-* w coach-theme.css
 function ExerciseEditForm({
   exercise,
   exercises,
@@ -445,20 +445,32 @@ function ExerciseEditForm({
     setWorkSets(prev => prev.length === 1 ? prev : prev.filter((_, setIndex) => setIndex !== index))
   }
 
-  return (
-    <div className="coach-exercise-edit-form">
-      <div className="coach-scheme-row">
-        <button type="button" className={`coach-scheme-btn ${!useCustomName ? 'coach-active' : ''}`} onClick={() => setUseCustomName(false)}>
-          Z biblioteki
-        </button>
-        <button type="button" className={`coach-scheme-btn ${useCustomName ? 'coach-active' : ''}`} onClick={() => setUseCustomName(true)}>
-          Własna nazwa
-        </button>
-      </div>
+  const typeHint = ecc
+    ? 'Każda seria może mieć inne powtórzenia, ciężar, czas fazy ekscentrycznej, hold w rozciągnięciu i RIR.'
+    : iso
+      ? 'Każda seria może mieć inny czas napięcia, liczbę powtórzeń, przerwę (rest) między nimi, ciężar i RIR.'
+      : 'Każda seria może mieć inne powtórzenia, ciężar, tempo i RIR.'
+  const cols = ecc
+    ? [{ field: 'reps' as const, label: 'Powt.', placeholder: '5' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'ecc' as const, label: 'Ekscentryka (s)', placeholder: '5' }, { field: 'hold' as const, label: 'Hold (s)', placeholder: '-' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }]
+    : iso
+    ? (isoType === 'PIMA'
+      ? [{ field: 'seconds' as const, label: 'Czas (s)', placeholder: '20' }, { field: 'reps' as const, label: 'Powt.', placeholder: '-' }, { field: 'rest' as const, label: 'Rest (s)', placeholder: '-' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'intensity' as const, label: 'Intens. (%)', placeholder: '%' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }]
+      : [{ field: 'seconds' as const, label: 'Czas (s)', placeholder: '20' }, { field: 'reps' as const, label: 'Powt.', placeholder: '-' }, { field: 'rest' as const, label: 'Rest (s)', placeholder: '-' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }])
+    : [{ field: 'reps' as const, label: 'Powt.', placeholder: '8-10' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'tempo' as const, label: 'Tempo', placeholder: '3-1-2-0' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }]
 
-      {!useCustomName ? (
-        <Field label="Ćwiczenie">
-          <select value={exerciseId} onChange={e => {
+  return (
+    <div className="exf">
+      {/* nazwa: z biblioteki albo własna */}
+      <section className="exf-sec">
+        <div className="exf-head">
+          <span className="exf-label">Ćwiczenie</span>
+          <div className="exf-seg exf-seg-sm">
+            <button type="button" className={!useCustomName ? 'on' : ''} onClick={() => setUseCustomName(false)}>Z biblioteki</button>
+            <button type="button" className={useCustomName ? 'on' : ''} onClick={() => setUseCustomName(true)}>Własna nazwa</button>
+          </div>
+        </div>
+        {!useCustomName ? (
+          <select className="exf-input exf-input-lg" value={exerciseId} onChange={e => {
             const nameOf = (id: string) => exercises.find(x => x.id.toString() === id)?.name || ''
             const l = linkAfterRename(linkFor, nameOf(exerciseId), nameOf(e.target.value), exerciseUrl.trim() || null)
             if (l !== undefined) setExerciseUrl(l || '')
@@ -469,166 +481,146 @@ function ExerciseEditForm({
               <option key={ex.id} value={ex.id}>{formatExerciseName(ex.name)}{ex.category ? ` (${ex.category})` : ''}</option>
             ))}
           </select>
-        </Field>
-      ) : (
-        <Field label="Nazwa ćwiczenia">
-          <input list={EXERCISE_CATALOG_LIST_ID} value={exerciseCode} onChange={e => {
+        ) : (
+          <input className="exf-input exf-input-lg" list={EXERCISE_CATALOG_LIST_ID} value={exerciseCode} onChange={e => {
             const l = linkAfterRename(linkFor, exerciseCode, e.target.value, exerciseUrl.trim() || null)
             if (l !== undefined) setExerciseUrl(l || '')
             setExerciseCode(e.target.value)
           }} placeholder="np. rdl, tgu, chest press" />
-        </Field>
-      )}
-
-      <div style={{ marginBottom: 10 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>Typ ćwiczenia</div>
-        <div className="coach-scheme-row" style={{ marginBottom: iso ? 8 : 0 }}>
-          <button type="button" className={`coach-scheme-btn ${!iso && !ecc ? 'coach-active' : ''}`} onClick={() => { setIso(false); setEcc(false) }}>
-            Standardowe
-          </button>
-          <button type="button" className={`coach-scheme-btn ${iso ? 'coach-active' : ''}`} onClick={() => { setIso(true); setEcc(false) }}>
-            Izometryczne (ISO)
-          </button>
-          <button type="button" className={`coach-scheme-btn ${ecc ? 'coach-active' : ''}`} onClick={() => { setEcc(true); setIso(false) }}>
-            Ekscentryczne
-          </button>
-        </div>
-        {iso && (
-          <>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>Wariant ISO</div>
-            <div className="coach-scheme-row" style={{ marginBottom: 6 }}>
-              {(['PIMA', 'HIMA'] as const).map(v => (
-                <button
-                  key={v}
-                  type="button"
-                  className="coach-scheme-btn"
-                  style={isoType === v ? { background: 'var(--gold)', color: 'var(--navy-900)', borderColor: 'var(--gold)' } : undefined}
-                  onClick={() => setIsoType(v)}
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
-            <div style={{ fontSize: 11.5, color: 'var(--muted)', fontFamily: 'var(--font-inter),sans-serif', marginBottom: 8 }}>
-              {isoType === 'PIMA'
-                ? 'PIMA — napięcie z narastającą intensywnością (%). Podaj docelową intensywność.'
-                : 'HIMA — napięcie na stałej, maksymalnej intensywności przez cały czas trwania.'}
-            </div>
-          </>
         )}
-      </div>
+      </section>
 
-      <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px', marginBottom: 10, background: '#fff' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+      {/* typ ćwiczenia (+ wariant ISO w tym samym wierszu) */}
+      <section className="exf-sec">
+        <div className="exf-type-row">
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink)' }}>Serie</div>
-            <div style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--font-inter),sans-serif' }}>
-              {ecc ? 'Każda seria może mieć inne powtórzenia, ciężar, czas fazy ekscentrycznej, hold w rozciągnięciu i RIR.' : iso ? 'Każda seria może mieć inny czas napięcia, liczbę powtórzeń, przerwę (rest) między nimi, ciężar i RIR.' : 'Każda seria może mieć inne powtórzenia, ciężar, tempo i RIR.'}
+            <span className="exf-label">Typ</span>
+            <div className="exf-seg">
+              <button type="button" className={!iso && !ecc ? 'on' : ''} onClick={() => { setIso(false); setEcc(false) }}>Standardowe</button>
+              <button type="button" className={iso ? 'on' : ''} onClick={() => { setIso(true); setEcc(false) }}>Izometryczne (ISO)</button>
+              <button type="button" className={ecc ? 'on' : ''} onClick={() => { setEcc(true); setIso(false) }}>Ekscentryczne</button>
             </div>
           </div>
-          <button type="button" className="coach-btn coach-btn-dark coach-btn-small" onClick={addWorkSet}>Dodaj serię</button>
-        </div>
-
-        {(() => {
-          const cols = ecc
-            ? [{ field: 'reps' as const, label: 'Powt.', placeholder: '5' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'ecc' as const, label: 'Ekscentryka (s)', placeholder: '5' }, { field: 'hold' as const, label: 'Hold w rozciągnięciu (s)', placeholder: '-' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }]
-            : iso
-            ? (isoType === 'PIMA'
-              ? [{ field: 'seconds' as const, label: 'Czas (s)', placeholder: '20' }, { field: 'reps' as const, label: 'Powt.', placeholder: '-' }, { field: 'rest' as const, label: 'Rest (s)', placeholder: '-' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'intensity' as const, label: 'Intensywność (%)', placeholder: '%' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }]
-              : [{ field: 'seconds' as const, label: 'Czas (s)', placeholder: '20' }, { field: 'reps' as const, label: 'Powt.', placeholder: '-' }, { field: 'rest' as const, label: 'Rest (s)', placeholder: '-' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }])
-            : [{ field: 'reps' as const, label: 'Powt.', placeholder: '8-10' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'tempo' as const, label: 'Tempo', placeholder: '3-1-2-0' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }]
-          const gridCols = `30px ${cols.map(() => 'minmax(0, 1fr)').join(' ')} 30px`
-          return (
-            <>
-              <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: 6, marginBottom: 4, padding: '0 2px' }}>
-                <span />
-                {cols.map(c => (
-                  <span key={c.field} style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-light)', textTransform: 'uppercase', textAlign: 'center' }}>{c.label}</span>
+          {iso && (
+            <div>
+              <span className="exf-label">Wariant ISO</span>
+              <div className="exf-seg exf-seg-gold">
+                {(['PIMA', 'HIMA'] as const).map(v => (
+                  <button key={v} type="button" className={isoType === v ? 'on' : ''} onClick={() => setIsoType(v)}>{v}</button>
                 ))}
-                <span />
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {workSets.map((set, index) => (
-                  <div key={index} style={{ display: 'grid', gridTemplateColumns: gridCols, gap: 6, alignItems: 'center' }}>
-                    <div style={{ height: 32, borderRadius: 8, background: 'var(--navy-900)', color: 'var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11 }}>
-                      {index + 1}
-                    </div>
-                    {cols.map((c, colIndex) => (
+            </div>
+          )}
+        </div>
+        {iso && (
+          <div className="exf-hint" style={{ marginTop: 6 }}>
+            {isoType === 'PIMA'
+              ? 'PIMA — napięcie z narastającą intensywnością (%). Podaj docelową intensywność.'
+              : 'HIMA — napięcie na stałej, maksymalnej intensywności przez cały czas trwania.'}
+          </div>
+        )}
+      </section>
+
+      {/* serie główne */}
+      <section className="exf-card">
+        <div className="exf-card-head">
+          <span className="exf-card-title">Serie <span className="exf-count">{workSets.length}</span></span>
+          <span className="exf-hint">{typeHint}</span>
+        </div>
+        <div className="exf-table-wrap">
+          <table className="exf-sets">
+            <thead>
+              <tr>
+                <th style={{ width: 28 }} />
+                {cols.map(c => <th key={c.field}>{c.label}</th>)}
+                <th style={{ width: 28 }} />
+              </tr>
+            </thead>
+            <tbody>
+              {workSets.map((set, index) => (
+                <tr key={index}>
+                  <td><span className="exf-num">{index + 1}</span></td>
+                  {cols.map((c, colIndex) => (
+                    <td key={c.field}>
                       <input
-                        key={c.field}
                         ref={el => { workSetInputRefs.current[`${index}-${colIndex}`] = el }}
                         value={set[c.field] || ''}
                         onChange={e => updateWorkSet(index, c.field, e.target.value)}
                         onKeyDown={e => handleWorkSetKeyDown(e, index, colIndex)}
                         placeholder={c.placeholder}
-                        style={{ textAlign: 'center', width: '100%', minWidth: 0, boxSizing: 'border-box' }}
                       />
-                    ))}
-                    <button type="button" onClick={() => removeWorkSet(index)} className="coach-icon-btn coach-danger" style={{ width: 30, height: 30 }} disabled={workSets.length === 1}>
-                      <X size={13} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </>
-          )
-        })()}
-      </div>
+                    </td>
+                  ))}
+                  <td>
+                    <button type="button" className="exf-x" onClick={() => removeWorkSet(index)} disabled={workSets.length === 1} title="Usuń serię"><X size={13} /></button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <button type="button" className="exf-add" onClick={addWorkSet}>+ Dodaj serię</button>
+      </section>
 
-      <label className="coach-exercise-edit-form-checkbox">
-        <input type="checkbox" checked={isWarmup} onChange={e => setIsWarmup(e.target.checked)} />
-        Dodaj serie rozgrzewkowe
-      </label>
-
-      {isWarmup && (
-        <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px', marginBottom: 10, background: '#fff' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink)' }}>Serie rozgrzewkowe</div>
-              <div style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--font-inter),sans-serif' }}>Każda seria może mieć inną liczbę powtórzeń i ciężar.</div>
+      {/* serie rozgrzewkowe */}
+      <section className="exf-card">
+        <label className="exf-toggle">
+          <input type="checkbox" checked={isWarmup} onChange={e => setIsWarmup(e.target.checked)} />
+          <span className="exf-switch" />
+          <span className="exf-card-title">Serie rozgrzewkowe{isWarmup && <span className="exf-count">{warmupSets.length}</span>}</span>
+          <span className="exf-hint">{isWarmup ? 'Każda seria może mieć inną liczbę powtórzeń i ciężar.' : 'wyłączone'}</span>
+        </label>
+        {isWarmup && (
+          <>
+            <div className="exf-table-wrap" style={{ marginTop: 8 }}>
+              <table className="exf-sets">
+                <thead>
+                  <tr>
+                    <th style={{ width: 28 }} />
+                    <th>Powt.</th>
+                    <th>Ciężar</th>
+                    <th style={{ width: '40%' }}>Komentarz</th>
+                    <th style={{ width: 28 }} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {warmupSets.map((set, index) => (
+                    <tr key={index}>
+                      <td><span className="exf-num exf-num-warm">R{index + 1}</span></td>
+                      <td><input value={set.reps || ''} onChange={e => updateWarmupSet(index, 'reps', e.target.value)} placeholder="powt." /></td>
+                      <td><input value={set.weight_kg || ''} onChange={e => updateWarmupSet(index, 'weight_kg', e.target.value)} placeholder="kg" /></td>
+                      <td><input value={set.note || ''} onChange={e => updateWarmupSet(index, 'note', e.target.value)} placeholder="komentarz" style={{ textAlign: 'left' }} /></td>
+                      <td><button type="button" className="exf-x" onClick={() => removeWarmupSet(index)} title="Usuń serię"><X size={13} /></button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            <button type="button" className="coach-btn coach-btn-dark coach-btn-small" onClick={addWarmupSet}>Dodaj</button>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {warmupSets.map((set, index) => (
-              <div key={index} style={{ display: 'grid', gridTemplateColumns: '38px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr) 30px', gap: 6, alignItems: 'center' }}>
-                <div style={{ height: 32, borderRadius: 8, background: 'var(--navy-900)', color: 'var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11 }}>
-                  R{index + 1}
-                </div>
-                <input value={set.reps || ''} onChange={e => updateWarmupSet(index, 'reps', e.target.value)} placeholder="powt." style={{ textAlign: 'center', width: '100%', minWidth: 0, boxSizing: 'border-box' }} />
-                <input value={set.weight_kg || ''} onChange={e => updateWarmupSet(index, 'weight_kg', e.target.value)} placeholder="kg" style={{ textAlign: 'center', width: '100%', minWidth: 0, boxSizing: 'border-box' }} />
-                <input value={set.note || ''} onChange={e => updateWarmupSet(index, 'note', e.target.value)} placeholder="komentarz" style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }} />
-                <button type="button" onClick={() => removeWarmupSet(index)} className="coach-icon-btn coach-danger" style={{ width: 30, height: 30 }}>
-                  <X size={13} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {saveError && (
-        <div style={{ border: '1px solid #c23b3b', background: '#fef2f2', color: '#c23b3b', borderRadius: 8, padding: '8px 10px', marginBottom: 10, fontSize: 12, fontWeight: 700, fontFamily: 'var(--font-inter),sans-serif' }}>
-          {saveError}
-        </div>
-      )}
-
-      <Field label="Link do filmu / instrukcji">
-        <input value={exerciseUrl} onChange={e => setExerciseUrl(e.target.value)} placeholder="https://youtube.com/..." />
-      </Field>
-
-      <Field label="Komentarz dla zawodniczki">
-        <textarea value={comment} onChange={e => setComment(e.target.value)} placeholder="Wskazowki techniczne, zakres ruchu, uwagi..." rows={3} />
-      </Field>
-
-      <div className="coach-inline-form-actions">
-        <Button variant="ghost" onClick={onClose}>Anuluj</Button>
-        {!isNew && (
-          <button className="coach-btn" style={{ border: '1px solid #c23b3b', color: '#c23b3b', background: '#fff' }} onClick={handleDelete} disabled={saving}>
-            Usuń
-          </button>
+            <button type="button" className="exf-add" onClick={addWarmupSet}>+ Dodaj serię rozgrzewkową</button>
+          </>
         )}
+      </section>
+
+      {/* link + komentarz */}
+      <section className="exf-grid2">
+        <label className="exf-field">
+          <span className="exf-label">Link do filmu / instrukcji</span>
+          <input className="exf-input" value={exerciseUrl} onChange={e => setExerciseUrl(e.target.value)} placeholder="https://youtube.com/..." />
+        </label>
+        <label className="exf-field">
+          <span className="exf-label">Komentarz dla zawodniczki</span>
+          <textarea className="exf-input" value={comment} onChange={e => setComment(e.target.value)} placeholder="Wskazówki techniczne, zakres ruchu, uwagi..." rows={2} />
+        </label>
+      </section>
+
+      {saveError && <div className="exf-error">{saveError}</div>}
+
+      <div className="exf-actions">
+        {!isNew && (
+          <button type="button" className="exf-del" onClick={handleDelete} disabled={saving}>Usuń ćwiczenie</button>
+        )}
+        <span style={{ flex: 1 }} />
+        <Button variant="ghost" onClick={onClose}>Anuluj</Button>
         <Button variant="dark" onClick={handleSave} disabled={saving || !canSave}>
           {saving ? 'Zapisuję...' : isNew ? 'Dodaj ćwiczenie' : 'Zapisz zmiany'}
         </Button>
@@ -971,21 +963,6 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
       setLocalBlocks(prev => [...prev, newBlock])
       setTargetBlocks(prev => [...prev, newBlock])
     }
-  }
-
-  async function copyBlockToAllDays(block: Block) {
-    const otherDays = localDays.filter(day => day.id !== block.day_id)
-    if (otherDays.length === 0) { showError('Brak innych treningów w planie.'); return }
-    if (!confirm(`Skopiować blok "${block.block_name}" do ${otherDays.length} pozostałych treningów?`)) return
-
-    const newBlocks: Block[] = []
-    for (const day of otherDays) {
-      const copy = await insertBlockCopy(block, day.id)
-      if (copy) newBlocks.push(copy)
-    }
-
-    setLocalBlocks(prev => [...prev, ...newBlocks])
-    setTargetBlocks(prev => [...prev, ...newBlocks])
   }
 
   async function deleteBlock(blockId: number) {
@@ -1358,7 +1335,6 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
           onSaveDayMessage={(dayId, field, value) => field === 'coach_intro' ? saveCoachIntro(dayId, value) : saveCoachClosing(dayId, value)}
           onAddBlock={addBlock}
           onRenameBlock={renameBlock}
-          onCopyBlock={copyBlockToAllDays}
           clipboard={clipboard ? (clipboard.kind === 'block' ? { kind: 'block', name: clipboard.block.block_name } : { kind: 'exercises', count: clipboard.exercises.filter(e => e.variant_of == null).length }) : null}
           onCopyBlockToClipboard={copyBlockToClipboard}
           onCopyExercises={copyExercisesToClipboard}
