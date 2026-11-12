@@ -430,7 +430,16 @@ function ExerciseEditForm({
   }
 
   function updateWorkSet(index: number, field: keyof WorkSet, value: string) {
-    setWorkSets(prev => prev.map((set, setIndex) => setIndex === index ? { ...set, [field]: value } : set))
+    setWorkSets(prev => {
+      // Wpis w 1. serii przepisuje się do pozostałych, jeśli są puste albo miały to samo co 1. seria
+      // (czyli nie były zmieniane osobno) — inne, ręcznie wpisane wartości zostają.
+      const prevFirst = prev[0]?.[field] || ''
+      return prev.map((set, setIndex) => {
+        if (setIndex === index) return { ...set, [field]: value }
+        if (index === 0 && (!(set[field] || '') || (set[field] || '') === prevFirst)) return { ...set, [field]: value }
+        return set
+      })
+    })
   }
 
   function addWorkSet() {
