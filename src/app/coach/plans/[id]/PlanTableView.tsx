@@ -8,6 +8,7 @@ import { buildPlanPdf, loadPdfFonts, loadPdfLogo } from '@/lib/coach/planPdf'
 import { EXERCISE_CATALOG_LIST_ID } from '@/lib/exerciseCatalog'
 import Link from 'next/link'
 import PlanModeSwitch, { fillHref, lastFillDay } from '@/components/coach/PlanModeSwitch'
+import { emptySkipState, loadSkipState, setSkipped, sessKey, skipLogKey, ovKey, type SkipState } from '@/lib/coach/groupSkipped'
 
 type WarmupSet = { reps?: string; weight_kg?: string; note?: string }
 type WorkSet = { reps?: string; weight_kg?: string; tempo?: string; rir?: string; seconds?: string; intensity?: string; rest?: string; ecc?: string; hold?: string }
@@ -424,6 +425,85 @@ export default function PlanTableView(props: Props) {
   const orderedDays = [...weeks].sort((a, b) => a.week_number - b.week_number).flatMap(w => allDays.filter(d => d.week_id === w.id))
   const fillDayId = savedFillDay && days.some(d => d.id === savedFillDay) ? savedFillDay : orderedDays[0]?.id
 
+  // ── Niewykonane (plan grupy) ──
+  // Trener zaznacza, że ćwiczenie albo seria nie zostały zrobione — zapis w seriach zawodniczek
+  // (set_logs.skipped), tak samo jak w „Wpisuj wyniki” i u zawodniczki.
+  const [skipState, setSkipState] = useState<SkipState>(emptySkipState)
+  const [skipOpen, setSkipOpen] = useState<string | null>(null)
+  // okienko jako position: fixed — kontener tabeli przewija się poziomo i przyciąłby je
+  const [skipPos, setSkipPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
+  function openSkip(key: string, el: HTMLElement) {
+    const r = el.getBoundingClientRect()
+    setSkipPos({ top: Math.min(r.bottom + 4, window.innerHeight - 230), left: Math.max(8, Math.min(r.right - 250, window.innerWidth - 258)) })
+    setSkipOpen(o => o === key ? null : key)
+  }
+  const [skipBusy, setSkipBusy] = useState<string | null>(null)
+  const [skipError, setSkipError] = useState('')
+  const skipLoadKey = groupId != null
+    ? `${days.map(d => d.id).join(',')}|${blocks.flatMap(b => (b.workout_block_exercises || []).map(e => e.id)).join(',')}|${props.athletes.map(a => a.id).join(',')}`
+    : ''
+  useEffect(() => {
+    if (!skipLoadKey) return
+    let alive = true
+    const exIds = blocks.flatMap(b => (b.workout_block_exercises || []).map(e => e.id)).filter((x): x is number => x != null)
+    loadSkipState(plan.id, days.map(d => d.id), exIds, props.athletes.map(a => a.id))
+      .then(s => { if (alive) setSkipState(s) })
+      .catch(e => console.error(e))
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skipLoadKey, plan.id])
+  useEffect(() => {
+    if (!skipOpen) return
+    const close = (e: MouseEvent) => { if (!(e.target as HTMLElement | null)?.closest?.('[data-skip-pop]')) setSkipOpen(null) }
+    const onScroll = (e: Event) => { if (!(e.target as HTMLElement | null)?.closest?.('[data-skip-pop]')) setSkipOpen(null) }
+    document.addEventListener('mousedown', close)
+    window.addEventListener('scroll', onScroll, true)
+    return () => { document.removeEventListener('mousedown', close); window.removeEventListener('scroll', onScroll, true) }
+  }, [skipOpen])
+
+  // Kto robi to ćwiczenie w tym treningu (warianty, nieobecne, ćwiczenie usunięte zawodniczce) i ile serii
+  function skipTargets(dayId: number, ex: BlockExercise, exs: BlockExercise[]) {
+    if (ex.id == null) return []
+    const inVariants = new Set(exs.filter(v => v.variant_of != null && v.variant_of === ex.id).flatMap(v => v.variant_athlete_ids || []))
+    const absent = new Set(skipState.absent[dayId] || [])
+    return props.athletes
+      .filter(a => ex.variant_of != null ? (ex.variant_athlete_ids || []).includes(a.id) : !inVariants.has(a.id))
+      .filter(a => !absent.has(a.id) && !skipState.overrides[ovKey(a.id, ex.id as number)]?.skip)
+      .map(a => {
+        const n = Math.max(1, skipState.overrides[ovKey(a.id, ex.id as number)]?.sets_override ?? ex.sets ?? 1)
+        return { athleteId: a.id, setNums: Array.from({ length: n }, (_, i) => i + 1) }
+      })
+  }
+  function skipStatus(dayId: number, ex: BlockExercise, exs: BlockExercise[]) {
+    const targets = skipTargets(dayId, ex, exs)
+    const maxSets = Math.max(0, ...targets.map(t => t.setNums.length))
+    const isSkipped = (athleteId: number, n: number) => {
+      const s = skipState.sessions[sessKey(dayId, athleteId)]
+      return !!(s && skipState.logs[skipLogKey(s.id, ex.id as number, n)]?.skipped)
+    }
+    // per seria: ile zawodniczek ją ma i ile ma ją niewykonaną
+    const perSet = Array.from({ length: maxSets }, (_, i) => {
+      const having = targets.filter(t => t.setNums.includes(i + 1))
+      return { total: having.length, skipped: having.filter(t => isSkipped(t.athleteId, i + 1)).length }
+    })
+    const slots = perSet.reduce((s, p) => s + p.total, 0)
+    const skipped = perSet.reduce((s, p) => s + p.skipped, 0)
+    const athletesSkipped = targets.filter(t => t.setNums.some(n => isSkipped(t.athleteId, n))).length
+    return { targets, perSet, all: slots > 0 && skipped === slots, any: skipped > 0, athletesSkipped }
+  }
+  async function toggleSkip(rowKey: string, dayId: number, ex: BlockExercise, exs: BlockExercise[], setNum: number | null, skip: boolean) {
+    if (ex.id == null) return
+    const targets = skipTargets(dayId, ex, exs)
+      .map(t => ({ athleteId: t.athleteId, setNums: setNum == null ? t.setNums : t.setNums.filter(n => n === setNum) }))
+      .filter(t => t.setNums.length)
+    if (!targets.length) return
+    setSkipBusy(rowKey); setSkipError('')
+    const res = await setSkipped(skipState, dayId, ex.id, targets, skip)
+    setSkipState(res.state)
+    if (res.error) setSkipError(res.error)
+    setSkipBusy(null)
+  }
+
   // ── Kopiuj / wklej ──
   // Zaznaczenie ćwiczeń (checkbox przy numerze, w obrębie jednego bloku) → Ctrl+C;
   // kliknięcie w blok wybiera miejsce wklejenia → Ctrl+V (ćwiczenia do bloku, blok do treningu)
@@ -705,11 +785,14 @@ export default function PlanTableView(props: Props) {
                                 ...exs.map((ex, i) => {
                                   const name = fmtName(ex.exercise?.name || ex.exercise_code || '')
                                   const isoReps = !!ex.iso
+                                  const sk = groupId != null && ex.id != null ? skipStatus(day.id, ex, exs) : null
+                                  const skRow = `${day.id}_${ex.id}`
+                                  const skSets = sk ? sk.perSet.map((p, k) => (p.total > 0 && p.skipped === p.total ? `S${k + 1}` : null)).filter(Boolean) : []
                                   return (
                                     <tr
                                       key={ex.id ?? `${block.id}-${i}`}
                                       onMouseDown={e => { e.stopPropagation(); setActive({ dayId: day.id, blockId: block.id }) }}
-                                      style={{ ...(ex.variant_of != null ? { background: '#faf7ff' } : {}), ...(selection?.blockId === block.id && selection.ids.includes((ex.variant_of ?? ex.id) as number) ? { background: '#fff7e0' } : {}), ...(dropKey === `ex-${ex.variant_of ?? ex.id}` && ex.variant_of == null ? dropLine : {}) }}
+                                      style={{ ...(ex.variant_of != null ? { background: '#faf7ff' } : {}), ...(sk?.all ? { background: '#fdf1f1' } : {}),...(selection?.blockId === block.id && selection.ids.includes((ex.variant_of ?? ex.id) as number) ? { background: '#fff7e0' } : {}), ...(dropKey === `ex-${ex.variant_of ?? ex.id}` && ex.variant_of == null ? dropLine : {}) }}
                                       onDragOver={e => {
                                         const target = ex.variant_of ?? ex.id
                                         if (drag?.kind === 'ex' && drag.dayId === day.id && target != null && drag.exId !== target) { e.preventDefault(); setDropKey(`ex-${target}`) }
@@ -737,10 +820,22 @@ export default function PlanTableView(props: Props) {
                                       </td>
                                       <td style={td({ textAlign: 'left', minWidth: 150 })}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                                          <div style={{ flex: 1, minWidth: 0 }}>
+                                          <div style={{ flex: 1, minWidth: 0, ...(sk?.all ? { textDecoration: 'line-through', textDecorationColor: '#c23b3b', opacity: 0.75 } : {}) }}>
                                             {/* wpisana nazwa = własna nazwa (odpina od biblioteki); zmiana z biblioteki — przez ✏️ */}
                                             <EditCell value={name} onCommit={v => onUpdateExercise(block.id, ex, { exercise_code: v.trim() || name, exercise_id: null, exercise: null })} align="left" placeholder="nazwa" list={EXERCISE_CATALOG_LIST_ID} />
                                           </div>
+                                          {sk?.any && (
+                                            <button
+                                              data-skip-pop
+                                              onClick={e => openSkip(skRow, e.currentTarget)}
+                                              title={sk.all
+                                                ? 'Ćwiczenie nie wykonane — kliknij, by zmienić'
+                                                : `Nie wykonane: ${skSets.length ? skSets.join(', ') : 'część serii'} (${sk.athletesSkipped}/${sk.targets.length} zawodniczek) — kliknij, by zmienić`}
+                                              style={{ flexShrink: 0, border: '1px solid #c23b3b', background: sk.all ? '#c23b3b' : '#FDEDED', color: sk.all ? '#fff' : '#c23b3b', fontFamily: 'var(--font-inter),sans-serif', fontSize: 9, fontWeight: 700, borderRadius: 4, padding: '1px 5px', letterSpacing: '.02em', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                                            >
+                                              {sk.all ? 'NIE WYKONANE' : `NIE WYK. ${skSets.length ? skSets.join('·') : `${sk.athletesSkipped}/${sk.targets.length}`}`}
+                                            </button>
+                                          )}
                                           {ex.is_individual && (
                                             <button onClick={() => props.onEditExercise(block.id, ex)} title="Ćwiczenie indywidualne — każda zawodniczka ma własne parametry (kliknij, by edytować)" style={{ flexShrink: 0, border: '1px solid #0e7490', background: '#ecfeff', color: '#0e7490', fontFamily: 'var(--font-inter),sans-serif', fontSize: 9, fontWeight: 700, borderRadius: 4, padding: '1px 5px', letterSpacing: '.02em', cursor: 'pointer' }}>
                                               INDYW.
@@ -865,6 +960,64 @@ export default function PlanTableView(props: Props) {
                                         />
                                       </td>
                                       <td style={td({ padding: '2px', whiteSpace: 'nowrap' })}>
+                                        {sk && (
+                                          <button
+                                            data-skip-pop
+                                            onClick={e => openSkip(skRow, e.currentTarget)}
+                                            title="Nie wykonano — zaznacz ćwiczenie albo serie, których grupa nie zrobiła"
+                                            style={{ ...iconBtn, fontWeight: 700, color: sk.any ? '#fff' : '#c25454', background: sk.any ? '#c23b3b' : 'transparent' }}
+                                          >
+                                            ⊘
+                                          </button>
+                                        )}
+                                        {sk && skipOpen === skRow && (
+                                          <div data-skip-pop style={{ position: 'fixed', top: skipPos.top, left: skipPos.left, zIndex: 300, background: '#fff', border: '1px solid var(--border)', borderRadius: 10, boxShadow: 'var(--shadow)', padding: '10px 12px', width: 250, whiteSpace: 'normal', textAlign: 'left', fontFamily: 'var(--font-inter),sans-serif', fontSize: 12, color: 'var(--ink)' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
+                                              <b style={{ fontSize: 12 }}>Nie wykonano</b>
+                                              <span style={{ marginLeft: 6, color: 'var(--muted)', fontSize: 11 }}>{sk.targets.length} {sk.targets.length === 1 ? 'zawodniczka' : 'zawodniczek'}</span>
+                                              <button onClick={() => setSkipOpen(null)} style={{ ...iconBtn, marginLeft: 'auto' }} title="Zamknij">✕</button>
+                                            </div>
+                                            {sk.targets.length === 0 ? (
+                                              <div style={{ color: 'var(--muted)', fontSize: 11 }}>Nikt nie robi tego ćwiczenia w tym treningu.</div>
+                                            ) : (
+                                              <>
+                                                <button
+                                                  disabled={skipBusy != null}
+                                                  onClick={() => toggleSkip(skRow, day.id, ex, exs, null, !sk.all)}
+                                                  style={{ width: '100%', border: '1.5px solid #c23b3b', borderRadius: 7, padding: '5px 8px', cursor: skipBusy ? 'wait' : 'pointer', fontFamily: 'var(--font-inter),sans-serif', fontSize: 12, fontWeight: 700, background: sk.all ? '#c23b3b' : '#fff', color: sk.all ? '#fff' : '#c23b3b' }}
+                                                >
+                                                  {sk.all ? '✓ Cofnij — ćwiczenie wykonane' : '✕ Całe ćwiczenie nie wykonane'}
+                                                </button>
+                                                {sk.perSet.length > 1 && (
+                                                  <div style={{ marginTop: 8 }}>
+                                                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4 }}>Albo pojedyncze serie</div>
+                                                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                                                      {sk.perSet.map((p, k) => {
+                                                        const full = p.total > 0 && p.skipped === p.total
+                                                        return (
+                                                          <button
+                                                            key={k}
+                                                            disabled={skipBusy != null || p.total === 0}
+                                                            onClick={() => toggleSkip(skRow, day.id, ex, exs, k + 1, !full)}
+                                                            title={full ? `S${k + 1} nie wykonana — kliknij, by cofnąć` : p.skipped ? `S${k + 1}: nie wykonało ${p.skipped}/${p.total} — kliknij, by oznaczyć wszystkim` : `Oznacz S${k + 1} jako nie wykonaną`}
+                                                            style={{ minWidth: 38, border: `1.5px solid ${full || p.skipped ? '#c23b3b' : 'var(--border)'}`, borderRadius: 7, padding: '3px 6px', cursor: skipBusy ? 'wait' : 'pointer', fontFamily: 'var(--font-inter),sans-serif', fontSize: 11, fontWeight: 700, background: full ? '#c23b3b' : p.skipped ? '#FDEDED' : '#fff', color: full ? '#fff' : p.skipped ? '#c23b3b' : 'var(--ink)', textDecoration: full ? 'line-through' : 'none' }}
+                                                          >
+                                                            S{k + 1}{p.skipped && !full ? ` ${p.skipped}/${p.total}` : ''}
+                                                          </button>
+                                                        )
+                                                      })}
+                                                    </div>
+                                                  </div>
+                                                )}
+                                              </>
+                                            )}
+                                            {skipBusy === skRow && <div style={{ marginTop: 6, fontSize: 11, color: 'var(--muted)' }}>Zapisuję…</div>}
+                                            {skipError && <div style={{ marginTop: 6, fontSize: 11, color: '#c23b3b' }}>{skipError}</div>}
+                                            <div style={{ marginTop: 8, fontSize: 10, color: 'var(--muted)', lineHeight: 1.4 }}>
+                                              Dotyczy całej grupy (bez nieobecnych). Serie z wpisanym wynikiem zostają. Pojedyncze zawodniczki — w „📝 Wpisuj wyniki”.
+                                            </div>
+                                          </div>
+                                        )}
                                         <button onClick={() => props.onEditExercise(block.id, ex)} title="Pełna edycja ćwiczenia" style={iconBtn}>✏️</button>
                                         {ex.variant_of == null && (
                                           <button onClick={() => props.onAddVariant(block.id, ex)} title="Dodaj wariant tego ćwiczenia (1a → 1b) dla części zawodniczek" style={{ ...iconBtn, color: '#7c3aed', fontWeight: 700 }}>+wariant</button>
