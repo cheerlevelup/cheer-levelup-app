@@ -6,7 +6,7 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
-import { ChevronRight, ArrowRightLeft, Archive, AlertTriangle, RotateCcw } from 'lucide-react'
+import { ChevronRight, ArrowRightLeft, Archive, AlertTriangle, RotateCcw, UserPlus } from 'lucide-react'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { Card, Chip, Modal, Button } from '@/components/coach/ui'
 import AthleteProfileCard, { type AthleteRow } from '@/components/coach/AthleteProfileCard'
@@ -117,10 +117,13 @@ export default function AthletesListClient({ athletes, archivedAthletes, allGrou
       <SetPageMeta title="Zawodniczki" />
       <div className="coach-content" style={{ paddingTop: 4 }}>
         {view === 'active' && (
-          <div className="coach-toolbar" style={{ justifyContent: 'flex-end' }}>
+          <div className="coach-toolbar" style={{ justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
             <div className="coach-search-box" style={{ width: 220, flexShrink: 0 }}>
               <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Szukaj zawodniczki…" />
             </div>
+            <Button variant="dark" onClick={() => router.push('/coach/athletes/new')} style={{ color: 'var(--gold)' }}>
+              <UserPlus size={15} /> Dodaj zawodniczkę
+            </Button>
           </div>
         )}
 

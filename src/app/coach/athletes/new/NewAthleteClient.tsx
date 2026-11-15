@@ -68,7 +68,7 @@ export default function NewAthleteClient({ groups }: { groups: Group[] }) {
 
   return (
     <>
-      <SetPageMeta title="Dodaj zawodniczkę" backHref="/coach/groups" backLabel="Grupy" />
+      <SetPageMeta title="Dodaj zawodniczkę" backHref="/coach/athletes" backLabel="Zawodniczki" />
       <div className="coach-content" style={{ maxWidth: 560 }}>
         <Card>
           <div style={{ padding: '1.25rem' }}>
