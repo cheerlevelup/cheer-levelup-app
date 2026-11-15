@@ -34,7 +34,8 @@ export default async function CoachAthletePage({ params }: Props) {
     .select('*, plan:workout_plans(*)')
     .or(conditions.join(','))
     .order('created_at', { ascending: false })
-  const assignment = (allAssignments || []).find(a => a.is_active) || null
+  // plan główny (grupowy); plany indywidualne widać w zakładce Plany
+  const assignment = (allAssignments || []).find(a => a.is_active && a.assignment_type !== 'individual') || null
   const pastAssignments = (allAssignments || []).filter(a => !a.is_active)
 
   // Historia treningów (z pełnym kontekstem)

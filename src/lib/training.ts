@@ -43,29 +43,42 @@ export type PlanTrainingItem = {
 const isAbsentOn = (day: { absent_athlete_ids?: unknown } | null | undefined, athleteId: number) =>
   Array.isArray(day?.absent_athlete_ids) && (day!.absent_athlete_ids as unknown[]).map(Number).includes(athleteId)
 
-// Aktywny plan zawodniczki (indywidualny, potem grupowy) z treningami i statusem sesji
-async function loadAthletePlan(athleteId: number, groupId?: number) {
+// Aktywne przypisania zawodniczki: najpierw plan grupowy, potem plany indywidualne
+// (assignment_type = 'individual', migracja 202611150001 — widoczne tylko tej zawodniczce)
+async function loadActiveAssignments(athleteId: number, groupId?: number): Promise<AthleteWorkoutAssignment[]> {
   const supabase = await createClient()
-
-  // Szukaj najpierw przypisania indywidualnego, potem grupowego
-  const { data: individualAssignments } = await supabase
+  const { data: own } = await supabase
     .from('athlete_workout_assignments')
     .select('*, plan:workout_plans(*)')
     .eq('is_active', true)
     .eq('athlete_id', athleteId)
+    .order('created_at', { ascending: false })
 
-  let assignment: AthleteWorkoutAssignment | null = (individualAssignments || [])[0] as AthleteWorkoutAssignment || null
-
-  if (!assignment && groupId) {
-    const { data: groupAssignments } = await supabase
+  let rows = (own || []) as any[]
+  // stare przypisania całej grupy (bez zawodniczki) — tylko gdy zawodniczka nie ma żadnego
+  if (rows.length === 0 && groupId) {
+    const { data: legacy } = await supabase
       .from('athlete_workout_assignments')
       .select('*, plan:workout_plans(*)')
       .eq('is_active', true)
       .eq('group_id', groupId)
-    assignment = (groupAssignments || [])[0] as AthleteWorkoutAssignment || null
+      .is('athlete_id', null)
+    rows = (legacy || []).slice(0, 1)
   }
+  const group = rows.filter(r => r.assignment_type !== 'individual').slice(0, 1)
+  const individual = rows.filter(r => r.assignment_type === 'individual').reverse()
+  return [...group, ...individual] as AthleteWorkoutAssignment[]
+}
 
-  if (!assignment) return null
+// Wszystkie aktywne plany zawodniczki z treningami i statusem sesji
+async function loadAthletePlans(athleteId: number, groupId?: number) {
+  const assignments = await loadActiveAssignments(athleteId, groupId)
+  const plans = await Promise.all(assignments.map(a => loadPlanForAssignment(athleteId, a)))
+  return plans.filter((p): p is NonNullable<typeof p> => !!p)
+}
+
+async function loadPlanForAssignment(athleteId: number, assignment: AthleteWorkoutAssignment) {
+  const supabase = await createClient()
 
   // Pobierz tygodnie dla tego planu
   const { data: weeks } = await supabase
@@ -114,33 +127,36 @@ export async function getNextTrainingForAthlete(
   completedCount: number
   totalCount: number
 } | null> {
-  const plan = await loadAthletePlan(athleteId, groupId)
-  if (!plan) return null
-  const { assignment, days, completedDayIds, absentDayIds } = plan
-  // treningi z nieobecnością nie są proponowane i nie liczą się do postępu planu
-  const activeDays = days.filter((d: any) => !absentDayIds.has(d.id))
-  const nextDay = activeDays.find((d: any) => !completedDayIds.has(d.id))
-  if (!nextDay) return null
+  // pierwszy plan (grupowy przed indywidualnymi), w którym został trening do zrobienia
+  for (const plan of await loadAthletePlans(athleteId, groupId)) {
+    const { assignment, days, completedDayIds, absentDayIds } = plan
+    // treningi z nieobecnością nie są proponowane i nie liczą się do postępu planu
+    const activeDays = days.filter((d: any) => !absentDayIds.has(d.id))
+    const nextDay = activeDays.find((d: any) => !completedDayIds.has(d.id))
+    if (!nextDay) continue
 
-  return {
-    assignment,
-    day: nextDay as WorkoutDay,
-    completedCount: activeDays.filter((d: any) => completedDayIds.has(d.id)).length,
-    totalCount: activeDays.length,
+    return {
+      assignment,
+      day: nextDay as WorkoutDay,
+      completedCount: activeDays.filter((d: any) => completedDayIds.has(d.id)).length,
+      totalCount: activeDays.length,
+    }
   }
+  return null
 }
 
-// Wszystkie treningi aktywnego planu ze statusem — zawodniczka może rozpocząć dowolny
+export type PlanTrainings = { assignmentId: number; planName: string; individual: boolean; trainings: PlanTrainingItem[] }
+
+// Treningi wszystkich aktywnych planów (grupowy + indywidualne) ze statusem — zawodniczka może rozpocząć dowolny
 export async function getPlanTrainingsForAthlete(
   athleteId: number,
   groupId?: number
-): Promise<{ assignmentId: number; planName: string; trainings: PlanTrainingItem[] } | null> {
-  const plan = await loadAthletePlan(athleteId, groupId)
-  if (!plan) return null
-  const { assignment, days, completedDayIds, inProgressDayIds, completedSessionByDay, absentDayIds } = plan
-  return {
+): Promise<PlanTrainings[]> {
+  const plans = await loadAthletePlans(athleteId, groupId)
+  return plans.map(({ assignment, days, completedDayIds, inProgressDayIds, completedSessionByDay, absentDayIds }) => ({
     assignmentId: assignment.id,
     planName: (assignment as any).plan?.name || 'Plan treningowy',
+    individual: (assignment as any).assignment_type === 'individual',
     trainings: days.map((d: any) => ({
       id: d.id,
       day_name: d.day_name || 'Trening',
@@ -152,7 +168,7 @@ export async function getPlanTrainingsForAthlete(
       absent: absentDayIds.has(d.id),
       training_date: d.training_date ?? null,
     })),
-  }
+  }))
 }
 
 // Czy trener zaznaczył zawodniczce nieobecność na tym treningu (wtedy trening jest zablokowany)

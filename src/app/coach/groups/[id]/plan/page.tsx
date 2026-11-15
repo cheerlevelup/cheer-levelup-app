@@ -54,7 +54,8 @@ export default async function GroupPlanPage({ params }: Props) {
         .in('athlete_id', athleteIds)
         .eq('is_active', true)
     : { data: [] }
-  const allAssignments = [...(groupAssignments || []), ...(athleteAssignments || [])]
+  // plany indywidualne zawodniczek nie są planem grupy
+  const allAssignments = [...(groupAssignments || []), ...(athleteAssignments || [])].filter((a: any) => a.assignment_type !== 'individual')
   const currentPlan = allAssignments[0]?.plan ?? null
 
   let activePlanDays: any[] = []

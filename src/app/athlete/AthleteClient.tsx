@@ -4,7 +4,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Athlete, WorkoutSession, AthleteWorkoutAssignment, WorkoutDay } from '@/types/workout'
-import type { PlanTrainingItem } from '@/lib/training'
+import type { PlanTrainingItem, PlanTrainings } from '@/lib/training'
 import type { GroupTrainingListItem } from '@/lib/athleteGroupTrainingShared'
 import WellnessModal from '@/components/WellnessModal'
 import { C, sans, display, shadow, radius } from '@/lib/athleteTheme'
@@ -17,8 +17,8 @@ interface Props {
     completedCount: number
     totalCount: number
   } | null
-  // wszystkie treningi aktywnego planu — zawodniczka może rozpocząć dowolny
-  planTrainings: { assignmentId: number; planName: string; trainings: PlanTrainingItem[] } | null
+  // treningi aktywnych planów (grupowy + indywidualne) — zawodniczka może rozpocząć dowolny
+  planTrainings: PlanTrainings[]
   // treningi grupy (moduł trenera „Trening grupy") — wpisy wspólne z tabelą trenera
   groupTrainings: GroupTrainingListItem[]
   // dzisiejsza data (YYYY-MM-DD, czas polski) — „Dzisiejszy trening" to trening planu z tą datą
@@ -51,20 +51,18 @@ export default function AthleteClient({ athlete, nextTraining, planTrainings, gr
   const router = useRouter()
   const [wellnessOpen, setWellnessOpen] = useState(false)
   const [wellnessDone, setWellnessDone] = useState(todayWellness.isComplete)
-  const [showAll, setShowAll] = useState(false)
-  const trainings = planTrainings?.trainings || []
-  const multiWeek = new Set(trainings.map(t => t.week_number)).size > 1
+  // „pokaż wszystkie" osobno dla każdego planu (klucz: id przypisania)
+  const [showAll, setShowAll] = useState<Record<number, boolean>>({})
   // ukończony trening (bez rozpoczętej sesji) — edycja wpisów w historii, nie powtórka
-  const startTraining = (t: PlanTrainingItem) => {
-    if (!planTrainings || t.absent) return
+  const startTraining = (t: PlanTrainingItem, assignmentId: number) => {
+    if (t.absent) return
     if (t.completed && !t.inProgress && t.completedSessionId) router.push(`/athlete/history/${t.completedSessionId}`)
-    else router.push(`/athlete/training?day=${t.id}&assignment=${planTrainings.assignmentId}`)
+    else router.push(`/athlete/training?day=${t.id}&assignment=${assignmentId}`)
   }
-  // domyślnie: rozpoczęte i do zrobienia; ukończone po „pokaż wszystkie"
-  // trening z dzisiejszą datą (z edytora planu); brak — karta się nie pokazuje
-  const todayTraining = trainings.find(t => t.training_date === today && !t.absent) || null
+  // trening z dzisiejszą datą (z edytora planu, dowolny aktywny plan); brak — karta się nie pokazuje
+  const todayPlan = planTrainings.find(p => p.trainings.some(t => t.training_date === today && !t.absent)) || null
+  const todayTraining = todayPlan?.trainings.find(t => t.training_date === today && !t.absent) || null
   const shortDate = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString('pl-PL', { weekday: 'short', day: 'numeric', month: 'numeric' })
-  const visibleTrainings = showAll ? trainings : trainings.filter(t => (!t.completed || t.inProgress) && !t.absent)
 
   // Prefetch kluczowych tras przy ładowaniu panelu
   useState(() => {
@@ -143,14 +141,14 @@ export default function AthleteClient({ athlete, nextTraining, planTrainings, gr
           {todayTraining && (
             <button
               className="ath-card"
-              onClick={() => startTraining(todayTraining)}
+              onClick={() => startTraining(todayTraining, todayPlan!.assignmentId)}
               style={{ width: '100%', border: 'none', padding: 0, textAlign: 'left', background: C.navy, borderRadius: 18, overflow: 'hidden', boxShadow: '0 8px 24px rgba(11,18,32,.22)' }}
             >
               <div style={{ padding: '18px 18px 16px', position: 'relative' }}>
                 <div style={{ position: 'absolute', top: 0, right: 0, width: 120, height: 120, background: `radial-gradient(circle at top right, ${C.gold}33, transparent 70%)` }} />
                 <div className="ath-eyebrow" style={{ color: C.gold }}>Dzisiejszy trening · {shortDate(todayTraining.training_date as string)}</div>
                 <div className="ath-display" style={{ fontSize: 34, color: C.white, marginTop: 6 }}>{todayTraining.day_name}</div>
-                <div style={{ fontSize: 14, color: C.gray, marginTop: 4 }}>{planTrainings?.planName || planName}</div>
+                <div style={{ fontSize: 14, color: C.gray, marginTop: 4 }}>{todayPlan?.planName || planName}{todayPlan?.individual ? ' · plan indywidualny' : ''}</div>
                 <div style={{ marginTop: 16, minHeight: 52, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 12, background: todayTraining.completed && !todayTraining.inProgress ? C.green : C.gold, color: C.navy, fontFamily: display, fontWeight: 700, fontSize: 20, letterSpacing: '.02em' }}>
                   {todayTraining.completed && !todayTraining.inProgress ? '✓ Ukończony · popraw wpisy' : todayTraining.inProgress ? 'Kontynuuj trening' : 'Rozpocznij trening'} <span style={{ fontSize: 22 }}>→</span>
                 </div>
@@ -164,16 +162,23 @@ export default function AthleteClient({ athlete, nextTraining, planTrainings, gr
           )}
 
           {/* ── WSZYSTKIE TRENINGI PLANU: dowolny do rozpoczęcia ── */}
-          {trainings.length > 0 && (
-            <section style={{ background: C.white, border: `1px solid ${C.grayLight}`, borderRadius: radius, boxShadow: shadow, overflow: 'hidden' }}>
+          {planTrainings.map(plan => {
+            const trainings = plan.trainings
+            if (trainings.length === 0) return null
+            const multiWeek = new Set(trainings.map(t => t.week_number)).size > 1
+            const planShowAll = !!showAll[plan.assignmentId]
+            // domyślnie: rozpoczęte i do zrobienia; ukończone po „pokaż wszystkie"
+            const visibleTrainings = planShowAll ? trainings : trainings.filter(t => (!t.completed || t.inProgress) && !t.absent)
+            return (
+            <section key={plan.assignmentId} style={{ background: C.white, border: `1px solid ${C.grayLight}`, borderRadius: radius, boxShadow: shadow, overflow: 'hidden' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '14px 16px 8px' }}>
                 <div>
-                  <div className="ath-eyebrow" style={{ color: C.muted, fontSize: 10 }}>Treningi planu</div>
-                  <div className="ath-display" style={{ fontSize: 20, color: C.ink, marginTop: 2 }}>Wybierz trening</div>
+                  <div className="ath-eyebrow" style={{ color: plan.individual ? '#a8650f' : C.muted, fontSize: 10 }}>{plan.individual ? 'Twój plan indywidualny' : 'Treningi planu'}</div>
+                  <div className="ath-display" style={{ fontSize: 20, color: C.ink, marginTop: 2 }}>{planTrainings.length > 1 ? plan.planName : 'Wybierz trening'}</div>
                 </div>
                 {trainings.some(t => (t.completed && !t.inProgress) || t.absent) && (
-                  <button onClick={() => setShowAll(v => !v)} style={{ flexShrink: 0, border: `1px solid ${C.grayLight}`, background: C.offWhite, color: C.muted, borderRadius: 999, padding: '6px 12px', fontSize: 12, fontWeight: 600 }}>
-                    {showAll ? 'Pokaż tylko do zrobienia' : `Pokaż wszystkie (${trainings.length})`}
+                  <button onClick={() => setShowAll(v => ({ ...v, [plan.assignmentId]: !planShowAll }))} style={{ flexShrink: 0, border: `1px solid ${C.grayLight}`, background: C.offWhite, color: C.muted, borderRadius: 999, padding: '6px 12px', fontSize: 12, fontWeight: 600 }}>
+                    {planShowAll ? 'Pokaż tylko do zrobienia' : `Pokaż wszystkie (${trainings.length})`}
                   </button>
                 )}
               </div>
@@ -189,7 +194,7 @@ export default function AthleteClient({ athlete, nextTraining, planTrainings, gr
                   : isNext ? { label: 'następny', fg: C.navy, bg: '#fdf3e2', bd: C.gold }
                   : null
                 return (
-                  <button key={t.id} className={t.absent ? undefined : 'ath-card'} onClick={() => startTraining(t)} disabled={t.absent}
+                  <button key={t.id} className={t.absent ? undefined : 'ath-card'} onClick={() => startTraining(t, plan.assignmentId)} disabled={t.absent}
                     title={t.absent ? 'Trener zaznaczył nieobecność na tym treningu — nie można go uzupełnić' : undefined}
                     style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, minHeight: 56, padding: '10px 16px', border: 'none', borderTop: `1px solid ${C.grayLight}`, background: isNext ? '#fffaf0' : C.white, textAlign: 'left', opacity: t.absent ? 0.6 : 1, cursor: t.absent ? 'not-allowed' : 'pointer' }}>
                     <div style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: t.completed && !t.inProgress ? '#ecfaf3' : isNext ? C.gold : C.offWhite, color: t.completed && !t.inProgress ? '#1f9d68' : C.navy, fontFamily: display, fontWeight: 700, fontSize: 16 }}>
@@ -205,7 +210,8 @@ export default function AthleteClient({ athlete, nextTraining, planTrainings, gr
                 )
               })}
             </section>
-          )}
+            )
+          })}
 
           {/* ── TRENINGI GRUPY ── */}
           {groupTrainings.length > 0 && (

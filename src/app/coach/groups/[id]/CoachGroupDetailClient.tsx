@@ -10,6 +10,7 @@ import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { Card, Modal, Field, Button, TabsNav, SegmentedControl, StatsTable } from '@/components/coach/ui'
 import GroupHero from '@/components/coach/GroupHero'
 import { dedupeLogs } from '@/lib/coach/dedupeLogs'
+import { deactivateGroupAssignments, insertAssignments } from '@/lib/coach/planAssignments'
 
 const thStyle: React.CSSProperties = { padding: '0.75rem 0.5rem', textAlign: 'center', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.6rem', color: 'var(--muted-light)', background: 'var(--bg)', borderBottom: `1.5px solid var(--border)`, whiteSpace: 'nowrap', minWidth: 44 }
 function tdWs(bg: string): React.CSSProperties { return { padding: '0.4rem 0.5rem', textAlign: 'center', borderBottom: `1.5px solid var(--border)`, background: bg, verticalAlign: 'middle' } }
@@ -41,11 +42,8 @@ function AssignPlanModal({ athletes, plans, groupId, onClose, onAssigned }: {
     if (!selectedPlanId || selectedAthletes.length === 0) return
     setSaving(true); setError('')
     try {
-      // Dezaktywuj przypisania indywidualne dla wybranych zawodniczek
-      await supabase.from('athlete_workout_assignments')
-        .update({ is_active: false })
-        .in('athlete_id', selectedAthletes)
-        .eq('is_active', true)
+      // Dezaktywuj dotychczasowe plany grupowe wybranych zawodniczek (indywidualne zostają)
+      await deactivateGroupAssignments(supabase, selectedAthletes)
 
       // Dezaktywuj przypisania grupowe (group_id) — żeby nie było duplikatów
       await supabase.from('athlete_workout_assignments')
@@ -53,15 +51,11 @@ function AssignPlanModal({ athletes, plans, groupId, onClose, onAssigned }: {
         .eq('group_id', groupId)
         .eq('is_active', true)
 
-      const rows = selectedAthletes.map(athleteId => ({
+      await insertAssignments(supabase, selectedAthletes.map(athleteId => ({
         athlete_id: athleteId,
         plan_id: parseInt(selectedPlanId),
-        is_active: true,
         order_mode: orderMode,
-        start_date: new Date().toISOString().split('T')[0],
-      }))
-      const { error: err } = await supabase.from('athlete_workout_assignments').insert(rows)
-      if (err) throw err
+      })), 'group')
       onAssigned()
       onClose()
     } catch (e: unknown) {

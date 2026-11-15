@@ -880,7 +880,8 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
   const supabase = createClient()
   const catalog = useExerciseCatalog()
   // Plan grupy samodzielnej wraca do zakładki Plan tej grupy, ogólny — do listy planów
-  const backHref = plan.group_id ? `/coach/groups/${plan.group_id}/plan` : '/coach/plans'
+  // plan indywidualny wraca do zawodniczki w zakładce Plany
+  const backHref = plan.group_id ? `/coach/groups/${plan.group_id}/plan` : (plan as any).athlete_id ? `/coach/plans?a=${(plan as any).athlete_id}` : '/coach/plans'
   const { sidebarCollapsed, setSidebarCollapsed } = usePageMeta()
 
   const [planName, setPlanName] = useState(plan.name)

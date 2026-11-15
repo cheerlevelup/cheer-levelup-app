@@ -45,15 +45,15 @@ export default async function GroupStatsPage({ params }: Props) {
   if (!isManaged && athleteIdsForSelf.length > 0) {
     const { data: groupAssignments } = await supabase
       .from('athlete_workout_assignments')
-      .select('plan_id')
+      .select('*')
       .eq('group_id', groupId)
       .eq('is_active', true)
     const { data: athleteAssignments } = await supabase
       .from('athlete_workout_assignments')
-      .select('plan_id')
+      .select('*')
       .in('athlete_id', athleteIdsForSelf)
       .eq('is_active', true)
-    const allAssignments = [...(groupAssignments || []), ...(athleteAssignments || [])]
+    const allAssignments = [...(groupAssignments || []), ...(athleteAssignments || [])].filter((a: any) => a.assignment_type !== 'individual')
     const currentPlanId = allAssignments[0]?.plan_id ?? null
 
     if (currentPlanId) {

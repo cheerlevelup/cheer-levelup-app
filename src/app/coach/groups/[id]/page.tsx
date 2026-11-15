@@ -73,7 +73,8 @@ export default async function CoachGroupDetailPage({ params }: Props) {
     .in('athlete_id', athleteIds)
     .eq('is_active', true)
 
-  const allAssignments = [...(groupAssignments || []), ...(athleteAssignments || [])]
+  // plany indywidualne zawodniczek nie są planem grupy
+  const allAssignments = [...(groupAssignments || []), ...(athleteAssignments || [])].filter((a: any) => a.assignment_type !== 'individual')
 
   // Historia wszystkich przypisań (aktywne + archiwalne)
   const { data: allGroupAssignmentsHistory } = await supabase

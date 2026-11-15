@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { Card, Button } from '@/components/coach/ui'
 import { Plus, Pencil, ClipboardEdit, Check } from 'lucide-react'
+import { deactivateGroupAssignments, insertAssignments } from '@/lib/coach/planAssignments'
 
 export type GroupPlanDay = { id: number; day_name: string | null; day_order: number; week_number: number; done: number; absent?: number }
 export type GroupPlanItem = { id: number; name: string; is_archived: boolean; owned: boolean; days: GroupPlanDay[] }
@@ -31,19 +32,13 @@ export default function GroupPlansPanel({ groupId, athletes, plans, currentPlanI
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
-  // Plan aktywny dla wszystkich zawodniczek grupy (jak „Przypisz plan" w Treningach)
+  // Plan aktywny dla wszystkich zawodniczek grupy (jak „Przypisz plan" w Treningach).
+  // Plany indywidualne zawodniczek zostają aktywne.
   async function assignToGroup(planId: number) {
     const ids = athletes.map(a => a.id)
-    if (ids.length) {
-      await supabase.from('athlete_workout_assignments').update({ is_active: false }).in('athlete_id', ids).eq('is_active', true)
-    }
+    await deactivateGroupAssignments(supabase, ids)
     await supabase.from('athlete_workout_assignments').update({ is_active: false }).eq('group_id', groupId).eq('is_active', true)
-    if (!ids.length) return
-    const { error: err } = await supabase.from('athlete_workout_assignments').insert(ids.map(athleteId => ({
-      athlete_id: athleteId, plan_id: planId, is_active: true, order_mode: 'sequential',
-      start_date: new Date().toISOString().split('T')[0],
-    })))
-    if (err) throw err
+    await insertAssignments(supabase, ids.map(athleteId => ({ athlete_id: athleteId, plan_id: planId })), 'group')
   }
 
   async function handleCreate() {
