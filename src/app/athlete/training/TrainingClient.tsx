@@ -802,33 +802,26 @@ function WellnessExpanded({ sessionId, athleteId, existingWellness, preFields, o
         // Krótki opis wg wartości
         const desc = getWellnessDesc(f.key, val, f.max)
         return (
-          <div key={f.key} style={{ marginBottom: '1rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 2 }}>
-              <div>
-                <span style={{ fontSize: '0.84rem', fontWeight: 700, color: C.navy }}>{f.label}</span>
-                {f.hint && <div style={{ fontSize: '0.68rem', color: C.gray, marginTop: 1, lineHeight: 1.3 }}>{f.hint}</div>}
-              </div>
-              <span style={{ fontFamily: mono, fontSize: '0.9rem', fontWeight: 800, color: sliderColor, flexShrink: 0, marginLeft: 8 }}>{val}{f.unit}</span>
+          <div key={f.key} title={f.hint} style={{ display: 'grid', gridTemplateColumns: '88px 1fr 52px', alignItems: 'center', columnGap: 8, padding: '0.3rem 0', borderBottom: '1px solid #F0F4F8' }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: C.navy, lineHeight: 1.15 }}>{f.label}</div>
+              {desc && <div style={{ fontSize: '0.62rem', fontWeight: 600, color: sliderColor, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{desc}</div>}
             </div>
-            <input type="range" min={f.min} max={f.max} step={f.step} value={val}
+            <input type="range" min={f.min} max={f.max} step={f.step} value={val} aria-label={f.label}
               onChange={e => setVals(v => ({ ...v, [f.key]: parseFloat(e.target.value) }))}
-              style={{ width: '100%', accentColor: sliderColor, height: 6 }} />
-            {desc && (
-              <div style={{ fontSize: '0.7rem', fontWeight: 600, color: sliderColor, marginTop: 2, textAlign: 'center' }}>
-                {desc}
-              </div>
-            )}
+              style={{ width: '100%', accentColor: sliderColor, height: 6, margin: 0 }} />
+            <span style={{ fontFamily: mono, fontSize: '0.82rem', fontWeight: 800, color: sliderColor, textAlign: 'right' }}>{val}{f.unit}</span>
           </div>
         )
       })}
       <textarea placeholder="Uwagi dla trenera..." value={concerns} onChange={e => setConcerns(e.target.value)} rows={2}
-        style={{ width: '100%', padding: '0.625rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.85rem', color: C.navy, resize: 'none', outline: 'none', marginBottom: 8, boxSizing: 'border-box' }} />
+        style={{ width: '100%', padding: '0.5rem 0.625rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.85rem', color: C.navy, resize: 'none', outline: 'none', margin: '0.6rem 0 8px', boxSizing: 'border-box' }} />
       {saveError && (
         <div style={{ color: C.red, fontSize: '0.78rem', fontWeight: 600, marginBottom: 6, padding: '0.5rem', background: '#FEF2F2', borderRadius: 8 }}>
           ❌ {saveError}
         </div>
       )}
-      <button onClick={save} style={{ width: '100%', padding: '0.75rem', background: saved ? C.green : C.navy, color: saved ? '#fff' : C.gold, border: 'none', borderRadius: 10, fontFamily: sans, fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer' }}>
+      <button onClick={save} style={{ width: '100%', padding: '0.6rem', background: saved ? C.green : C.navy, color: saved ? '#fff' : C.gold, border: 'none', borderRadius: 10, fontFamily: sans, fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer' }}>
         {saved ? '✓ Zapisano' : 'Zapisz wellness'}
       </button>
     </div>
