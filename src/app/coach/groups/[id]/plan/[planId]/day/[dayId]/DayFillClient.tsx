@@ -8,6 +8,7 @@
 //  - ból → pain_logs (pain_location = nazwa ćwiczenia, jak u zawodniczki)
 //  - „zakończony" → workout_sessions.completed (zaznacza trener albo zawodniczka)
 import PlanModeSwitch, { editorHref, rememberFillDay } from '@/components/coach/PlanModeSwitch'
+import { useLiveRefresh } from '@/lib/useLiveRefresh'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
@@ -152,6 +153,8 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
   useEffect(() => { rememberFillDay(plan.id, day.id) }, [plan.id, day.id])
   const [saving, setSaving] = useState(0)
   const [cellEdit, setCellEdit] = useState<{ key: string; type: 'note' | 'pain' } | null>(null)
+  // ciężary wpisywane przez zawodniczki w trakcie treningu (bez odświeżania, gdy trener pisze lub zapis trwa)
+  useLiveRefresh(15000, saving === 0 && !cellEdit)
   const sessionPromises = useRef<Map<number, Promise<Session | null>>>(new Map())
   const boardRef = useRef<HTMLDivElement>(null)
 

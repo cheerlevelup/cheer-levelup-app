@@ -4,7 +4,9 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
-import { Dumbbell, Upload, X } from 'lucide-react'
+import { Dumbbell, Upload, X, ClipboardList, Play } from 'lucide-react'
+import StartPlanTrainingModal, { type StartPlanOption } from '@/components/coach/StartPlanTrainingModal'
+import { fillHref } from '@/components/coach/PlanModeSwitch'
 import { localDateStr, formatDatePl, linkLogsToTraining } from '@/lib/groupTraining'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { TabsNav, Card, Modal, Field, Button } from '@/components/coach/ui'
@@ -14,10 +16,14 @@ type Group = { id: number; name: string; group_type?: string }
 type Athlete = { id: number; full_name: string; birth_year?: number | null }
 type Training = { id: number; group_id: number; training_date: string; created_at: string }
 
+type PlanTraining = { id: number; plan_id: number; plan_name: string; day_name: string | null; training_date: string }
+
 interface Props {
   group: Group
   athletes: Athlete[]
   trainings: Training[]
+  startPlans?: StartPlanOption[]
+  planTrainings?: PlanTraining[]
 }
 
 type SetCell = { weight?: string; skipped?: boolean }
@@ -371,16 +377,19 @@ function ImportTrainingModal({ group, athletes, onClose }: { group: Group; athle
   )
 }
 
-export default function ManagedGroupClient({ group, athletes, trainings }: Props) {
+export default function ManagedGroupClient({ group, athletes, trainings, startPlans = [], planTrainings = [] }: Props) {
   const router = useRouter()
   const supabase = createClient()
   const [importOpen, setImportOpen] = useState(false)
+  const [startOpen, setStartOpen] = useState(false)
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState('')
   const [deletingId, setDeletingId] = useState<number | null>(null)
 
   const today = localDateStr()
   const todayTraining = trainings.find(t => t.training_date === today)
+  // trening z planu rozpoczęty dziś (ma dzisiejszą datę) — kontynuacja wpisywania
+  const todayPlanTraining = planTrainings.find(t => t.training_date === today)
 
   async function handleStartTraining() {
     setStarting(true); setError('')
@@ -412,12 +421,32 @@ export default function ManagedGroupClient({ group, athletes, trainings }: Props
   }
 
   const actionTiles = [
+    todayPlanTraining
+      ? {
+          label: `Kontynuuj trening: ${todayPlanTraining.day_name || 'Trening'}`,
+          desc: `${todayPlanTraining.plan_name} · tabela wyników`,
+          icon: <Play size={16} />,
+          onClick: () => router.push(fillHref(group.id, todayPlanTraining.plan_id, todayPlanTraining.id)),
+          primary: true,
+        }
+      : {
+          label: 'Rozpocznij trening',
+          desc: 'Wybierz plan i trening, sprawdź obecność',
+          icon: <Play size={16} />,
+          onClick: () => setStartOpen(true),
+          primary: true,
+        },
+    ...(todayPlanTraining ? [{
+      label: 'Rozpocznij inny trening z planu',
+      desc: 'Wybierz plan i trening, sprawdź obecność',
+      icon: <ClipboardList size={16} />,
+      onClick: () => setStartOpen(true),
+    }] : []),
     {
-      label: todayTraining ? 'Kontynuuj dzisiejszy trening' : 'Rozpocznij trening',
-      desc: 'Zapisz nową sesję treningową dla całej grupy',
+      label: todayTraining ? 'Kontynuuj dzisiejszy trening bez planu' : 'Trening bez planu',
+      desc: 'Pusta tabela — ćwiczenia wpisujesz ręcznie',
       icon: <Dumbbell size={16} />,
       onClick: handleStartTraining,
-      primary: true,
     },
     {
       label: 'Wgraj trening z archiwum',
@@ -456,19 +485,39 @@ export default function ManagedGroupClient({ group, athletes, trainings }: Props
               <button
                 key={tile.label}
                 onClick={tile.onClick}
-                disabled={tile.primary && starting}
+                disabled={tile.onClick === handleStartTraining && starting}
                 className={`coach-group-action-btn ${tile.primary ? 'coach-primary' : ''}`}
               >
                 <span className="coach-gab-icon">{tile.icon}</span>
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div className="coach-gab-title">{tile.primary && starting ? 'Otwieram...' : tile.label}</div>
+                  <div className="coach-gab-title">{tile.onClick === handleStartTraining && starting ? 'Otwieram...' : tile.label}</div>
                   <div className="coach-gab-sub">{tile.desc}</div>
                 </div>
               </button>
             ))}
           </div>
 
-          <Card style={{ marginTop: 14 }}>
+          {planTrainings.length > 0 && (
+            <Card style={{ marginTop: 14 }} title="Treningi z planu" sub="Kliknij, aby otworzyć tabelę wyników">
+              <div style={{ padding: '10px 14px' }}>
+                {planTrainings.map(t => (
+                  <div key={t.id} className="coach-training-list-item">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', flex: 1, flexWrap: 'wrap' }} onClick={() => router.push(fillHref(group.id, t.plan_id, t.id))}>
+                      <span className="coach-training-date">{t.training_date}</span>
+                      <span className="coach-training-weekday">{t.day_name || 'Trening'} · {t.plan_name}</span>
+                      {t.training_date === today && (
+                        <span style={{ fontSize: '0.58rem', fontWeight: 700, color: '#15803D', background: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: 6, padding: '2px 7px' }}>
+                          dziś
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          <Card style={{ marginTop: 14 }} title={planTrainings.length > 0 ? 'Treningi bez planu' : undefined}>
             {trainings.length === 0 ? (
               <div className="coach-empty-list">Jeszcze nie było żadnego treningu. Kliknij „Rozpocznij trening”.</div>
             ) : (
@@ -494,6 +543,10 @@ export default function ManagedGroupClient({ group, athletes, trainings }: Props
           </Card>
         </div>
       </div>
+
+      {startOpen && (
+        <StartPlanTrainingModal groupId={group.id} athletes={athletes} plans={startPlans} onClose={() => setStartOpen(false)} />
+      )}
 
       {importOpen && (
         <ImportTrainingModal group={group} athletes={athletes} onClose={() => setImportOpen(false)} />

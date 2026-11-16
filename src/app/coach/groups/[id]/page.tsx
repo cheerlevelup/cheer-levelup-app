@@ -45,11 +45,45 @@ export default async function CoachGroupDetailPage({ params }: Props) {
       .eq('group_id', groupId)
       .order('training_date', { ascending: false })
 
+    // Plany do „Rozpocznij trening": aktywny plan grupy, wcześniejsze plany grupy, biblioteka
+    const ids = athletes.map((a: any) => a.id)
+    const [{ data: groupAssign }, { data: allPlans }] = await Promise.all([
+      ids.length
+        ? supabase.from('athlete_workout_assignments').select('*').in('athlete_id', ids).order('created_at', { ascending: false })
+        : Promise.resolve({ data: [] as any[] }),
+      supabase.from('workout_plans').select('*').order('created_at', { ascending: false }),
+    ])
+    const grp = ((groupAssign || []) as any[]).filter(a => a.assignment_type !== 'individual')
+    const counts = new Map<number, number>()
+    for (const a of grp) if (a.is_active) counts.set(a.plan_id, (counts.get(a.plan_id) || 0) + 1)
+    const activePlanId = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+    const groupPlanIds = new Set([...grp.map(a => a.plan_id), ...((allPlans || []) as any[]).filter(p => p.group_id === groupId).map(p => p.id)])
+    const startPlans = ((allPlans || []) as any[])
+      .filter(p => p.id === activePlanId || groupPlanIds.has(p.id) || (!p.group_id && !p.athlete_id && !p.is_archived))
+      .map(p => ({ id: p.id as number, name: p.name as string, tag: (p.id === activePlanId ? 'active' : groupPlanIds.has(p.id) ? 'group' : 'library') as 'active' | 'group' | 'library' }))
+
+    // Treningi z planów grupy z ustawioną datą (rozpoczęte) — do kontynuowania / listy
+    let planTrainings: { id: number; plan_id: number; plan_name: string; day_name: string | null; training_date: string }[] = []
+    if (groupPlanIds.size) {
+      const { data: weeks } = await supabase.from('workout_weeks').select('id, plan_id').in('plan_id', [...groupPlanIds])
+      const planByWeek = new Map(((weeks || []) as any[]).map(w => [w.id, w.plan_id]))
+      const { data: dated } = planByWeek.size
+        ? await supabase.from('workout_days').select('id, week_id, day_name, training_date').in('week_id', [...planByWeek.keys()]).not('training_date', 'is', null).order('training_date', { ascending: false }).limit(30)
+        : { data: [] as any[] }
+      const nameById = new Map(((allPlans || []) as any[]).map(p => [p.id, p.name]))
+      planTrainings = ((dated || []) as any[]).map(d => {
+        const pid = planByWeek.get(d.week_id)
+        return { id: d.id, plan_id: pid, plan_name: nameById.get(pid) || 'Plan', day_name: d.day_name, training_date: d.training_date }
+      })
+    }
+
     return (
       <ManagedGroupClient
         group={group}
         athletes={athletes || []}
         trainings={trainings || []}
+        startPlans={startPlans}
+        planTrainings={planTrainings}
       />
     )
   }

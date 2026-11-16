@@ -7,6 +7,7 @@ import type { Athlete, WorkoutSession, AthleteWorkoutAssignment, WorkoutDay } fr
 import type { PlanTrainingItem, PlanTrainings } from '@/lib/training'
 import type { GroupTrainingListItem } from '@/lib/athleteGroupTrainingShared'
 import WellnessModal from '@/components/WellnessModal'
+import { useLiveRefresh } from '@/lib/useLiveRefresh'
 import { C, sans, display, shadow, radius } from '@/lib/athleteTheme'
 
 interface Props {
@@ -50,6 +51,8 @@ function formatLongDate(iso: string): string {
 export default function AthleteClient({ athlete, nextTraining, planTrainings, groupTrainings, today, history, todayWellness, wellnessEnabled, wellnessFields }: Props) {
   const router = useRouter()
   const [wellnessOpen, setWellnessOpen] = useState(false)
+  // trening rozpoczęty przez trenera pojawia się bez przeładowania strony
+  useLiveRefresh(15000, !wellnessOpen)
   const [wellnessDone, setWellnessDone] = useState(todayWellness.isComplete)
   // „pokaż wszystkie" osobno dla każdego planu (klucz: id przypisania)
   const [showAll, setShowAll] = useState<Record<number, boolean>>({})

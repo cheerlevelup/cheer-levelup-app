@@ -6,7 +6,6 @@ import { sortWithVariants, variantLabels } from '@/lib/exerciseVariants'
 import { fmtRange, isoPowtLines, repsLines, eccTempoLines } from '@/lib/coach/planFormat'
 import { buildPlanPdf, loadPdfFonts, loadPdfLogo } from '@/lib/coach/planPdf'
 import { EXERCISE_CATALOG_LIST_ID } from '@/lib/exerciseCatalog'
-import Link from 'next/link'
 import PlanModeSwitch, { fillHref, lastFillDay } from '@/components/coach/PlanModeSwitch'
 import { emptySkipState, loadSkipState, setSkipped, sessKey, skipLogKey, ovKey, type SkipState } from '@/lib/coach/groupSkipped'
 
@@ -426,7 +425,10 @@ export default function PlanTableView(props: Props) {
     return () => clearTimeout(t)
   }, [plan.id])
   const orderedDays = [...weeks].sort((a, b) => a.week_number - b.week_number).flatMap(w => allDays.filter(d => d.week_id === w.id))
-  const fillDayId = savedFillDay && days.some(d => d.id === savedFillDay) ? savedFillDay : orderedDays[0]?.id
+  // Edytor służy tylko do tworzenia planu — wyniki wpisuje się po „Rozpocznij trening” w grupie.
+  // Przełącznik wraca do ostatnio rozpoczętego treningu (jeśli był).
+  const fillDayId = savedFillDay && orderedDays.some(d => d.id === savedFillDay) ? savedFillDay : null
+  const RESULTS_IN_EDITOR = false
 
   // ── Niewykonane (plan grupy) ──
   // Trener zaznacza, że ćwiczenie albo seria nie zostały zrobione — zapis w seriach zawodniczek
@@ -442,7 +444,7 @@ export default function PlanTableView(props: Props) {
   }
   const [skipBusy, setSkipBusy] = useState<string | null>(null)
   const [skipError, setSkipError] = useState('')
-  const skipLoadKey = groupId != null
+  const skipLoadKey = RESULTS_IN_EDITOR && groupId != null
     ? `${days.map(d => d.id).join(',')}|${blocks.flatMap(b => (b.workout_block_exercises || []).map(e => e.id)).join(',')}|${props.athletes.map(a => a.id).join(',')}`
     : ''
   useEffect(() => {
@@ -608,7 +610,7 @@ export default function PlanTableView(props: Props) {
         </div>
       )}
       {/* toolbar */}
-      {groupId != null && (
+      {groupId != null && fillDayId != null && (
         <div style={{ marginBottom: 10 }}>
           <PlanModeSwitch mode="editor" editorLink="#" fillLink={fillDayId ? fillHref(groupId, plan.id, fillDayId) : null} />
         </div>
@@ -669,9 +671,6 @@ export default function PlanTableView(props: Props) {
                           />
                         </label>
                         <button className="coach-btn coach-btn-ghost coach-btn-small" onClick={() => onAddBlock(day.id)}>+ Blok</button>
-                        {groupId != null && (
-                          <Link href={fillHref(groupId, plan.id, day.id)} className="coach-btn coach-btn-gold coach-btn-small" style={{ textDecoration: 'none' }} title="Wpisuj wyniki zawodniczek w tym treningu">📝 Wpisuj wyniki</Link>
-                        )}
                         {props.clipboard?.kind === 'block' && (
                           <button style={{ ...iconBtn, color: 'var(--gold)', fontWeight: 700 }} title="Wklej skopiowany blok na koniec tego treningu (Ctrl+V)" onClick={() => pasteInto(day.id, null)}>📋 wklej blok „{props.clipboard.name}”</button>
                         )}
@@ -797,7 +796,7 @@ export default function PlanTableView(props: Props) {
                                 ...exs.map((ex, i) => {
                                   const name = fmtName(ex.exercise?.name || ex.exercise_code || '')
                                   const isoReps = !!ex.iso
-                                  const sk = groupId != null && ex.id != null ? skipStatus(day.id, ex, exs) : null
+                                  const sk = RESULTS_IN_EDITOR && groupId != null && ex.id != null ? skipStatus(day.id, ex, exs) : null
                                   const skRow = `${day.id}_${ex.id}`
                                   const skSets = sk ? sk.perSet.map((p, k) => (p.total > 0 && p.skipped === p.total ? `S${k + 1}` : null)).filter(Boolean) : []
                                   return (
