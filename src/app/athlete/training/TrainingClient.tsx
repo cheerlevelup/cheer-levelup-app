@@ -373,66 +373,135 @@ function VideoModal({ exerciseName, exerciseUrl, onClose }: { exerciseName: stri
 
 // ─── FLOATING TIMER ───────────────────────────────────────────────────────────
 
+const TIMER_PRESETS = [30, 60, 90, 120, 180]
+
 function FloatingTimer() {
   const [open, setOpen] = useState(false)
-  const [seconds, setSeconds] = useState(0)
-  const [running, setRunning] = useState(false)
-  const [preset, setPreset] = useState(90)
-  const [countdown, setCountdown] = useState(false)
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [mode, setMode] = useState<'countdown' | 'stopwatch'>('countdown')
+  const [target, setTarget] = useState(90)           // sekundy (odliczanie)
+  const [accMs, setAccMs] = useState(0)               // czas zebrany przed ostatnim startem
+  const [startedAt, setStartedAt] = useState<number | null>(null)
+  const [now, setNow] = useState(0)
+  const notifiedRef = useRef(false)
+
+  const running = startedAt !== null
+  // Liczone z zegara, więc nie gubi czasu gdy telefon uśpi kartę
+  const elapsedMs = accMs + (running ? Math.max(0, now - startedAt) : 0)
+  const elapsed = Math.floor(elapsedMs / 1000)
+  const remaining = Math.max(0, target - elapsed)
+  const displayed = mode === 'countdown' ? remaining : elapsed
+  const isFinished = mode === 'countdown' && running && remaining === 0
 
   useEffect(() => {
-    if (running) { intervalRef.current = setInterval(() => setSeconds(s => s + 1), 1000) }
-    else { if (intervalRef.current) clearInterval(intervalRef.current) }
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
+    if (!running) return
+    const id = setInterval(() => setNow(Date.now()), 250)
+    return () => clearInterval(id)
   }, [running])
 
-  const fmt = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
-  const reset = () => { setSeconds(0); setRunning(false) }
-  const startPreset = (p: number) => { setPreset(p); setSeconds(0); setRunning(true) }
-  const displayed = countdown ? Math.max(0, preset - seconds) : seconds
-  const isFinished = countdown && displayed === 0
+  useEffect(() => {
+    if (isFinished && !notifiedRef.current) {
+      notifiedRef.current = true
+      try { navigator.vibrate?.([300, 150, 300]) } catch {}
+    }
+    if (!isFinished) notifiedRef.current = false
+  }, [isFinished])
+
+  const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+  const presetLabel = (p: number) => p < 60 ? `${p}s` : p % 60 ? `${Math.floor(p / 60)}:${String(p % 60).padStart(2, '0')}` : `${p / 60} min`
+
+  const start = () => { const t = Date.now(); setNow(t); setStartedAt(t) }
+  const pause = () => { setAccMs(accMs + Math.max(0, Date.now() - (startedAt ?? Date.now()))); setStartedAt(null) }
+  const reset = () => { setAccMs(0); setStartedAt(null) }
+  const startCountdown = (p: number) => { setMode('countdown'); setTarget(p); setAccMs(0); start() }
+  const switchMode = (m: 'countdown' | 'stopwatch') => { if (m !== mode) { setMode(m); reset() } }
+  const adjust = (delta: number) => setTarget(t => Math.max(5, t + delta))
+
+  // Pierścień postępu (odliczanie)
+  const R = 92, CIRC = 2 * Math.PI * R
+  const frac = mode === 'countdown' ? (target > 0 ? remaining / target : 0) : (elapsed % 60) / 60
+  const accent = isFinished ? C.green : running ? C.gold : '#8A9BB0'
+
+  const chip = (active: boolean): React.CSSProperties => ({
+    padding: '10px 0', borderRadius: 10, cursor: 'pointer', fontFamily: mono, fontWeight: 700, fontSize: '0.8rem',
+    background: active ? C.gold : 'rgba(255,255,255,0.06)', color: active ? C.navy : C.white,
+    border: `1px solid ${active ? C.gold : 'rgba(255,255,255,0.08)'}`,
+  })
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} aria-label="Otwórz timer"
+        style={{ position: 'fixed', bottom: 96, right: 16, zIndex: 50, height: 52, minWidth: 52, padding: running ? '0 16px 0 12px' : 0, borderRadius: 26, background: isFinished ? C.green : C.navy, border: `2px solid ${isFinished ? C.green : C.gold}`, boxShadow: '0 4px 20px rgba(13,27,42,0.25)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: sans }}>
+        <span style={{ fontSize: '1.15rem' }}>{isFinished ? '✅' : '⏱️'}</span>
+        {running && <span style={{ fontFamily: mono, fontSize: '0.95rem', color: isFinished ? '#fff' : C.gold, fontWeight: 800 }}>{fmt(displayed)}</span>}
+      </button>
+    )
+  }
 
   return (
-    <div onClick={() => setOpen(!open)}
-      style={{ position: 'fixed', bottom: open ? 'auto' : 96, top: open ? 0 : 'auto', right: open ? 0 : 16, width: open ? '100%' : 52, height: open ? 'auto' : 52, maxWidth: open ? 480 : 'none', background: isFinished ? C.green : C.navy, borderRadius: open ? 0 : '50%', border: open ? 'none' : `2px solid ${isFinished ? C.green : C.gold}`, cursor: 'pointer', zIndex: 50, display: 'flex', flexDirection: open ? 'column' : 'row', alignItems: 'center', justifyContent: open ? 'stretch' : 'center', boxShadow: open ? 'none' : '0 4px 20px rgba(13,27,42,0.25)', fontFamily: sans }}>
-      {!open ? (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-          <span style={{ fontSize: '1.1rem' }}>{isFinished ? '✅' : '⏱️'}</span>
-          {running && <span style={{ fontFamily: mono, fontSize: '0.55rem', color: isFinished ? '#fff' : C.gold, fontWeight: 700 }}>{fmt(displayed)}</span>}
+    <div onClick={() => setOpen(false)}
+      style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(8,16,28,0.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: sans }}>
+      <div onClick={e => e.stopPropagation()}
+        style={{ width: '100%', maxWidth: 440, background: C.navy, borderRadius: '22px 22px 0 0', padding: '10px 20px calc(20px + env(safe-area-inset-bottom))', boxShadow: '0 -8px 30px rgba(0,0,0,0.3)', boxSizing: 'border-box' }}>
+        {/* uchwyt + zamknij */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div style={{ width: 36 }} />
+          <div style={{ width: 40, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)' }} />
+          <button onClick={() => setOpen(false)} aria-label="Zamknij timer"
+            style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.08)', color: C.white, fontSize: '1.1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
         </div>
-      ) : (
-        <div style={{ background: C.navy, width: '100%', padding: '1rem 1.25rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-            <span style={{ fontWeight: 800, fontSize: '0.9rem', color: C.white }}>⏱️ Timer</span>
-            <button onClick={e => { e.stopPropagation(); setOpen(false) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.gray, fontSize: '1.2rem', lineHeight: 1 }}>×</button>
-          </div>
-          <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
-            <div style={{ fontFamily: mono, fontSize: '3.5rem', fontWeight: 700, color: isFinished ? C.green : running ? C.gold : C.white, lineHeight: 1 }}>{fmt(displayed)}</div>
-            {isFinished && <div style={{ color: C.green, fontWeight: 700, fontSize: '0.9rem', marginTop: 4 }}>Czas minął! 🎉</div>}
-            {!isFinished && countdown && running && (
-              <div style={{ marginTop: 8, height: 4, background: C.navyBorder, borderRadius: 2, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${((preset - seconds) / preset) * 100}%`, background: C.gold, borderRadius: 2, transition: 'width 1s linear' }} />
-              </div>
-            )}
-          </div>
-          <div style={{ display: 'flex', gap: 8, marginBottom: '1rem' }}>
-            <button onClick={e => { e.stopPropagation(); setRunning(!running) }} style={{ flex: 1, padding: '0.75rem', background: running ? C.gold : C.green, color: C.navy, border: 'none', borderRadius: 10, fontFamily: sans, fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer' }}>{running ? '⏸ Pauza' : '▶ Start'}</button>
-            <button onClick={e => { e.stopPropagation(); reset() }} style={{ padding: '0.75rem 1rem', background: C.navyLight, color: C.gray, border: 'none', borderRadius: 10, fontFamily: sans, fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer' }}>Reset</button>
-          </div>
-          <div style={{ marginBottom: '0.75rem' }}>
-            <div style={{ fontSize: '0.65rem', fontWeight: 700, color: C.gray, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8, fontFamily: mono }}>Szybki start</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {[30, 60, 90, 120, 180].map(p => (
-                <button key={p} onClick={e => { e.stopPropagation(); setCountdown(true); startPreset(p) }} style={{ padding: '6px 12px', background: C.navyLight, border: `1.5px solid ${C.navyBorder}`, borderRadius: 8, fontFamily: mono, fontSize: '0.75rem', color: C.gold, cursor: 'pointer', fontWeight: 700 }}>
-                  {p < 60 ? `${p}s` : `${p / 60}min`}
-                </button>
-              ))}
-              <button onClick={e => { e.stopPropagation(); setCountdown(false); setSeconds(0); setRunning(true) }} style={{ padding: '6px 12px', background: C.navyLight, border: `1.5px solid ${C.navyBorder}`, borderRadius: 8, fontFamily: mono, fontSize: '0.75rem', color: C.gray, cursor: 'pointer' }}>stoper</button>
+
+        {/* tryb */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: 4, marginBottom: 16 }}>
+          {(['countdown', 'stopwatch'] as const).map(m => (
+            <button key={m} onClick={() => switchMode(m)}
+              style={{ padding: '8px 0', borderRadius: 9, border: 'none', cursor: 'pointer', fontFamily: sans, fontWeight: 700, fontSize: '0.82rem', background: mode === m ? C.white : 'transparent', color: mode === m ? C.navy : '#8A9BB0' }}>
+              {m === 'countdown' ? 'Przerwa' : 'Stoper'}
+            </button>
+          ))}
+        </div>
+
+        {/* tarcza */}
+        <div style={{ position: 'relative', width: 210, height: 210, margin: '0 auto 16px' }}>
+          <svg width="210" height="210" viewBox="0 0 210 210" style={{ transform: 'rotate(-90deg)' }}>
+            <circle cx="105" cy="105" r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="10" />
+            <circle cx="105" cy="105" r={R} fill="none" stroke={accent} strokeWidth="10" strokeLinecap="round"
+              strokeDasharray={CIRC} strokeDashoffset={CIRC * (1 - frac)} style={{ transition: 'stroke-dashoffset 0.25s linear, stroke 0.3s' }} />
+          </svg>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ fontFamily: mono, fontSize: '3.2rem', fontWeight: 700, color: isFinished ? C.green : C.white, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{fmt(displayed)}</div>
+            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: isFinished ? C.green : '#8A9BB0', marginTop: 6 }}>
+              {isFinished ? 'Koniec przerwy! 💪' : mode === 'countdown' ? (running ? 'odpoczywaj' : `przerwa ${presetLabel(target)}`) : (running ? 'mierzę czas' : 'gotowy')}
             </div>
           </div>
+          {mode === 'countdown' && (
+            <>
+              <button onClick={() => adjust(-15)} aria-label="Odejmij 15 sekund"
+                style={{ position: 'absolute', left: -14, top: '50%', transform: 'translateY(-50%)', width: 44, height: 44, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.08)', color: C.white, fontFamily: mono, fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>−15</button>
+              <button onClick={() => adjust(15)} aria-label="Dodaj 15 sekund"
+                style={{ position: 'absolute', right: -14, top: '50%', transform: 'translateY(-50%)', width: 44, height: 44, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.08)', color: C.white, fontFamily: mono, fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>+15</button>
+            </>
+          )}
         </div>
-      )}
+
+        {/* szybki wybór przerwy */}
+        {mode === 'countdown' && (
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${TIMER_PRESETS.length}, 1fr)`, gap: 6, marginBottom: 16 }}>
+            {TIMER_PRESETS.map(p => (
+              <button key={p} onClick={() => startCountdown(p)} style={chip(target === p)}>{presetLabel(p)}</button>
+            ))}
+          </div>
+        )}
+
+        {/* sterowanie */}
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={reset} aria-label="Wyzeruj"
+            style={{ width: 56, flexShrink: 0, borderRadius: 14, border: 'none', background: 'rgba(255,255,255,0.08)', color: C.white, fontSize: '1.2rem', cursor: 'pointer' }}>↺</button>
+          <button onClick={() => (isFinished ? startCountdown(target) : running ? pause() : start())}
+            style={{ flex: 1, padding: '15px 0', borderRadius: 14, border: 'none', cursor: 'pointer', fontFamily: sans, fontWeight: 800, fontSize: '1rem', background: running && !isFinished ? C.gold : C.green, color: C.navy }}>
+            {isFinished ? '↻ Jeszcze raz' : running ? '❚❚ Pauza' : elapsedMs > 0 ? '▶ Wznów' : '▶ Start'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

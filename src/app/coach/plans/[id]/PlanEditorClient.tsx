@@ -1490,10 +1490,10 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
               style={{ display: 'block', width: '100%', background: 'transparent', border: 'none', outline: 'none', color: '#fff', fontWeight: 600, fontSize: 20, margin: '2px 0 10px', fontFamily: 'inherit' }}
             />
             <div className="coach-editor-notes-row" style={{ alignItems: 'center' }}>
-              <button className="coach-btn coach-btn-gold coach-btn-small" onClick={openInfo} style={{ flexShrink: 0 }} title="Co zawodniczki widzą w panelu ℹ️ podczas treningu">
+              <button className="coach-btn coach-btn-small" onClick={openInfo} style={{ flexShrink: 0, background: 'transparent', color: '#fff', border: '1px solid rgba(255,255,255,0.35)', boxShadow: 'none' }} title="Co zawodniczki widzą w panelu ℹ️ podczas treningu">
                 ℹ️ Notatki i skróty dla zawodniczek
               </button>
-              <button className="coach-btn coach-btn-gold coach-btn-small" onClick={() => setShowWellness(true)} style={{ flexShrink: 0 }} title="Skonfiguruj pola gotowości do treningu">
+              <button className="coach-btn coach-btn-small" onClick={() => setShowWellness(true)} style={{ flexShrink: 0, background: 'transparent', color: '#fff', border: '1px solid rgba(255,255,255,0.35)', boxShadow: 'none' }} title="Skonfiguruj pola gotowości do treningu">
                 <ClipboardList size={14} /> Feedback treningowy
               </button>
               <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: 11, color: '#aeb7cc' }}>
