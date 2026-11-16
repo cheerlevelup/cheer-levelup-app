@@ -1494,7 +1494,7 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
                 ℹ️ Notatki i skróty dla zawodniczek
               </button>
               <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: 11, color: '#aeb7cc' }}>
-                {notesSaved ? '✓ Zapisano' : `${planNotes ? 'notatka · ' : ''}${legend.length} skrótów${sameAsDefault(legend) ? ' (domyślne)' : ' (zmienione)'}`}
+                {notesSaved ? '✓ Zapisano' : ''}
               </span>
             </div>
           </div>
