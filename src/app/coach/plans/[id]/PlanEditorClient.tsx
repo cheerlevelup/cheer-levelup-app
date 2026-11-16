@@ -334,7 +334,8 @@ function ExerciseEditForm({
   function switchTimeMode(on: boolean) {
     if (on === timeMode) return
     const conv = (v?: string) => (v ? (on ? toTime(v) : stripTime(v)) : v)
-    setWorkSets(prev => prev.map(w => ({ ...w, reps: conv(w.reps) })))
+    // przy czasie tempo nie ma sensu — czyścimy je
+    setWorkSets(prev => prev.map(w => ({ ...w, reps: conv(w.reps), ...(on ? { tempo: '' } : {}) })))
     setIndiv(prev => Object.fromEntries(Object.entries(prev).map(([k, r]) => [k, { ...r, reps: conv(r.reps) || '' }])))
     setTimeMode(on)
   }
@@ -545,8 +546,10 @@ function ExerciseEditForm({
     ? 'Każda seria może mieć inne powtórzenia, ciężar, czas fazy ekscentrycznej, hold w rozciągnięciu i RIR.'
     : iso
       ? 'Każda seria może mieć inny czas napięcia, liczbę powtórzeń, przerwę (rest) między nimi, ciężar i RIR.'
-      : 'Każda seria może mieć inne powtórzenia, ciężar, tempo i RIR.'
-  const cols = ecc
+      : timeMode
+        ? 'Każda seria może mieć inny czas, ciężar i RIR.'
+        : 'Każda seria może mieć inne powtórzenia, ciężar, tempo i RIR.'
+  const allCols = ecc
     ? [{ field: 'reps' as const, label: 'Powt.', placeholder: '5' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'ecc' as const, label: 'Ekscentryka (s)', placeholder: '5' }, { field: 'hold' as const, label: 'Hold (s)', placeholder: '-' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }]
     : iso
     ? (isoType === 'PIMA'
@@ -554,6 +557,8 @@ function ExerciseEditForm({
       : [{ field: 'seconds' as const, label: 'Czas (s)', placeholder: '20' }, { field: 'reps' as const, label: 'Powt.', placeholder: '-' }, { field: 'rest' as const, label: 'Rest (s)', placeholder: '-' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }])
     : [{ field: 'reps' as const, label: 'Powt.', placeholder: '8-10' }, { field: 'weight_kg' as const, label: 'Ciężar', placeholder: 'kg' }, { field: 'tempo' as const, label: 'Tempo', placeholder: '3-1-2-0' }, { field: 'rir' as const, label: 'RIR', placeholder: '-' }]
   const timeCols = !iso && timeMode
+  // seria na czas — kolumna tempo niepotrzebna
+  const cols = timeCols ? allCols.filter(c => c.field !== 'tempo') : allCols
   const colLabel = (c: { field: string; label: string }) => (timeCols && c.field === 'reps' ? 'Czas (s)' : c.label)
 
   return (
@@ -717,7 +722,7 @@ function ExerciseEditForm({
           <div className="exf-hint" style={{ marginTop: 8 }}>Ten plan nie ma przypisanych zawodniczek.</div>
         ) : (() => {
           const firstSet = workSets[0] || {}
-          const showTempo = !iso && !ecc
+          const showTempo = !iso && !ecc && !timeMode
           return (
             <div className="exf-table-wrap" style={{ marginTop: 8, maxHeight: 320, overflowY: 'auto' }}>
               <table className="exf-sets">
