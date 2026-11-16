@@ -670,7 +670,6 @@ export default function PlanTableView(props: Props) {
                             style={{ border: `1px solid ${day.training_date ? 'var(--gold)' : 'var(--border)'}`, borderRadius: 7, padding: '3px 6px', fontFamily: 'var(--font-inter),sans-serif', fontSize: 12, color: 'var(--ink)', background: '#fff', outline: 'none' }}
                           />
                         </label>
-                        <button className="coach-btn coach-btn-ghost coach-btn-small" onClick={() => onAddBlock(day.id)}>+ Blok</button>
                         {props.clipboard?.kind === 'block' && (
                           <button style={{ ...iconBtn, color: 'var(--gold)', fontWeight: 700 }} title="Wklej skopiowany blok na koniec tego treningu (Ctrl+V)" onClick={() => pasteInto(day.id, null)}>📋 wklej blok „{props.clipboard.name}”</button>
                         )}
@@ -1059,7 +1058,6 @@ export default function PlanTableView(props: Props) {
                       {/* pod tabelą: nowy blok w tym treningu / nowy trening w tym tygodniu */}
                       <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                         <button className="coach-btn coach-btn-ghost coach-btn-small" onClick={() => onAddBlock(day.id)}>+ Blok do {day.day_name}</button>
-                        <button className="coach-btn coach-btn-dark coach-btn-small" onClick={() => onAddDay(week.id)}>+ Trening</button>
                       </div>
                     </div>
                   )
