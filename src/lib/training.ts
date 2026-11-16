@@ -71,10 +71,33 @@ async function loadActiveAssignments(athleteId: number, groupId?: number): Promi
 }
 
 // Wszystkie aktywne plany zawodniczki z treningami i statusem sesji
+// Bez „samodzielnej pracy" (assignment.self_access, migracja 202611160001) zawodniczka widzi
+// tylko trening rozpoczęty przez trenera (dzisiejsza data) i treningi już rozpoczęte/zakończone.
+// self_access = null → domyślnie: grupa samodzielna tak, grupa zorganizowana nie.
 async function loadAthletePlans(athleteId: number, groupId?: number) {
-  const assignments = await loadActiveAssignments(athleteId, groupId)
+  const supabase = await createClient()
+  const [assignments, { data: group }] = await Promise.all([
+    loadActiveAssignments(athleteId, groupId),
+    groupId ? supabase.from('groups').select('group_type').eq('id', groupId).maybeSingle() : Promise.resolve({ data: null }),
+  ])
+  const defaultAccess = (group as { group_type?: string } | null)?.group_type !== 'managed'
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' })
   const plans = await Promise.all(assignments.map(a => loadPlanForAssignment(athleteId, a)))
-  return plans.filter((p): p is NonNullable<typeof p> => !!p)
+  return plans
+    .filter((p): p is NonNullable<typeof p> => !!p)
+    .map(p => {
+      const selfAccess = (p.assignment as any).self_access ?? defaultAccess
+      if (selfAccess) return p
+      const days = p.days.filter((d: any) => d.training_date === today || p.completedDayIds.has(d.id) || p.inProgressDayIds.has(d.id))
+      return { ...p, days }
+    })
+    .filter(p => p.days.length > 0)
+}
+
+// Czy zawodniczka może otworzyć ten trening (widoczny na jej liście)
+export async function canAthleteOpenDay(athleteId: number, groupId: number | undefined, dayId: number): Promise<boolean> {
+  const plans = await loadAthletePlans(athleteId, groupId)
+  return plans.some(p => p.days.some((d: any) => d.id === dayId))
 }
 
 async function loadPlanForAssignment(athleteId: number, assignment: AthleteWorkoutAssignment) {

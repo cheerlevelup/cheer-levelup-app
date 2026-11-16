@@ -10,6 +10,7 @@ import {
   getNextTrainingForAthlete,
   getCompletedSessionToEdit,
   isAthleteAbsentOnDay,
+  canAthleteOpenDay,
 } from '@/lib/training'
 import TrainingClient from './TrainingClient'
 
@@ -40,6 +41,9 @@ export default async function TrainingPage({ searchParams }: Props) {
 
   // Nieobecność zaznaczona przez trenera — trening zablokowany
   if (await isAthleteAbsentOnDay(athlete.id, dayId)) redirect('/athlete')
+
+  // Plan bez samodzielnej pracy — tylko treningi rozpoczęte przez trenera
+  if (!(await canAthleteOpenDay(athlete.id, athlete.group_id || undefined, dayId))) redirect('/athlete')
 
   // Ukończonego treningu nie powtarzamy — otwieramy go do edycji wpisów
   const completedId = await getCompletedSessionToEdit(athlete.id, dayId)

@@ -9,7 +9,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
-import { Plus, ChevronRight, ChevronLeft, Copy, Trash2, Pencil, User, Users, RotateCcw } from 'lucide-react'
+import { Plus, ChevronRight, ChevronLeft, Copy, Trash2, Pencil, User, Users, RotateCcw, Lock, Unlock } from 'lucide-react'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { Card, Button, StatCard, SegmentedControl } from '@/components/coach/ui'
 import { insertExercisesWithVariants } from '@/lib/exerciseVariants'
@@ -18,7 +18,7 @@ import { createPlanSkeleton, deactivateGroupAssignments, insertAssignments, isIn
 type Plan = { id: number; name: string; description?: string | null; created_at: string; group_id?: number | null; athlete_id?: number | null; is_archived?: boolean | null }
 type Group = { id: number; name: string; group_type?: string | null }
 type Athlete = { id: number; full_name: string; group_id: number | null }
-type Assignment = { id: number; athlete_id: number; plan_id: number; is_active: boolean; created_at: string; assignment_type?: string | null }
+type Assignment = { id: number; athlete_id: number; plan_id: number; is_active: boolean; created_at: string; assignment_type?: string | null; self_access?: boolean | null }
 type GroupKey = number | 'none'
 
 const INTER = 'var(--font-inter), sans-serif'
@@ -357,18 +357,39 @@ function AthletePlans({ athlete, group, groupAthletes, plans, assignments, onBac
     })
   }
 
+  // samodzielna praca: null = domyślnie (grupa samodzielna tak, zorganizowana nie)
+  const selfAccessOf = (a: Assignment) => a.self_access ?? (group?.group_type !== 'managed')
+  const toggleSelfAccess = (a: Assignment) => run(async () => {
+    const { error: err } = await supabase.from('athlete_workout_assignments').update({ self_access: !selfAccessOf(a) }).eq('id', a.id)
+    if (err) throw new Error(/self_access/.test(err.message) ? 'Aby włączać samodzielną pracę, uruchom w Supabase migrację 202611160001_plan_self_access.sql.' : err.message)
+  })
+
   const assignmentRow = (a: Assignment) => {
     const p = planById.get(a.plan_id)
+    const selfAccess = selfAccessOf(a)
     return (
       <div key={a.id} style={rowStyle}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 800, color: 'var(--navy-900)', fontSize: '0.92rem' }}>{p?.name || `Plan #${a.plan_id}`}</span>
             {isIndividual(a) ? <Badge tone="individual">indywidualny</Badge> : <Badge tone="group">z grupy</Badge>}
+            {selfAccess ? <Badge tone="active">SAMODZIELNA PRACA</Badge> : <Badge>tylko treningi rozpoczęte przez trenera</Badge>}
           </div>
-          <div style={{ fontFamily: INTER, fontSize: '0.7rem', color: 'var(--muted-light)', marginTop: 3 }}>przypisany {formatDate(a.created_at)}</div>
+          <div style={{ fontFamily: INTER, fontSize: '0.7rem', color: 'var(--muted-light)', marginTop: 3 }}>
+            przypisany {formatDate(a.created_at)}
+            {selfAccess ? ' · zawodniczka widzi wszystkie treningi planu i uzupełnia je kiedy chce' : ''}
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {selfAccess ? (
+            <Button variant="ghost" size="small" onClick={() => toggleSelfAccess(a)} disabled={busy} title="Zawodniczka zobaczy tylko trening rozpoczęty przez Ciebie (i już rozpoczęte)">
+              <Lock size={13} /> Wyłącz samodzielną pracę
+            </Button>
+          ) : (
+            <Button variant="dark" size="small" onClick={() => toggleSelfAccess(a)} disabled={busy} style={{ color: 'var(--gold)' }} title="Zawodniczka dostanie wszystkie treningi planu i może je uzupełniać w dowolnym czasie">
+              <Unlock size={13} /> Aktywuj plan do samodzielnej pracy
+            </Button>
+          )}
           {p && <Button variant="ghost" size="small" onClick={() => router.push(planHref(p))}><Pencil size={13} /> Edytuj</Button>}
           <Button variant="ghost" size="small" onClick={() => remove(a)} disabled={busy} style={{ color: '#c23b3b' }}><Trash2 size={13} /> Usuń</Button>
         </div>
