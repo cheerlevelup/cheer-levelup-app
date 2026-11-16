@@ -1116,7 +1116,8 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, o
             {/* Notatka do ćwiczenia (jedna, zapisuje do first set_log) */}
             <div style={{ marginTop: 6, display: 'flex', gap: 6, alignItems: 'flex-start' }}>
               <textarea
-                placeholder="📝 Notatka: jak poszło, co poprawić…"
+                placeholder="📝 Notatka…"
+                title="Notatka: jak poszło, co poprawić"
                 value={exerciseNote}
                 onChange={e => setExerciseNote(e.target.value)}
                 onBlur={async () => {
@@ -1130,7 +1131,7 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, o
                   }
                 }}
                 rows={exerciseNote ? 2 : 1}
-                style={{ flex: 1, minWidth: 0, minHeight: 36, padding: '8px 10px', border: `1px solid ${C.grayLight}`, borderRadius: 8, fontFamily: sans, fontSize: '0.82rem', color: C.navy, resize: 'none', outline: 'none', background: '#fafbfc', boxSizing: 'border-box', lineHeight: 1.35 }}
+                style={{ flex: 1, minWidth: 0, minHeight: 36, padding: '8px 10px', border: `1px solid ${C.grayLight}`, borderRadius: 8, fontFamily: sans, fontSize: '0.82rem', color: C.navy, resize: 'none', outline: 'none', background: '#fafbfc', boxSizing: 'border-box', lineHeight: 1.35, overflow: 'hidden' }}
               />
               {/* Ból */}
               <button onClick={() => setFeelingOpen(!feelingOpen)}
