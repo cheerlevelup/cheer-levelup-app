@@ -1493,6 +1493,9 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
               <button className="coach-btn coach-btn-gold coach-btn-small" onClick={openInfo} style={{ flexShrink: 0 }} title="Co zawodniczki widzą w panelu ℹ️ podczas treningu">
                 ℹ️ Notatki i skróty dla zawodniczek
               </button>
+              <button className="coach-btn coach-btn-gold coach-btn-small" onClick={() => setShowWellness(true)} style={{ flexShrink: 0 }} title="Skonfiguruj pola gotowości do treningu">
+                <ClipboardList size={14} /> Feedback treningowy
+              </button>
               <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: 11, color: '#aeb7cc' }}>
                 {notesSaved ? '✓ Zapisano' : ''}
               </span>
@@ -1501,9 +1504,6 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
 
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
             <div className="coach-editor-hero-right">
-              <button className="coach-btn coach-btn-gold coach-btn-small" onClick={() => setShowWellness(true)} title="Skonfiguruj pola gotowości do treningu">
-                <ClipboardList size={14} /> Feedback treningowy
-              </button>
               <button className="coach-btn coach-btn-dark" onClick={saveWholePlan} disabled={savingPlan} style={{ minWidth: 126 }}>
                 {savingPlan ? 'Zapisuje...' : 'Zapisz plan'}
               </button>
