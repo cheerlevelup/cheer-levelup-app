@@ -3,6 +3,7 @@
 // Nowy design — Sesja 7
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { resolveLegend, type LegendItem } from '@/lib/planLegend'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import type { Athlete, TrainingView, SetLog, WorkoutBlockExercise } from '@/types/workout'
@@ -240,22 +241,7 @@ function RirModal({ rir, onClose }: { rir: number; onClose: () => void }) {
 
 // ─── LEGEND MODAL ─────────────────────────────────────────────────────────────
 
-const ABBREV = [
-  { short: 'iso', full: 'izometria — zatrzymanie bez ruchu' },
-  { short: 'bb', full: 'barbell — sztanga' },
-  { short: 'ssb', full: 'safety squat bar — sztanga bezpieczna' },
-  { short: 'kb', full: 'kettlebell' },
-  { short: 'db', full: 'dumbbell — hantle' },
-  { short: 'sl', full: 'single leg — jednonóż' },
-  { short: 'BW', full: 'body weight — ciężar ciała (bez dodatkowego obciążenia)' },
-  { short: '1RM', full: 'one repetition maximum — maksymalny ciężar na 1 powtórzenie' },
-  { short: '50% 1RM', full: 'obciążenie 50% Twojego maksimum' },
-  { short: 'rampa', full: 'stopniowe zwiększanie ciężaru w kolejnych seriach (np. 35 / 37,5 / 40 kg)' },
-  { short: '30"', full: '30 sekund' },
-  { short: '5" ecc', full: 'faza ekscentryczna (opuszczanie) trwa 5 sekund — np. w przysiadzie to faza schodzenia w dół' },
-]
-
-function LegendModal({ planNotes, onClose }: { planNotes?: string | null; onClose: () => void }) {
+function LegendModal({ planNotes, legend, onClose }: { planNotes?: string | null; legend: LegendItem[]; onClose: () => void }) {
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(13,27,42,0.75)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }} onClick={onClose}>
       <div style={{ width: '100%', maxWidth: 480, background: '#fff', borderRadius: '20px 20px 0 0', borderTop: `4px solid ${C.gold}`, maxHeight: '85vh', overflowY: 'auto', fontFamily: sans }} onClick={e => e.stopPropagation()}>
@@ -271,7 +257,7 @@ function LegendModal({ planNotes, onClose }: { planNotes?: string | null; onClos
         )}
         <div style={{ padding: '0 1.5rem' }}>
           <div style={{ fontFamily: '"Space Mono",monospace', fontSize: '0.62rem', color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.75rem', fontWeight: 700 }}>Skróty</div>
-          {ABBREV.map(a => (
+          {legend.map(a => (
             <div key={a.short} style={{ display: 'flex', gap: 12, padding: '0.5rem 0', borderBottom: '1px solid #F0F4F8', alignItems: 'flex-start' }}>
               <span style={{ fontFamily: '"Space Mono",monospace', fontWeight: 800, fontSize: '0.82rem', color: C.gold, minWidth: 70, flexShrink: 0 }}>{a.short}</span>
               <span style={{ fontSize: '0.82rem', color: C.navy, lineHeight: 1.45 }}>{a.full}</span>
@@ -1980,7 +1966,7 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
       `}</style>
 
       <FloatingTimer />
-      {legendOpen && <LegendModal planNotes={(plan as any)?.description || null} onClose={() => setLegendOpen(false)} />}
+      {legendOpen && <LegendModal planNotes={(plan as any)?.description || null} legend={resolveLegend((plan as any)?.legend)} onClose={() => setLegendOpen(false)} />}
 
       <div style={{ minHeight: '100vh', background: C.offWhite, fontFamily: sans, color: C.navy }}>
 

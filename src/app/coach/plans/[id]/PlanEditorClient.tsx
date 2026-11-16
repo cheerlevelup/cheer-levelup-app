@@ -12,6 +12,7 @@ import { Modal, Button } from '@/components/coach/ui'
 import { useExerciseCatalog, linkAfterRename, ExerciseCatalogDatalist, EXERCISE_CATALOG_LIST_ID } from '@/lib/exerciseCatalog'
 import { insertExercisesWithVariants, sortWithVariants, variantLabels } from '@/lib/exerciseVariants'
 import { moveExercise, moveBlock } from '@/lib/planReorder'
+import { DEFAULT_LEGEND, resolveLegend, sameAsDefault, type LegendItem } from '@/lib/planLegend'
 
 type Plan = {
   id: number
@@ -929,11 +930,30 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
     setSavingName(false)
   }
 
+  // Notatki + skróty (panel ℹ️ zawodniczki). Skróty: domyślna lista, edytowalna dla tego planu.
+  const [legend, setLegend] = useState<LegendItem[]>(() => resolveLegend((plan as any).legend))
+  const [infoOpen, setInfoOpen] = useState(false)
+  const [draftNotes, setDraftNotes] = useState('')
+  const [draftLegend, setDraftLegend] = useState<LegendItem[]>([])
+  function openInfo() { setDraftNotes(planNotes); setDraftLegend(legend.map(l => ({ ...l }))); setInfoOpen(true) }
+
   async function savePlanNotes() {
     setSavingNotes(true)
-    const { error } = await supabase.from('workout_plans').update({ description: planNotes || null }).eq('id', plan.id)
+    const cleaned = draftLegend.map(l => ({ short: l.short.trim(), full: l.full.trim() })).filter(l => l.short || l.full)
+    const payload: Record<string, unknown> = { description: draftNotes.trim() || null, legend: sameAsDefault(cleaned) ? null : cleaned }
+    let { error } = await supabase.from('workout_plans').update(payload).eq('id', plan.id)
+    if (error && /legend/.test(error.message)) {
+      showError('Aby edytować skróty, uruchom w Supabase migrację 202611160002_plan_legend.sql. Notatki zapisano.')
+      ;({ error } = await supabase.from('workout_plans').update({ description: payload.description }).eq('id', plan.id))
+      if (!error) { setPlanNotes(draftNotes.trim()); setInfoOpen(false) }
+      setSavingNotes(false)
+      return
+    }
     if (error) showError(`Błąd zapisu notatek: ${error.message}`)
-    else { setNotesSaved(true); setTimeout(() => setNotesSaved(false), 2500) }
+    else {
+      setPlanNotes(draftNotes.trim()); setLegend(cleaned); setInfoOpen(false)
+      setNotesSaved(true); setTimeout(() => setNotesSaved(false), 2500)
+    }
     setSavingNotes(false)
   }
 
@@ -1469,16 +1489,13 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
               onBlur={savePlanName}
               style={{ display: 'block', width: '100%', background: 'transparent', border: 'none', outline: 'none', color: '#fff', fontWeight: 600, fontSize: 20, margin: '2px 0 10px', fontFamily: 'inherit' }}
             />
-            <div className="coach-editor-notes-row">
-              <textarea
-                value={planNotes}
-                onChange={e => setPlanNotes(e.target.value)}
-                placeholder="Notatki dla zawodniczek (skróty, wskazówki) — widoczne w panelu ℹ️ podczas treningu..."
-                rows={2}
-              />
-              <button className="coach-btn coach-btn-gold coach-btn-small" onClick={savePlanNotes} disabled={savingNotes} style={{ flexShrink: 0 }}>
-                {savingNotes ? '...' : notesSaved ? '✓ Zapisano' : 'Zapisz notatki'}
+            <div className="coach-editor-notes-row" style={{ alignItems: 'center' }}>
+              <button className="coach-btn coach-btn-gold coach-btn-small" onClick={openInfo} style={{ flexShrink: 0 }} title="Co zawodniczki widzą w panelu ℹ️ podczas treningu">
+                ℹ️ Notatki i skróty dla zawodniczek
               </button>
+              <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: 11, color: '#aeb7cc' }}>
+                {notesSaved ? '✓ Zapisano' : `${planNotes ? 'notatka · ' : ''}${legend.length} skrótów${sameAsDefault(legend) ? ' (domyślne)' : ' (zmienione)'}`}
+              </span>
             </div>
           </div>
 
@@ -1496,6 +1513,50 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
             </div>
           </div>
         </div>
+
+        {infoOpen && (
+          <Modal
+            open
+            wide
+            onClose={() => setInfoOpen(false)}
+            eyebrow="Panel ℹ️ zawodniczki"
+            title="Notatki i skróty dla tego planu"
+            sub="Zawodniczka widzi je podczas treningu po kliknięciu ℹ️. Domyślne skróty możesz zmienić tylko w tym planie."
+            footer={
+              <>
+                <Button variant="ghost" onClick={() => setInfoOpen(false)}>Anuluj</Button>
+                <Button variant="dark" onClick={savePlanNotes} disabled={savingNotes}>{savingNotes ? 'Zapisuję…' : 'Zapisz'}</Button>
+              </>
+            }
+          >
+            <div style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--muted-light)', marginBottom: 6 }}>Notatki od trenera</div>
+            <textarea
+              value={draftNotes}
+              onChange={e => setDraftNotes(e.target.value)}
+              rows={3}
+              placeholder="np. przerwy 90 s między seriami, rozgrzewka 10 min…"
+              style={{ width: '100%', boxSizing: 'border-box', border: '1.5px solid var(--border)', borderRadius: 8, padding: '8px 10px', fontFamily: 'var(--font-inter),sans-serif', fontSize: 13, resize: 'vertical', outline: 'none' }}
+            />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '16px 0 6px' }}>
+              <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--muted-light)' }}>Skróty</span>
+              {!sameAsDefault(draftLegend) && (
+                <button type="button" onClick={() => setDraftLegend(DEFAULT_LEGEND.map(l => ({ ...l })))} style={{ border: 'none', background: 'none', color: 'var(--gold)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>↺ Przywróć domyślne</button>
+              )}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {draftLegend.map((l, i) => (
+                <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <input value={l.short} onChange={e => setDraftLegend(prev => prev.map((x, k) => k === i ? { ...x, short: e.target.value } : x))} placeholder="skrót"
+                    style={{ width: 90, flexShrink: 0, border: '1.5px solid var(--border)', borderRadius: 7, padding: '6px 8px', fontFamily: 'var(--font-inter),sans-serif', fontSize: 13, fontWeight: 700, outline: 'none' }} />
+                  <input value={l.full} onChange={e => setDraftLegend(prev => prev.map((x, k) => k === i ? { ...x, full: e.target.value } : x))} placeholder="znaczenie"
+                    style={{ flex: 1, minWidth: 0, border: '1.5px solid var(--border)', borderRadius: 7, padding: '6px 8px', fontFamily: 'var(--font-inter),sans-serif', fontSize: 13, outline: 'none' }} />
+                  <button type="button" onClick={() => setDraftLegend(prev => prev.filter((_, k) => k !== i))} title="Usuń skrót" style={{ border: 'none', background: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 4 }}><X size={14} /></button>
+                </div>
+              ))}
+            </div>
+            <button type="button" onClick={() => setDraftLegend(prev => [...prev, { short: '', full: '' }])} className="coach-add-injury-btn" style={{ marginTop: 8 }}>＋ Dodaj skrót</button>
+          </Modal>
+        )}
 
         {/* Pełna edycja / dodawanie ćwiczenia (biblioteka, ISO, osobne serie, rozgrzewka) */}
         {editingExercise && (
