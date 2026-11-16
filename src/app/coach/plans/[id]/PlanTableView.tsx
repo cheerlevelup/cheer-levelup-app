@@ -673,8 +673,8 @@ export default function PlanTableView(props: Props) {
                         {props.clipboard?.kind === 'block' && (
                           <button style={{ ...iconBtn, color: 'var(--gold)', fontWeight: 700 }} title="Wklej skopiowany blok na koniec tego treningu (Ctrl+V)" onClick={() => pasteInto(day.id, null)}>📋 wklej blok „{props.clipboard.name}”</button>
                         )}
-                        <button style={iconBtn} title="Kopiuj cały trening — potem „wklej trening” przy dowolnym tygodniu (też w innym planie)" onClick={() => { props.onCopyDay(day.id); notify(`Skopiowano trening „${day.day_name}” — kliknij „wklej trening” przy wybranym tygodniu`) }}>⧉ kopiuj trening</button>
-                        <button style={{ ...iconBtn, color: '#c23b3b' }} title="Usuń trening" onClick={() => props.onDeleteDay(day.id)}>✕ usuń</button>
+                        <button style={iconBtn} title="Kopiuj cały trening — potem „wklej trening” przy dowolnym tygodniu (też w innym planie)" onClick={() => { props.onCopyDay(day.id); notify(`Skopiowano trening „${day.day_name}” — kliknij „wklej trening” przy wybranym tygodniu`) }} aria-label="Kopiuj trening">⧉</button>
+                        <button style={{ ...iconBtn, color: '#c23b3b' }} title="Usuń trening" aria-label="Usuń trening" onClick={() => props.onDeleteDay(day.id)}>✕</button>
                       </div>
                       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: '0.5rem' }}>
                         <DayMessage
