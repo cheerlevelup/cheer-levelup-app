@@ -1988,22 +1988,12 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: '0.875rem' }}>
-            <div style={{ background: C.gold, borderRadius: 20, padding: '4px 12px', flexShrink: 0 }}>
-              <span style={{ fontWeight: 800, fontSize: '0.72rem', color: C.navy, letterSpacing: '0.06em', fontFamily: mono }}>
-                TYD {week?.week_number || '1'}
-              </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: '0.625rem' }}>
+            <div style={{ flex: 1, minWidth: 0, fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={plan?.name || undefined}>
+              <span style={{ fontWeight: 700, color: C.white }}>{day.day_name}</span>
+              <span style={{ color: C.gray, fontSize: '0.75rem' }}> · tydzień {week?.week_number || '1'}</span>
             </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: C.white, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {day.day_name}
-              </div>
-              <div style={{ fontSize: '0.65rem', color: C.gray, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {plan?.name}
-              </div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-              <span style={{ fontSize: '0.72rem', color: C.gray }}>{new Date().toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' })}</span>
+            <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
               <button onClick={() => setLegendOpen(true)}
                 style={{ width: 28, height: 28, borderRadius: '50%', background: C.navyLight, border: `1.5px solid ${C.navyBorder}`, color: C.gold, fontWeight: 900, fontFamily: mono, fontSize: '0.72rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 title="Legenda skrótów">
