@@ -1131,7 +1131,7 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, o
                   }
                 }}
                 rows={exerciseNote ? 2 : 1}
-                style={{ flex: 1, minWidth: 0, minHeight: 36, padding: '8px 10px', border: `1px solid ${C.grayLight}`, borderRadius: 8, fontFamily: sans, fontSize: '0.82rem', color: C.navy, resize: 'none', outline: 'none', background: '#fafbfc', boxSizing: 'border-box', lineHeight: 1.35, overflow: 'hidden' }}
+                style={{ flex: 1, minWidth: 0, minHeight: 36, padding: '8px 10px', border: `1px solid ${C.grayLight}`, borderRadius: 8, fontFamily: sans, fontSize: '0.82rem', color: C.navy, resize: 'none', outline: 'none', background: '#fafbfc', boxSizing: 'border-box', lineHeight: 1.35 }}
               />
               {/* Ból */}
               <button onClick={() => setFeelingOpen(!feelingOpen)}
