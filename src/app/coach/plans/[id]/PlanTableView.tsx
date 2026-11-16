@@ -1080,6 +1080,16 @@ export default function PlanTableView(props: Props) {
             Brak tygodni — <button onClick={onAddWeek} style={{ border: 'none', background: 'none', color: 'var(--gold)', cursor: 'pointer', fontWeight: 700 }}>dodaj tydzień</button>
           </div>
         )}
+
+        {/* na końcu planu — kolejny tydzień bez przewijania na górę */}
+        {weeks.length > 0 && (
+          <div style={{ borderTop: '1.5px dashed var(--border)', paddingTop: '1rem' }}>
+            <button className="coach-btn coach-btn-dark" onClick={async () => {
+              await onAddWeek()
+              setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 150)
+            }}>+ Dodaj tydzień {weeks.length + 1}</button>
+          </div>
+        )}
       </div>
     </div>
   )
