@@ -130,11 +130,12 @@ interface Props {
   allBlocks: Block[]
 }
 
-// Schowek edytora (kopiuj / wklej): blok albo ćwiczenia (z wariantami).
+// Schowek edytora (kopiuj / wklej): cały trening, blok albo ćwiczenia (z wariantami).
 // Trzymany też w localStorage — można wkleić w innym planie.
 type PlanClipboard =
   | { kind: 'block'; block: Block }
   | { kind: 'exercises'; exercises: BlockExercise[] }
+  | { kind: 'day'; day: Day; blocks: Block[] }
 const CLIPBOARD_KEY = 'cheer-plan-clipboard'
 
 function formatExerciseName(name: string) {
@@ -1344,8 +1345,8 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
     return (exData as BlockExercise[]) || []
   }
 
-  async function insertBlockCopy(source: Block, dayId: number): Promise<Block | null> {
-    const order = Math.max(0, ...localBlocks.filter(b => b.day_id === dayId).map(b => b.block_order)) + 1
+  async function insertBlockCopy(source: Block, dayId: number, fixedOrder?: number): Promise<Block | null> {
+    const order = fixedOrder ?? Math.max(0, ...localBlocks.filter(b => b.day_id === dayId).map(b => b.block_order)) + 1
     const { data: blockData, error } = await supabase
       .from('workout_day_blocks')
       .insert({ day_id: dayId, block_name: source.block_name, block_order: order, rounds: source.rounds })
@@ -1371,6 +1372,43 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
     const ids = new Set(baseIds)
     const picked = all.filter(e => (e.id != null && ids.has(e.id)) || (e.variant_of != null && ids.has(e.variant_of)))
     if (picked.length) saveClipboard({ kind: 'exercises', exercises: picked })
+  }
+
+  // Cały trening (bloki + ćwiczenia + wiadomości trenera) — wklejany jako nowy trening w wybranym tygodniu
+  function copyDayToClipboard(dayId: number) {
+    const day = localDays.find(d => d.id === dayId)
+    if (!day) return
+    const dayBlocks = localBlocks
+      .filter(b => b.day_id === dayId)
+      .sort((a, b) => a.block_order - b.block_order)
+      .map(b => ({ ...b, workout_block_exercises: [...(b.workout_block_exercises || [])] }))
+    saveClipboard({ kind: 'day', day: { ...day }, blocks: dayBlocks })
+  }
+
+  async function pasteDay(weekId: number) {
+    if (clipboard?.kind !== 'day') return
+    const src = clipboard.day
+    const weekDays = localDays.filter(d => d.week_id === weekId)
+    const order = Math.max(0, ...weekDays.map(d => d.day_order)) + 1
+    const row: Record<string, unknown> = { week_id: weekId, day_name: `${src.day_name || 'Trening'} (kopia)`, day_order: order }
+    if (src.coach_intro) row.coach_intro = src.coach_intro
+    if (src.coach_closing) row.coach_closing = src.coach_closing
+    const { data, error } = await supabase.from('workout_days').insert(row).select().single()
+    if (error || !data) { showError(`Nie udało się wkleić treningu: ${error?.message || ''}`); return }
+    const newDay = data as Day
+    setLocalDays(prev => [...prev, newDay])
+    setTargetDays(prev => [...prev, newDay])
+    setSelectedDayId(newDay.id)
+    const copied: Block[] = []
+    for (const [i, b] of clipboard.blocks.entries()) {
+      const nb = await insertBlockCopy(b, newDay.id, i + 1)
+      if (nb) copied.push(nb)
+    }
+    if (copied.length) {
+      setLocalBlocks(prev => [...prev, ...copied])
+      setTargetBlocks(prev => [...prev, ...copied])
+    }
+    setTimeout(() => document.getElementById(`day-${newDay.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
   }
 
   async function pasteBlock(dayId: number) {
@@ -1506,7 +1544,9 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
           onSaveDayMessage={(dayId, field, value) => field === 'coach_intro' ? saveCoachIntro(dayId, value) : saveCoachClosing(dayId, value)}
           onAddBlock={addBlock}
           onRenameBlock={renameBlock}
-          clipboard={clipboard ? (clipboard.kind === 'block' ? { kind: 'block', name: clipboard.block.block_name } : { kind: 'exercises', count: clipboard.exercises.filter(e => e.variant_of == null).length }) : null}
+          clipboard={clipboard ? (clipboard.kind === 'block' ? { kind: 'block', name: clipboard.block.block_name } : clipboard.kind === 'day' ? { kind: 'day', name: clipboard.day.day_name } : { kind: 'exercises', count: clipboard.exercises.filter(e => e.variant_of == null).length }) : null}
+          onCopyDay={copyDayToClipboard}
+          onPasteDay={pasteDay}
           onCopyBlockToClipboard={copyBlockToClipboard}
           onCopyExercises={copyExercisesToClipboard}
           onPasteBlock={pasteBlock}

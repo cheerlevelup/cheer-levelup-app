@@ -325,7 +325,10 @@ interface Props {
   onAddBlock: (dayId: number) => Promise<void>
   onRenameBlock: (blockId: number, name: string) => void
   // schowek kopiuj / wklej (blok albo ćwiczenia z wariantami)
-  clipboard: { kind: 'block'; name: string } | { kind: 'exercises'; count: number } | null
+  clipboard: { kind: 'block'; name: string } | { kind: 'exercises'; count: number } | { kind: 'day'; name: string } | null
+  // cały trening: kopiuj → wklej jako nowy trening w dowolnym tygodniu (też w innym planie)
+  onCopyDay: (dayId: number) => void
+  onPasteDay: (weekId: number) => Promise<void>
   onCopyBlockToClipboard: (block: Block) => void
   onCopyExercises: (blockId: number, baseIds: number[]) => void
   onPasteBlock: (dayId: number) => Promise<void>
@@ -536,6 +539,11 @@ export default function PlanTableView(props: Props) {
       if (blockId == null) { notify('Kliknij blok, do którego wkleić ćwiczenia'); return }
       await props.onPasteExercises(blockId)
       notify(`Wklejono ${cb.count} ${exWord(cb.count)}`)
+    } else if (cb.kind === 'day') {
+      const weekId = allDays.find(d => d.id === dayId)?.week_id
+      if (weekId == null) return
+      await props.onPasteDay(weekId)
+      notify(`Wklejono trening „${cb.name}”`)
     } else {
       await props.onPasteBlock(dayId)
       notify(`Wklejono blok „${cb.name}”`)
@@ -635,6 +643,9 @@ export default function PlanTableView(props: Props) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '0.75rem' }}>
                 <div className="coach-week-label">Tydzień {week.week_number}</div>
                 <button className="coach-btn coach-btn-ghost coach-btn-small" onClick={() => onAddDay(week.id)}>+ Trening</button>
+                {props.clipboard?.kind === 'day' && (
+                  <button style={{ ...iconBtn, color: 'var(--gold)', fontWeight: 700 }} title="Wklej skopiowany trening jako nowy trening w tym tygodniu" onClick={async () => { await props.onPasteDay(week.id); notify(`Wklejono trening „${(props.clipboard as { name: string }).name}”`) }}>📋 wklej trening „{props.clipboard.name}”</button>
+                )}
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -664,6 +675,7 @@ export default function PlanTableView(props: Props) {
                         {props.clipboard?.kind === 'block' && (
                           <button style={{ ...iconBtn, color: 'var(--gold)', fontWeight: 700 }} title="Wklej skopiowany blok na koniec tego treningu (Ctrl+V)" onClick={() => pasteInto(day.id, null)}>📋 wklej blok „{props.clipboard.name}”</button>
                         )}
+                        <button style={iconBtn} title="Kopiuj cały trening — potem „wklej trening” przy dowolnym tygodniu (też w innym planie)" onClick={() => { props.onCopyDay(day.id); notify(`Skopiowano trening „${day.day_name}” — kliknij „wklej trening” przy wybranym tygodniu`) }}>⧉ kopiuj trening</button>
                         <button style={{ ...iconBtn, color: '#c23b3b' }} title="Usuń trening" onClick={() => props.onDeleteDay(day.id)}>✕ usuń</button>
                       </div>
                       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: '0.5rem' }}>
