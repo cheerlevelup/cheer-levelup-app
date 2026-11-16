@@ -683,7 +683,7 @@ export default function PlanTableView(props: Props) {
                           onSave={v => props.onSaveDayMessage(day.id, 'coach_intro', v)}
                         />
                         <DayMessage
-                          key={`closing-${day.id}`} icon="💙" label="Wiadomość po treningu" value={day.coach_closing || ''}
+                          key={`closing-${day.id}`} icon="🏁" label="Wiadomość po treningu" value={day.coach_closing || ''}
                           placeholder="Gratulacje, recovery, co dalej… widoczne na końcu, po raporcie."
                           onSave={v => props.onSaveDayMessage(day.id, 'coach_closing', v)}
                         />
