@@ -2062,7 +2062,7 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
           </div>
 
           {/* Bloki */}
-          {blockGroups.map(block => (
+          {blockGroups.map((block, blockIdx) => (
             <div key={block.id}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '0.625rem', marginTop: '0.5rem' }}>
                 <div style={{ background: C.navy, borderRadius: 20, padding: '5px 14px', flexShrink: 0 }}>
@@ -2080,7 +2080,7 @@ export default function TrainingClient({ athlete, trainingView, existingSetLogs,
                   onSetsChange={handleSetsChange}
                   onLogSaved={handleLogSaved}
                   prevWeight={null}
-                  blockLetter={`${block.block_name?.split(/\s+/).pop() || ''}${exIdx + 1}`}
+                  blockLetter={`${String.fromCharCode(65 + (blockIdx % 26))}${exIdx + 1}`}
                 />
               ))}
             </div>
