@@ -728,24 +728,27 @@ export default function PlanTableView(props: Props) {
                               // kto robi który wariant: baza = wszyscy nieprzypisani do innego wariantu
                               const assignedIn = (baseId?: number) => new Set(exs.filter(v => v.variant_of === baseId).flatMap(v => v.variant_athlete_ids || []))
 
+                              // Blok upuszczony w dowolnym miejscu innego bloku (nagłówek, ćwiczenia, „dodaj”) zajmuje jego miejsce
+                              const canDropBlock = drag?.kind === 'block' && drag.dayId === day.id && drag.blockId !== block.id
+                              const blockOver = (e: React.DragEvent) => { if (canDropBlock) { e.preventDefault(); setDropKey(`block-${block.id}`); return true } return false }
+                              const blockDrop = (e: React.DragEvent) => {
+                                if (!canDropBlock || drag?.kind !== 'block') return false
+                                e.preventDefault(); props.onDropBlock(drag.blockId, block.id); endDrag(); return true
+                              }
+                              const blockTarget = dropKey === `block-${block.id}`
+                              const targetCell: CSSProperties = blockTarget ? { background: '#fff3cf', boxShadow: 'inset 0 3px 0 var(--gold)' } : {}
+
                               // wiersz bloku: nazwa (edytowalna) + kopiuj / wklej / usuń
                               const blockHeadRow = (
                                 <tr
                                   key={`head-${block.id}`}
                                   onMouseDown={e => { e.stopPropagation(); setActive({ dayId: day.id, blockId: block.id }) }}
-                                  style={dropKey === `block-${block.id}` ? dropLine : undefined}
-                                  onDragOver={e => {
-                                    if (drag?.kind === 'block' && drag.dayId === day.id && drag.blockId !== block.id) { e.preventDefault(); setDropKey(`block-${block.id}`) }
-                                  }}
-                                  onDrop={e => {
-                                    e.preventDefault()
-                                    if (drag?.kind === 'block' && drag.dayId === day.id && drag.blockId !== block.id) props.onDropBlock(drag.blockId, block.id)
-                                    endDrag()
-                                  }}
+                                  onDragOver={e => { blockOver(e) }}
+                                  onDrop={e => { if (!blockDrop(e)) { e.preventDefault(); endDrag() } }}
                                 >
                                   {/* jedna komórka z literą na cały blok (nagłówek + ćwiczenia + „dodaj”) */}
-                                  <td rowSpan={exs.length + 2} className="coach-pt-block" style={td()}>{blockLabel(bi)}</td>
-                                  <td colSpan={totalCols - 1} style={td({ textAlign: 'left', background: 'var(--bg)', padding: '3px 8px' })}>
+                                  <td rowSpan={exs.length + 2} className="coach-pt-block" style={td(blockTarget ? { background: 'var(--gold)', color: 'var(--navy-900)' } : undefined)}>{blockLabel(bi)}</td>
+                                  <td colSpan={totalCols - 1} style={td({ textAlign: 'left', background: 'var(--bg)', padding: '3px 8px', ...targetCell })}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                       {handle('Przeciągnij, by przenieść cały blok w tym treningu', () => setDrag({ kind: 'block', blockId: block.id, dayId: day.id }))}
                                       <div style={{ minWidth: 140, fontWeight: 700 }}>
@@ -772,9 +775,11 @@ export default function PlanTableView(props: Props) {
                                   onMouseDown={e => { e.stopPropagation(); setActive({ dayId: day.id, blockId: block.id }) }}
                                   style={dropKey === `end-${block.id}` ? dropLine : undefined}
                                   onDragOver={e => {
+                                    if (blockOver(e)) return
                                     if (drag?.kind === 'ex' && drag.dayId === day.id) { e.preventDefault(); setDropKey(`end-${block.id}`) }
                                   }}
                                   onDrop={e => {
+                                    if (blockDrop(e)) return
                                     e.preventDefault()
                                     if (drag?.kind === 'ex' && drag.dayId === day.id) props.onDropExercise(drag.exId, drag.blockId, block.id, null)
                                     endDrag()
@@ -805,10 +810,12 @@ export default function PlanTableView(props: Props) {
                                       onMouseDown={e => { e.stopPropagation(); setActive({ dayId: day.id, blockId: block.id }) }}
                                       style={{ ...(ex.variant_of != null ? { background: '#faf7ff' } : {}), ...(sk?.all ? { background: '#fdf1f1' } : {}),...(selection?.blockId === block.id && selection.ids.includes((ex.variant_of ?? ex.id) as number) ? { background: '#fff7e0' } : {}), ...(dropKey === `ex-${ex.variant_of ?? ex.id}` && ex.variant_of == null ? dropLine : {}) }}
                                       onDragOver={e => {
+                                        if (blockOver(e)) return
                                         const target = ex.variant_of ?? ex.id
                                         if (drag?.kind === 'ex' && drag.dayId === day.id && target != null && drag.exId !== target) { e.preventDefault(); setDropKey(`ex-${target}`) }
                                       }}
                                       onDrop={e => {
+                                        if (blockDrop(e)) return
                                         e.preventDefault()
                                         const target = ex.variant_of ?? ex.id
                                         if (drag?.kind === 'ex' && drag.dayId === day.id && target != null && drag.exId !== target) props.onDropExercise(drag.exId, drag.blockId, block.id, target)
