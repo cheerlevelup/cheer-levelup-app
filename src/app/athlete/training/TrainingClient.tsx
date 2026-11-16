@@ -967,6 +967,19 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, o
 
   async function savePain() {
     setPainError('')
+    // VAS 0 i brak opisu = brak bólu → usuń wpis
+    if (vas === 0 && !painNote.trim()) {
+      const q = supabase.from('pain_logs').delete().eq('workout_session_id', sessionId)
+      const { error } = existingPainId
+        ? await q.eq('id', existingPainId)
+        : await q.eq('pain_location', exerciseName)
+      if (error) { setPainError(error.message); return }
+      setExistingPainId(null)
+      setPainNote('')
+      setPainSaved(false)
+      setFeelingOpen(false)
+      return
+    }
     const payload = {
       workout_session_id: sessionId,
       vas_score: vas,
@@ -1144,20 +1157,23 @@ function ExerciseCard({ exercise, sessionId, athleteId, setLogs, onSetsChange, o
                 <div style={{ fontSize: '0.68rem', fontWeight: 700, color: C.gray, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.5rem', fontFamily: mono }}>Skala bólu VAS — {vas}/10</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                   <span style={{ fontSize: '0.75rem', color: C.green, fontWeight: 600 }}>0</span>
-                  <input type="range" min={0} max={10} step={1} value={vas} onChange={e => setVas(parseInt(e.target.value))} style={{ flex: 1, accentColor: vas >= 7 ? C.red : vas >= 4 ? '#F97316' : C.green }} />
+                  <input type="range" min={0} max={10} step={1} value={vas} onChange={e => { setVas(parseInt(e.target.value)); setPainSaved(false) }} style={{ flex: 1, accentColor: vas >= 7 ? C.red : vas >= 4 ? '#F97316' : C.green }} />
                   <span style={{ fontSize: '0.75rem', color: C.red, fontWeight: 600 }}>10</span>
                 </div>
                 <div style={{ textAlign: 'center', fontSize: '0.75rem', fontWeight: 600, color: vas >= 7 ? C.red : vas >= 4 ? '#F97316' : C.green, marginBottom: '0.75rem' }}>
                   {vas === 0 ? 'Brak bólu' : vas <= 3 ? 'Łagodny' : vas <= 6 ? 'Umiarkowany' : vas <= 8 ? 'Silny' : 'Bardzo silny'}
                 </div>
-                <textarea placeholder="Gdzie boli? Opis odczuć..." value={painNote} onChange={e => setPainNote(e.target.value)} rows={2}
+                <textarea placeholder="Gdzie boli? Opis odczuć..." value={painNote} onChange={e => { setPainNote(e.target.value); setPainSaved(false) }} rows={2}
                   style={{ width: '100%', padding: '0.625rem', border: '1.5px solid #E0E8F0', borderRadius: 8, fontFamily: sans, fontSize: '0.85rem', color: C.navy, resize: 'none', outline: 'none', background: '#fff', boxSizing: 'border-box' }} />
                 {painError && <div style={{ color: C.red, fontSize: '0.75rem', marginTop: 4 }}>❌ {painError}</div>}
-                {(vas > 0 || painNote) && (
-                  <button onClick={savePain} style={{ marginTop: 8, width: '100%', padding: '0.625rem', background: painSaved ? C.green : C.navy, color: painSaved ? '#fff' : C.gold, border: 'none', borderRadius: 8, fontFamily: sans, fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}>
-                    {painSaved ? '✓ Zapisano' : 'Zapisz odczucia'}
-                  </button>
-                )}
+                {(vas > 0 || painNote.trim() || existingPainId) && (() => {
+                  const clearing = vas === 0 && !painNote.trim()
+                  return (
+                    <button onClick={savePain} style={{ marginTop: 8, width: '100%', padding: '0.625rem', background: painSaved ? C.green : clearing ? '#fff' : C.navy, color: painSaved ? '#fff' : clearing ? C.red : C.gold, border: clearing && !painSaved ? `1.5px solid ${C.red}` : 'none', borderRadius: 8, fontFamily: sans, fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}>
+                      {painSaved ? '✓ Zapisano' : clearing ? 'Usuń zgłoszenie bólu' : 'Zapisz odczucia'}
+                    </button>
+                  )
+                })()}
               </div>
             )}
           </div>
