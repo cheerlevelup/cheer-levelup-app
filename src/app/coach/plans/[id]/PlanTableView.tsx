@@ -623,9 +623,6 @@ export default function PlanTableView(props: Props) {
           <button onClick={() => setWarmupCols(v => Math.min(6, v + 1))}>+</button>
         </div>
         <button className="coach-btn coach-btn-dark coach-btn-small" onClick={onAddWeek}>+ Tydzień</button>
-        <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: 11, color: 'var(--muted)' }}>
-          Kliknij komórkę, by edytować (zapisuje się od razu) · ✏️ pełna edycja ćwiczenia · ☐ zaznacz ćwiczenia → Ctrl+C, kliknij blok → Ctrl+V
-        </span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
           <button className="coach-btn coach-btn-excel" onClick={() => doExport('xlsx')} disabled={exporting !== null}>
             {exporting === 'xlsx' ? '...' : '⬇ Excel'}
@@ -636,14 +633,15 @@ export default function PlanTableView(props: Props) {
         </div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         {[...weeks].sort((a, b) => a.week_number - b.week_number).map(week => {
           const weekDays = allDays.filter(d => d.week_id === week.id)
           return (
-            <div key={week.id}>
-              {/* week header */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '0.75rem' }}>
-                <div className="coach-week-label">Tydzień {week.week_number}</div>
+            <div key={week.id} style={{ background: '#fff', border: '1.5px solid var(--border)', borderRadius: 16, padding: '0 1rem 1rem', boxShadow: '0 1px 3px rgba(13,27,42,.06)' }}>
+              {/* week header — każdy tydzień w osobnej karcie */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 -1rem 1rem', padding: '0.6rem 1rem', background: 'var(--navy-900)', borderRadius: '14px 14px 0 0', flexWrap: 'wrap' }}>
+                <div style={{ fontFamily: 'var(--font-inter),sans-serif', fontWeight: 800, fontSize: 14, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--gold)' }}>Tydzień {week.week_number}</div>
+                <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: 11, color: '#aeb7cc' }}>{weekDays.length} {weekDays.length === 1 ? 'trening' : weekDays.length < 5 ? 'treningi' : 'treningów'}</span>
                 <button className="coach-btn coach-btn-ghost coach-btn-small" onClick={() => onAddDay(week.id)}>+ Trening</button>
                 {props.clipboard?.kind === 'day' && (
                   <button style={{ ...iconBtn, color: 'var(--gold)', fontWeight: 700 }} title="Wklej skopiowany trening jako nowy trening w tym tygodniu" onClick={async () => { await props.onPasteDay(week.id); notify(`Wklejono trening „${(props.clipboard as { name: string }).name}”`) }}>📋 wklej trening „{props.clipboard.name}”</button>
