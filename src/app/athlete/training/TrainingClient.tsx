@@ -476,9 +476,9 @@ function FloatingTimer() {
           {mode === 'countdown' && (
             <>
               <button onClick={() => adjust(-15)} aria-label="Odejmij 15 sekund"
-                style={{ position: 'absolute', left: -14, top: '50%', transform: 'translateY(-50%)', width: 44, height: 44, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.08)', color: C.white, fontFamily: mono, fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>−15</button>
+                style={{ position: 'absolute', left: -56, top: '50%', transform: 'translateY(-50%)', width: 44, height: 44, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.08)', color: C.white, fontFamily: mono, fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>−15</button>
               <button onClick={() => adjust(15)} aria-label="Dodaj 15 sekund"
-                style={{ position: 'absolute', right: -14, top: '50%', transform: 'translateY(-50%)', width: 44, height: 44, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.08)', color: C.white, fontFamily: mono, fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>+15</button>
+                style={{ position: 'absolute', right: -56, top: '50%', transform: 'translateY(-50%)', width: 44, height: 44, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.08)', color: C.white, fontFamily: mono, fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>+15</button>
             </>
           )}
         </div>
