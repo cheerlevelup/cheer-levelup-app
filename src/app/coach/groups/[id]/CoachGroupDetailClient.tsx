@@ -11,6 +11,10 @@ import { Card, Modal, Field, Button, TabsNav, SegmentedControl, StatsTable } fro
 import GroupHero from '@/components/coach/GroupHero'
 import { dedupeLogs } from '@/lib/coach/dedupeLogs'
 import { deactivateGroupAssignments, insertAssignments } from '@/lib/coach/planAssignments'
+import StartPlanTrainingModal from '@/components/coach/StartPlanTrainingModal'
+import { fillHref } from '@/components/coach/PlanModeSwitch'
+import { localDateStr } from '@/lib/groupTraining'
+import { Play, ClipboardList } from 'lucide-react'
 
 const thStyle: React.CSSProperties = { padding: '0.75rem 0.5rem', textAlign: 'center', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.6rem', color: 'var(--muted-light)', background: 'var(--bg)', borderBottom: `1.5px solid var(--border)`, whiteSpace: 'nowrap', minWidth: 44 }
 function tdWs(bg: string): React.CSSProperties { return { padding: '0.4rem 0.5rem', textAlign: 'center', borderBottom: `1.5px solid var(--border)`, background: bg, verticalAlign: 'middle' } }
@@ -824,10 +828,14 @@ function filterByDays(logs: any[], days: number, dateField = 'date') {
 }
 
 
-export default function CoachGroupDetailClient({ group, athletes, assignments, days, sessions, plans, wellnessLogs = [], wellnessWeek = [], feedbacks = [], moduleConfigs = [], assignmentsHistory = [], archivedPlans = [] }: any) {
+export default function CoachGroupDetailClient({ group, athletes, assignments, days, sessions, plans, wellnessLogs = [], wellnessWeek = [], feedbacks = [], moduleConfigs = [], assignmentsHistory = [], archivedPlans = [], startPlans = [], planTrainings = [] }: any) {
   const router = useRouter()
   const supabase = createClient()
   const [showAssignModal, setShowAssignModal] = useState(false)
+  const [startOpen, setStartOpen] = useState(false)
+  // trening z planu rozpoczęty dziś — kontynuacja wpisywania wyników
+  const todayStr = localDateStr()
+  const todayPlanTraining = (planTrainings as any[]).find(t => t.training_date === todayStr) || null
   const [assignedMsg, setAssignedMsg] = useState('')
   const [subView, setSubView] = useState<SubView>('trening')
   const [moduleConfig, setModuleConfig] = useState<'wellness' | null>(null)
@@ -961,6 +969,9 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
     <>
       <SetPageMeta title={group.name} backHref="/coach/groups" backLabel="Grupy" />
 
+      {startOpen && (
+        <StartPlanTrainingModal groupId={group.id} athletes={athletes} plans={startPlans} onClose={() => setStartOpen(false)} />
+      )}
       {showAssignModal && (
         <AssignPlanModal
           athletes={athletes} plans={plans} groupId={group.id}
@@ -1017,6 +1028,46 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
         ]} />
 
         <div className="coach-group-tab-panel">
+          {/* Rozpocznij trening: plan → trening → obecność → tabela wyników */}
+          <div className="coach-group-actions" style={{ marginBottom: '1rem' }}>
+            {todayPlanTraining ? (
+              <>
+                <button className="coach-group-action-btn coach-primary" onClick={() => router.push(fillHref(group.id, todayPlanTraining.plan_id, todayPlanTraining.id))}>
+                  <span className="coach-gab-icon"><Play size={16} /></span>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div className="coach-gab-title">Kontynuuj trening: {todayPlanTraining.day_name || 'Trening'}</div>
+                    <div className="coach-gab-sub">{todayPlanTraining.plan_name} · tabela wyników</div>
+                  </div>
+                </button>
+                <button className="coach-group-action-btn" onClick={() => setStartOpen(true)}>
+                  <span className="coach-gab-icon"><ClipboardList size={16} /></span>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div className="coach-gab-title">Rozpocznij inny trening z planu</div>
+                    <div className="coach-gab-sub">Wybierz plan i trening, sprawdź obecność</div>
+                  </div>
+                </button>
+              </>
+            ) : (
+              <button className="coach-group-action-btn coach-primary" onClick={() => setStartOpen(true)} disabled={athletes.length === 0}>
+                <span className="coach-gab-icon"><Play size={16} /></span>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div className="coach-gab-title">Rozpocznij trening</div>
+                  <div className="coach-gab-sub">{athletes.length === 0 ? 'Dodaj najpierw zawodniczki do grupy' : 'Wybierz plan i trening, sprawdź obecność'}</div>
+                </div>
+              </button>
+            )}
+          </div>
+          {(planTrainings as any[]).length > 0 && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: -6, marginBottom: '1rem' }}>
+              <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.6rem', color: 'var(--muted-light)', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>Ostatnie treningi z planu</span>
+              {(planTrainings as any[]).slice(0, 8).map(t => (
+                <button key={t.id} onClick={() => router.push(fillHref(group.id, t.plan_id, t.id))} title={`${t.plan_name} — otwórz tabelę wyników`}
+                  style={{ border: `1.5px solid ${t.training_date === todayStr ? 'var(--gold)' : 'var(--border)'}`, background: '#fff', borderRadius: 8, padding: '4px 9px', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.72rem', fontWeight: 700, color: 'var(--navy-900)', cursor: 'pointer' }}>
+                  {t.day_name || 'Trening'} <span style={{ fontWeight: 600, color: 'var(--muted-light)' }}>· {t.training_date === todayStr ? 'dziś' : t.training_date}</span>
+                </button>
+              ))}
+            </div>
+          )}
           <div style={{ marginBottom: '1rem' }}>
             <SegmentedControl
               options={[
