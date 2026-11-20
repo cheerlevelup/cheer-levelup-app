@@ -105,8 +105,8 @@ const stripTime = (v?: string | null) => (v || '').trim().replace(TIME_SUFFIX, '
 const toTime = (v: string) => { const t = stripTime(v); return t ? `${t}''` : '' }
 
 // Parametry jednej zawodniczki w ćwiczeniu indywidualnym (puste = jak w planie)
-type IndivRow = { sets: string; reps: string; weight: string; tempo: string }
-const EMPTY_INDIV: IndivRow = { sets: '', reps: '', weight: '', tempo: '' }
+type IndivRow = { sets: string; reps: string; weight: string; tempo: string; comment: string }
+const EMPTY_INDIV: IndivRow = { sets: '', reps: '', weight: '', tempo: '', comment: '' }
 
 type Block = {
   id: number
@@ -314,12 +314,12 @@ function ExerciseEditForm({
     let cancelled = false
     ;(async () => {
       const { data } = await supabase.from('athlete_exercise_overrides')
-        .select('athlete_id, sets_override, reps_override, weight_override, tempo_override')
+        .select('athlete_id, sets_override, reps_override, weight_override, tempo_override, coach_note_override')
         .eq('block_exercise_id', exercise.id)
       if (cancelled || !data) return
       const rows: Record<number, IndivRow> = {}
-      for (const o of data as { athlete_id: number; sets_override: number | null; reps_override: string | null; weight_override: number | null; tempo_override: string | null }[]) {
-        rows[o.athlete_id] = { sets: o.sets_override?.toString() || '', reps: o.reps_override || '', weight: o.weight_override?.toString() || '', tempo: o.tempo_override || '' }
+      for (const o of data as { athlete_id: number; sets_override: number | null; reps_override: string | null; weight_override: number | null; tempo_override: string | null; coach_note_override?: string | null }[]) {
+        rows[o.athlete_id] = { sets: o.sets_override?.toString() || '', reps: o.reps_override || '', weight: o.weight_override?.toString() || '', tempo: o.tempo_override || '', comment: o.coach_note_override || '' }
       }
       setIndiv(rows)
       setIndivLoaded(new Set(Object.keys(rows).map(Number)))
@@ -353,8 +353,10 @@ function ExerciseEditForm({
         reps_override: r.reps.trim() || null,
         weight_override: isNaN(weight) ? (/^\s*bw\s*$/i.test(r.weight) ? 0 : null) : weight,
         tempo_override: r.tempo.trim() || null,
+        // komentarz tylko dla tej zawodniczki — u niej zastępuje ogólny komentarz ćwiczenia
+        coach_note_override: r.comment.trim() || null,
       }
-    }).filter(r => indivLoaded.has(r.athlete_id) || r.sets_override != null || r.reps_override || r.weight_override != null || r.tempo_override)
+    }).filter(r => indivLoaded.has(r.athlete_id) || r.sets_override != null || r.reps_override || r.weight_override != null || r.tempo_override || r.coach_note_override)
     if (rows.length === 0) return null
     const { error } = await supabase.from('athlete_exercise_overrides').upsert(rows, { onConflict: 'athlete_id,block_exercise_id' })
     return error ? error.message : null
@@ -734,6 +736,7 @@ function ExerciseEditForm({
                     <th>{iso ? 'Powt.' : timeMode ? 'Czas (s)' : 'Powt.'}</th>
                     <th>Ciężar</th>
                     {showTempo && <th>Tempo</th>}
+                    <th style={{ minWidth: 180 }}>Komentarz</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -747,6 +750,7 @@ function ExerciseEditForm({
                         <td><input value={timeReps ? stripTime(r.reps) : r.reps} onChange={e => updateIndiv(a.id, 'reps', timeReps ? toTime(e.target.value) : e.target.value)} placeholder={(timeReps ? stripTime(firstSet.reps) : firstSet.reps) || '—'} /></td>
                         <td><input value={r.weight} onChange={e => updateIndiv(a.id, 'weight', e.target.value)} placeholder={firstSet.weight_kg || 'kg'} /></td>
                         {showTempo && <td><input value={r.tempo} onChange={e => updateIndiv(a.id, 'tempo', e.target.value)} placeholder={firstSet.tempo || '—'} /></td>}
+                        <td><input value={r.comment} onChange={e => updateIndiv(a.id, 'comment', e.target.value)} placeholder={comment.trim() ? 'jak ogólny' : 'komentarz dla niej'} title="Komentarz widoczny tylko dla tej zawodniczki (zastępuje ogólny komentarz ćwiczenia)" style={{ textAlign: 'left' }} /></td>
                       </tr>
                     )
                   })}

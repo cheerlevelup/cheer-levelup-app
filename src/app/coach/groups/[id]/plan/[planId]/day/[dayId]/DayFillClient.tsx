@@ -46,7 +46,7 @@ type Block = { id: number; block_name: string | null; block_order: number; round
 type Session = { id: number; athlete_id: number; workout_day_id: number; assignment_id: number | null; completed: boolean; report_sent?: boolean | null; date_completed?: string | null; created_at?: string }
 type SetLog = { id: number; workout_session_id: number; block_exercise_id: number; athlete_id: number; set_number: number; weight: number | null; reps_completed: number | null; completed: boolean; is_warmup: boolean; athlete_note?: string | null; skipped?: boolean }
 type PainLog = { id: number; workout_session_id: number; vas_score: number | null; pain_comment: string | null; pain_location: string | null }
-type Override = { athlete_id: number; block_exercise_id: number; sets_override?: number | null; reps_override?: string | null; tempo_override?: string | null; weight_override?: number | null; skip?: boolean | null; exercise_code_override?: string | null; is_substitution?: boolean | null; warmup_sets_override?: WarmupSet[] | null }
+type Override = { athlete_id: number; block_exercise_id: number; sets_override?: number | null; reps_override?: string | null; tempo_override?: string | null; weight_override?: number | null; coach_note_override?: string | null; skip?: boolean | null; exercise_code_override?: string | null; is_substitution?: boolean | null; warmup_sets_override?: WarmupSet[] | null }
 
 interface Props {
   group: { id: number; name: string }
@@ -130,20 +130,20 @@ function InlineEditor({ initialValue, initialScale, showScale, placeholder, colo
 }
 
 // Parametry ćwiczenia dla jednej zawodniczki (athlete_exercise_overrides) — wpisywane w trakcie treningu
-type ParamValues = { sets: string; reps: string; weight: string; tempo: string }
+type ParamValues = { sets: string; reps: string; weight: string; tempo: string; comment: string }
 function ParamsEditor({ initial, placeholders, onSave, onCancel }: {
   initial: ParamValues; placeholders: ParamValues
   onSave: (v: ParamValues) => void; onCancel: () => void
 }) {
   const [v, setV] = useState(initial)
-  const field = (k: keyof ParamValues, label: string, width: number) => (
+  const field = (k: keyof ParamValues, label: string, width: number, align: 'center' | 'left' = 'center') => (
     <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <span style={{ fontFamily: INTER, fontSize: '0.55rem', fontWeight: 700, color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{label}</span>
       <input value={v[k]} placeholder={placeholders[k]} autoFocus={k === 'sets'}
         onChange={e => setV(prev => ({ ...prev, [k]: e.target.value }))}
         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onSave(v) } else if (e.key === 'Escape') onCancel() }}
         inputMode={k === 'sets' ? 'numeric' : undefined}
-        style={{ width, border: '1.5px solid #0e7490', borderRadius: 7, background: '#ecfeff', fontFamily: INTER, fontSize: '0.74rem', color: 'var(--navy-900)', padding: '4px 6px', outline: 'none', textAlign: 'center' }} />
+        style={{ width, border: '1.5px solid #0e7490', borderRadius: 7, background: '#ecfeff', fontFamily: INTER, fontSize: '0.74rem', color: 'var(--navy-900)', padding: '4px 6px', outline: 'none', textAlign: align }} />
     </label>
   )
   return (
@@ -152,6 +152,7 @@ function ParamsEditor({ initial, placeholders, onSave, onCancel }: {
       {field('reps', 'Powt.', 56)}
       {field('weight', 'Ciężar', 52)}
       {field('tempo', 'Tempo', 52)}
+      {field('comment', 'Komentarz dla niej', 170, 'left')}
       <button onClick={() => onSave(v)} title="Zapisz parametry tej zawodniczki" style={{ flexShrink: 0, width: 24, height: 24, borderRadius: 7, border: 'none', background: 'var(--green)', color: '#ffffff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Check size={13} /></button>
       <button onClick={onCancel} title="Anuluj" style={{ flexShrink: 0, width: 24, height: 24, borderRadius: 7, border: 'none', background: 'none', color: 'var(--muted-light)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><X size={13} /></button>
     </div>
@@ -200,6 +201,7 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
       reps_override: v.reps.trim() || null,
       weight_override: isNaN(w) ? (/^\s*bw\s*$/i.test(v.weight) ? 0 : null) : w,
       tempo_override: v.tempo.trim() || null,
+      coach_note_override: v.comment.trim() || null,
     }
     setSaving(n => n + 1)
     const { data, error: err } = await supabase.from('athlete_exercise_overrides')
@@ -709,8 +711,8 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
           const o = ovrMap.get(cellKey)
           return (
             <ParamsEditor
-              initial={{ sets: o?.sets_override != null ? String(o.sets_override) : '', reps: o?.reps_override || '', weight: o?.weight_override != null ? String(o.weight_override) : '', tempo: o?.tempo_override || '' }}
-              placeholders={{ sets: String(item.sets || ''), reps: item.reps || 'powt.', weight: item.weight != null ? String(item.weight) : 'kg', tempo: item.tempo || 'tempo' }}
+              initial={{ sets: o?.sets_override != null ? String(o.sets_override) : '', reps: o?.reps_override || '', weight: o?.weight_override != null ? String(o.weight_override) : '', tempo: o?.tempo_override || '', comment: o?.coach_note_override || '' }}
+              placeholders={{ sets: String(item.sets || ''), reps: item.reps || 'powt.', weight: item.weight != null ? String(item.weight) : 'kg', tempo: item.tempo || 'tempo', comment: 'np. wskazówka techniczna' }}
               onSave={v => { saveParams(athlete.id, item.id, v); setCellEdit(null) }}
               onCancel={() => setCellEdit(null)}
             />
@@ -946,7 +948,7 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                         }
                         const planned = o?.sets_override || ex.sets || workSets(ex).length || 1
                         const reps = o?.reps_override || exReps(ex)
-                        const changed = o && (o.sets_override || o.reps_override || o.weight_override != null || o.exercise_code_override)
+                        const changed = o && (o.sets_override || o.reps_override || o.weight_override != null || o.exercise_code_override || o.coach_note_override)
                         return (
                           <td key={col.ex.id} className={tdClass} style={tdStyle}>
                             {renderExercise(athlete, session, {
@@ -958,8 +960,8 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                               editParams: true,
                               // indywidualne (albo zmienione dla tej zawodniczki) — jej parametry przed polami
                               ...(ex.is_individual || changed ? {
-                                info: `${changed && !ex.is_individual ? '✎ ' : ''}${o?.exercise_code_override ? `${o.exercise_code_override} · ` : ''}${planned}×${reps || '?'}${o?.weight_override != null ? ` · ${o.weight_override} kg` : ''}${o?.tempo_override ? ` · ${o.tempo_override}` : ''}`,
-                                infoTitle: ex.is_individual ? 'Parametry tej zawodniczki (ćwiczenie indywidualne)' : 'Zmienione dla tej zawodniczki',
+                                info: `${changed && !ex.is_individual ? '✎ ' : ''}${o?.exercise_code_override ? `${o.exercise_code_override} · ` : ''}${planned}×${reps || '?'}${o?.weight_override != null ? ` · ${o.weight_override} kg` : ''}${o?.tempo_override ? ` · ${o.tempo_override}` : ''}${o?.coach_note_override ? ' · 📝' : ''}`,
+                                infoTitle: `${ex.is_individual ? 'Parametry tej zawodniczki (ćwiczenie indywidualne)' : 'Zmienione dla tej zawodniczki'}${o?.coach_note_override ? ` · komentarz: ${o.coach_note_override}` : ''}`,
                               } : {}),
                             }, nav)}
                           </td>
