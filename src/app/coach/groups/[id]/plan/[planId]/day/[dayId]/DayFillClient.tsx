@@ -41,7 +41,7 @@ type Extra = {
 }
 // Ćwiczenie w komórce zawodniczki — z planu (z jej modyfikacjami) albo dodatkowe
 // bw — seria z ciężarem „BW” w planie (masa ciała): pole od razu pokazuje 0 kg
-type CellExercise = { id: number; name: string; sets: number; reps: string; weight: number | null; warmups: WarmupSet[]; bw?: boolean[]; info?: string; infoTitle?: string; tempo?: string | null; editParams?: boolean }
+type CellExercise = { id: number; name: string; sets: number; reps: string; weight: number | null; warmups: WarmupSet[]; bw?: boolean[]; info?: string; infoTitle?: string; tempo?: string | null; editParams?: boolean; comment?: string | null }
 type Block = { id: number; block_name: string | null; block_order: number; rounds?: number | null; workout_block_exercises: BlockEx[] }
 type Session = { id: number; athlete_id: number; workout_day_id: number; assignment_id: number | null; completed: boolean; report_sent?: boolean | null; date_completed?: string | null; created_at?: string }
 type SetLog = { id: number; workout_session_id: number; block_exercise_id: number; athlete_id: number; set_number: number; weight: number | null; reps_completed: number | null; completed: boolean; is_warmup: boolean; athlete_note?: string | null; skipped?: boolean }
@@ -697,6 +697,12 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
             <MessageCircle size={10} />
           </button>
         </div>
+        {item.comment && !(cellEdit?.key === cellKey && cellEdit.type === 'params') && (
+          <button onClick={() => setCellEdit({ key: cellKey, type: 'params' })} title="Komentarz dla tej zawodniczki — kliknij, by zmienić"
+            style={{ display: 'block', marginTop: 3, border: 'none', background: 'none', padding: 0, fontFamily: INTER, fontSize: '0.66rem', fontWeight: 700, color: '#0e7490', textAlign: 'left', maxWidth: 260, whiteSpace: 'normal', cursor: 'pointer' }}>
+            📝 {item.comment}
+          </button>
+        )}
         {pain && !(cellEdit?.key === cellKey && cellEdit.type === 'pain') && (
           <button onClick={() => setCellEdit({ key: cellKey, type: 'pain' })} style={{ display: 'block', marginTop: 3, border: 'none', background: 'none', padding: 0, fontFamily: INTER, fontSize: '0.66rem', fontWeight: 700, color: (pain.vas_score ?? 0) >= 5 ? '#c23b3b' : '#c07f1e', textAlign: 'left', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             ⚠ {pain.vas_score != null ? `${pain.vas_score}/10 ` : ''}{pain.pain_comment || ''}
@@ -958,9 +964,10 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                               bw: bwSets(ex, o),
                               tempo: ex.tempo ?? null,
                               editParams: true,
+                              comment: o?.coach_note_override || null,
                               // indywidualne (albo zmienione dla tej zawodniczki) — jej parametry przed polami
                               ...(ex.is_individual || changed ? {
-                                info: `${changed && !ex.is_individual ? '✎ ' : ''}${o?.exercise_code_override ? `${o.exercise_code_override} · ` : ''}${planned}×${reps || '?'}${o?.weight_override != null ? ` · ${o.weight_override} kg` : ''}${o?.tempo_override ? ` · ${o.tempo_override}` : ''}${o?.coach_note_override ? ' · 📝' : ''}`,
+                                info: `${changed && !ex.is_individual ? '✎ ' : ''}${o?.exercise_code_override ? `${o.exercise_code_override} · ` : ''}${planned}×${reps || '?'}${o?.weight_override != null ? ` · ${o.weight_override} kg` : ''}${o?.tempo_override ? ` · ${o.tempo_override}` : ''}`,
                                 infoTitle: `${ex.is_individual ? 'Parametry tej zawodniczki (ćwiczenie indywidualne)' : 'Zmienione dla tej zawodniczki'}${o?.coach_note_override ? ` · komentarz: ${o.coach_note_override}` : ''}`,
                               } : {}),
                             }, nav)}
