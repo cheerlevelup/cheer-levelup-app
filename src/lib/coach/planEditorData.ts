@@ -29,6 +29,16 @@ export async function loadPlanEditorData(supabase: any, planId: number, groupId?
     }
     athletes.sort((a, b) => a.full_name.localeCompare(b.full_name, 'pl'))
   }
+  // Plan jeszcze nikomu nieprzypisany (np. z biblioteki, przed „Rozpocznij trening") —
+  // wszystkie zawodniczki z nazwą grupy, żeby od razu wpisać indywidualne parametry
+  if (athletes.length === 0) {
+    const { data } = await supabase.from('athletes').select('id, full_name, archived, group:groups(name)').order('full_name', { ascending: true })
+    athletes = ((data || []) as any[])
+      .filter(a => !a.archived)
+      .map(a => ({ id: a.id, full_name: a.group?.name ? `${a.full_name} · ${a.group.name}` : a.full_name, group: a.group?.name || '' }))
+      .sort((a, b) => a.group.localeCompare(b.group, 'pl') || a.full_name.localeCompare(b.full_name, 'pl'))
+      .map(({ id, full_name }) => ({ id, full_name }))
+  }
 
   // Pełna struktura planu
   const { data: weeks } = await supabase
