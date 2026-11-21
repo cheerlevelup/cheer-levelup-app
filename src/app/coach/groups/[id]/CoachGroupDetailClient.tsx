@@ -1023,7 +1023,6 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
           { key: 'treningi', label: 'Treningi', href: `/coach/groups/${group.id}` },
           { key: 'plan', label: 'Plan', href: `/coach/groups/${group.id}/plan` },
           { key: 'statystyki', label: 'Statystyki', href: `/coach/groups/${group.id}/stats` },
-          { key: 'obecnosc', label: 'Obecność', href: `/coach/groups/${group.id}/attendance` },
           { key: 'zawodniczki', label: 'Zawodniczki', href: `/coach/groups/${group.id}/athletes` },
           { key: 'testy', label: 'Testy', href: `/coach/groups/${group.id}/tests` },
         ]} />
