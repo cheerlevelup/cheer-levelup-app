@@ -319,7 +319,9 @@ export function WynikiTab({ groups, athletes, catalog, results, singleGroup }: P
                 <tr key={p.id}>
                   <td className="coach-rt-name">
                     {p.full_name}
-                    <div className="coach-rt-meta">{groupName(p.group_id)}{p.birth_year ? ` · ur. ${p.birth_year}` : ''}</div>
+                    {singleGroup
+                      ? (p.birth_year ? <div className="coach-rt-meta">ur. {p.birth_year}</div> : null)
+                      : <div className="coach-rt-meta">{groupName(p.group_id)}{p.birth_year ? ` · ur. ${p.birth_year}` : ''}</div>}
                   </td>
                   {visibleTestList.map(t => {
                     const dates = testDates[t.id] || []
