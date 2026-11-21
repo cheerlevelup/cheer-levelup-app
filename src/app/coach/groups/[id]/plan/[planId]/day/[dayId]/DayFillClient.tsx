@@ -9,6 +9,7 @@
 //  - „zakończony" → workout_sessions.completed (zaznacza trener albo zawodniczka)
 import PlanModeSwitch, { editorHref, rememberFillDay } from '@/components/coach/PlanModeSwitch'
 import { useLiveRefresh } from '@/lib/useLiveRefresh'
+import { writeSetLog } from '@/lib/coach/setLogWrite'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
@@ -324,15 +325,7 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
         completed: num != null || (!warmup && prev?.[other] != null),
         ...(prev?.skipped && num != null ? { skipped: false } : {}),
       }
-      let id = prev?.id
-      if (!id) {
-        const { data: found } = await supabase.from('set_logs').select('id').eq('workout_session_id', s.id).eq('block_exercise_id', exId)
-          .eq('set_number', setNum).eq('is_warmup', warmup).order('created_at', { ascending: false }).limit(1).maybeSingle()
-        id = found?.id
-      }
-      const res = id
-        ? await supabase.from('set_logs').update(payload).eq('id', id).select().single()
-        : await supabase.from('set_logs').insert(payload).select().single()
+      const res = await writeSetLog(supabase, payload, prev?.id)
       if (res.error || !res.data) { setError(res.error?.message || 'Błąd zapisu serii'); return }
       setLogs(m => ({ ...m, [logKey(s.id, exId, setNum, warmup)]: res.data as SetLog }))
     })())
@@ -348,15 +341,7 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
         const key = logKey(s.id, exId, n, false)
         const prev = logs[key]
         const payload = { workout_session_id: s.id, block_exercise_id: exId, athlete_id: athleteId, set_number: n, is_warmup: false, weight: null, reps_completed: null, completed: false, skipped: skip }
-        let id = prev?.id
-        if (!id) {
-          const { data: found } = await supabase.from('set_logs').select('id').eq('workout_session_id', s.id).eq('block_exercise_id', exId)
-            .eq('set_number', n).eq('is_warmup', false).order('created_at', { ascending: false }).limit(1).maybeSingle()
-          id = found?.id
-        }
-        const res = id
-          ? await supabase.from('set_logs').update(payload).eq('id', id).select().single()
-          : await supabase.from('set_logs').insert(payload).select().single()
+        const res = await writeSetLog(supabase, payload, prev?.id)
         if (res.error || !res.data) {
           setError(/skipped/.test(res.error?.message || '') ? 'Aby oznaczać ćwiczenia jako niewykonane, uruchom migrację 202611120004.' : (res.error?.message || 'Błąd zapisu'))
           return
@@ -367,9 +352,14 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
   }
 
   // Ćwiczenie niewykonane przez całą drużynę: obecne zawodniczki, które je robią (warianty, pominięte)
+  // Zawodniczki z wpisanym wynikiem w tym ćwiczeniu je zrobiły — „✕ drużyna” ich nie rusza
   function teamTargets(ex: BlockEx, isFor: (id: number) => boolean) {
     return athletes
       .filter(a => !absentIds.has(a.id) && isFor(a.id) && !ovrMap.get(ovrKey(a.id, ex.id))?.skip)
+      .filter(a => {
+        const s = sessions[a.id]
+        return !s || !Object.values(logs).some(l => l.workout_session_id === s.id && l.block_exercise_id === ex.id && !l.is_warmup && (l.weight != null || l.reps_completed != null))
+      })
       .map(a => ({ athleteId: a.id, nSets: ovrMap.get(ovrKey(a.id, ex.id))?.sets_override || ex.sets || workSets(ex).length || 1 }))
   }
   function teamSkipped(ex: BlockEx, isFor: (id: number) => boolean) {

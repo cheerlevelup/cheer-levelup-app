@@ -2,6 +2,7 @@
 // Ten sam zapis co w „Wpisuj wyniki” i u zawodniczki: set_logs.skipped (migracja 202611120004)
 // w sesji zawodniczki (workout_sessions) dla danego treningu. Plik tylko kliencki —
 // bez importów serwerowych (next/headers).
+import { writeSetLog } from './setLogWrite'
 import { createClient } from '@/utils/supabase/client'
 
 type Session = { id: number; athlete_id: number; workout_day_id: number; completed: boolean; created_at?: string }
@@ -44,7 +45,7 @@ export async function loadSkipState(planId: number, dayIds: number[], exIds: num
   const sessionIds = Object.values(sess).map(s => s.id)
   const logs: Record<string, SkipLog> = {}
   if (sessionIds.length && exIds.length) {
-    const { data } = await supabase.from('set_logs').select('*').in('workout_session_id', sessionIds).in('block_exercise_id', exIds).eq('is_warmup', false).order('created_at', { ascending: false })
+    const { data } = await supabase.from('set_logs').select('*').in('workout_session_id', sessionIds).in('block_exercise_id', exIds).or('is_warmup.is.null,is_warmup.eq.false').order('created_at', { ascending: false })
     for (const l of (data || []) as SkipLog[]) {
       const k = skipLogKey(l.workout_session_id, l.block_exercise_id, l.set_number)
       if (!logs[k]) logs[k] = l // najnowszy wygrywa
@@ -105,10 +106,10 @@ export async function setSkipped(
       if (skip ? (prev?.skipped || prev?.weight != null || prev?.reps_completed != null) : !prev?.skipped) continue
       const res = prev
         ? await supabase.from('set_logs').update(skip ? { skipped: true, completed: false } : { skipped: false }).eq('id', prev.id).select().single()
-        : await supabase.from('set_logs').insert({
+        : await writeSetLog(supabase, {
           workout_session_id: session.id, block_exercise_id: exId, athlete_id: t.athleteId, set_number: n, is_warmup: false,
           weight: null, reps_completed: null, completed: false, skipped: true,
-        }).select().single()
+        })
       if (res.error || !res.data) {
         error = error || (/skipped/.test(res.error?.message || '') ? 'Aby oznaczać ćwiczenia jako niewykonane, uruchom migrację 202611120004.' : (res.error?.message || 'Błąd zapisu'))
         return
