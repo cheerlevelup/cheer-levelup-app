@@ -157,3 +157,6 @@
 .coach-recent-name{font-size:13px;font-weight:600;font-family:var(--font-inter),sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .coach-recent-meta{font-size:11.5px;color:var(--muted);font-family:var(--font-inter),sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .coach-recent-chev{color:var(--muted-light);flex-shrink:0;}
+
+/* Pulpit: kolumny nie rozciągają się do wysokości sąsiedniej */
+.coach-grid-2.coach-grid-top{align-items:start;}

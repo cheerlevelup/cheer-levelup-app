@@ -85,7 +85,7 @@ export default function CoachDashboardClient({ groups, athletes, recentSessions,
             onCountdownsChange={setCountdowns}
           />
         )}
-        <section className="coach-grid-2">
+        <section className="coach-grid-2 coach-grid-top">
           <Card>
             <div className="coach-panel-head">
               <div>
