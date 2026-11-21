@@ -43,7 +43,29 @@ type Block = {
   workout_block_exercises?: BlockExercise[]
 }
 type Day = { id: number; week_id: number; day_name: string; day_order: number; coach_intro?: string | null; coach_closing?: string | null; training_date?: string | null }
-type Week = { id: number; plan_id: number; week_number: number; name?: string | null }
+type Week = { id: number; plan_id: number; week_number: number; name?: string | null; start_date?: string | null }
+
+// Kierunek sortowania tygodni po datach — zapamiętany między wejściami do edytora
+const WEEK_SORT_KEY = 'cheer.planEditor.weekSort'
+const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+const addDaysIso = (iso: string, n: number) => { const [y, m, d] = iso.split('-').map(Number); const dt = new Date(y, m - 1, d + n); return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}` }
+
+// Dodanie tygodnia — najpierw wybór daty, tydzień sam ustawi się na swoim miejscu
+function AddWeekPicker({ defaultDate, onAdd, onCancel }: { defaultDate: string; onAdd: (date: string) => Promise<void>; onCancel: () => void }) {
+  const [date, setDate] = useState(defaultDate)
+  const [busy, setBusy] = useState(false)
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 6px 4px 10px', border: '1.5px solid var(--gold)', borderRadius: 10, background: '#fff', fontFamily: 'var(--font-inter),sans-serif', fontSize: 12, fontWeight: 600, color: 'var(--ink)' }}>
+      Data tygodnia:
+      <input type="date" value={date} autoFocus onChange={e => setDate(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Escape') onCancel() }}
+        style={{ border: '1px solid var(--border)', borderRadius: 7, padding: '3px 6px', fontFamily: 'inherit', fontSize: 12, color: 'var(--ink)', background: '#fff', outline: 'none' }} />
+      <button className="coach-btn coach-btn-dark coach-btn-small" disabled={!date || busy}
+        onClick={async () => { setBusy(true); await onAdd(date); setBusy(false) }}>{busy ? '...' : 'Dodaj'}</button>
+      <button style={{ ...iconBtn, fontSize: 14 }} title="Anuluj" aria-label="Anuluj" onClick={onCancel}>✕</button>
+    </div>
+  )
+}
 type Plan = { id: number; name: string; group_id?: number | null }
 
 
@@ -113,9 +135,9 @@ interface Props {
   days: Day[]
   blocks: Block[]
   onUpdateExercise: (blockId: number, exercise: BlockExercise, patch: ExercisePatch) => void
-  onAddWeek: () => Promise<void>
-  // nowy Tydzień 1 na górze (pozostałe tygodnie przesuwają się o jeden)
-  onAddWeekTop?: () => Promise<void>
+  // nowy tydzień z wybraną datą — tygodnie układają się według dat
+  onAddWeek: (date: string) => Promise<void>
+  onSetWeekDate?: (weekId: number, date: string | null) => Promise<void>
   onDeleteWeek?: (weekId: number) => Promise<void>
   onAddDay: (weekId: number) => Promise<void>
   onRenameDay: (dayId: number, name: string) => void
@@ -228,7 +250,28 @@ export default function PlanTableView(props: Props) {
     const t = setTimeout(() => setSavedFillDay(lastFillDay(plan.id)), 0)
     return () => clearTimeout(t)
   }, [plan.id])
-  const orderedDays = [...weeks].sort((a, b) => a.week_number - b.week_number).flatMap(w => allDays.filter(d => d.week_id === w.id))
+  // Sortowanie tygodni po datach (numer tygodnia = kolejność dat): rosnąco albo malejąco,
+  // wybór zapamiętany w przeglądarce
+  const [weekSortDesc, setWeekSortDesc] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => { try { setWeekSortDesc(localStorage.getItem(WEEK_SORT_KEY) === 'desc') } catch {} }, 0)
+    return () => clearTimeout(t)
+  }, [])
+  const toggleWeekSort = () => setWeekSortDesc(v => {
+    try { localStorage.setItem(WEEK_SORT_KEY, v ? 'asc' : 'desc') } catch {}
+    return !v
+  })
+  const sortedWeeks = [...weeks].sort((a, b) => weekSortDesc ? b.week_number - a.week_number : a.week_number - b.week_number)
+  // dodawanie tygodnia: wybór daty (domyślnie tydzień po ostatnim, inaczej dziś)
+  const [addWeekAt, setAddWeekAt] = useState<'top' | 'bottom' | null>(null)
+  const lastWeekDate = weeks.map(w => w.start_date).filter((d): d is string => !!d).sort().pop()
+  const nextWeekDate = lastWeekDate ? addDaysIso(lastWeekDate, 7) : todayIso()
+  const addWeekWithDate = async (date: string) => {
+    await onAddWeek(date)
+    setAddWeekAt(null)
+    notify(`Dodano tydzień od ${date.split('-').reverse().join('.')}`)
+  }
+  const orderedDays = sortedWeeks.flatMap(w => allDays.filter(d => d.week_id === w.id))
   // Edytor służy tylko do tworzenia planu — wyniki wpisuje się po „Rozpocznij trening” w grupie.
   // Przełącznik wraca do ostatnio rozpoczętego treningu (jeśli był).
   const fillDayId = savedFillDay && orderedDays.some(d => d.id === savedFillDay) ? savedFillDay : null
@@ -427,14 +470,14 @@ export default function PlanTableView(props: Props) {
           <b>{warmupCols}</b>
           <button onClick={() => setWarmupCols(v => Math.min(6, v + 1))}>+</button>
         </div>
-        <button className="coach-btn coach-btn-dark coach-btn-small" onClick={onAddWeek}>+ Tydzień</button>
-        {props.onAddWeekTop && weeks.length > 0 && (
-          <button className="coach-btn coach-btn-ghost coach-btn-small" title="Nowy Tydzień 1 na samej górze — dotychczasowe tygodnie przesuną się na 2, 3…"
-            onClick={async () => {
-              if (!confirm('Wstawić nowy Tydzień 1 na górze? Obecne tygodnie przesuną się o jeden (Tydzień 1 → 2 itd.).')) return
-              await props.onAddWeekTop!()
-              notify('Dodano Tydzień 1 na górze')
-            }}>⤒ Tydzień na górze</button>
+        {addWeekAt === 'top'
+          ? <AddWeekPicker defaultDate={nextWeekDate} onAdd={addWeekWithDate} onCancel={() => setAddWeekAt(null)} />
+          : <button className="coach-btn coach-btn-dark coach-btn-small" onClick={() => setAddWeekAt('top')}>+ Tydzień</button>}
+        {weeks.length > 1 && (
+          <button className="coach-btn coach-btn-ghost coach-btn-small" onClick={toggleWeekSort}
+            title="Kolejność tygodni według dat — zapamiętana przy kolejnym wejściu do edytora">
+            📅 {weekSortDesc ? 'Najnowsze na górze ↓' : 'Najstarsze na górze ↑'}
+          </button>
         )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
           <button className="coach-btn coach-btn-excel" onClick={() => doExport('xlsx')} disabled={exporting !== null}>
@@ -447,13 +490,22 @@ export default function PlanTableView(props: Props) {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        {[...weeks].sort((a, b) => a.week_number - b.week_number).map(week => {
+        {sortedWeeks.map(week => {
           const weekDays = allDays.filter(d => d.week_id === week.id)
           return (
             <div key={week.id} style={{ background: '#fff', border: '1.5px solid var(--border)', borderRadius: 16, padding: '0 1rem 1rem', boxShadow: '0 1px 3px rgba(13,27,42,.06)' }}>
               {/* week header — każdy tydzień w osobnej karcie */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 -1rem 1rem', padding: '0.6rem 1rem', background: 'var(--navy-900)', borderRadius: '14px 14px 0 0', flexWrap: 'wrap' }}>
                 <div style={{ fontFamily: 'var(--font-inter),sans-serif', fontWeight: 800, fontSize: 14, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--gold)' }}>Tydzień {week.week_number}</div>
+                {props.onSetWeekDate && (
+                  <input
+                    type="date"
+                    value={week.start_date || ''}
+                    title="Data tygodnia — tygodnie ustawiają się według dat"
+                    onChange={e => props.onSetWeekDate!(week.id, e.target.value || null)}
+                    style={{ border: `1px solid ${week.start_date ? 'rgba(212,175,55,.55)' : 'rgba(174,183,204,.4)'}`, borderRadius: 7, padding: '2px 6px', fontFamily: 'var(--font-inter),sans-serif', fontSize: 12, color: week.start_date ? '#fff' : '#aeb7cc', background: 'transparent', outline: 'none', colorScheme: 'dark' }}
+                  />
+                )}
                 {props.clipboard?.kind === 'day' && (
                   <button style={{ ...iconBtn, color: 'var(--gold)', fontWeight: 700 }} title="Wklej skopiowany trening jako nowy trening w tym tygodniu" onClick={async () => { await props.onPasteDay(week.id); notify(`Wklejono trening „${(props.clipboard as { name: string }).name}”`) }}>📋 wklej trening „{props.clipboard.name}”</button>
                 )}
@@ -491,7 +543,7 @@ export default function PlanTableView(props: Props) {
                         <div className="coach-training-pill-name" style={{ minWidth: 160 }}>
                           <EditCell value={day.day_name} onCommit={v => props.onRenameDay(day.id, v)} align="left" placeholder="nazwa treningu" />
                         </div>
-                        <label title="Data treningu — zawodniczka zobaczy go jako „Dzisiejszy trening” tego dnia" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-inter),sans-serif', fontSize: 11, fontWeight: 600, color: day.training_date ? 'var(--ink)' : 'var(--muted)' }}>
+                        <label title="Data treningu (opcjonalna) — zawodniczka zobaczy go jako „Dzisiejszy trening” tego dnia" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-inter),sans-serif', fontSize: 11, fontWeight: 600, color: day.training_date ? 'var(--ink)' : 'var(--muted)' }}>
                           📅
                           <input
                             type="date"
@@ -905,17 +957,16 @@ export default function PlanTableView(props: Props) {
 
         {weeks.length === 0 && (
           <div style={{ textAlign: 'center', color: 'var(--muted)', padding: '2rem' }}>
-            Brak tygodni — <button onClick={onAddWeek} style={{ border: 'none', background: 'none', color: 'var(--gold)', cursor: 'pointer', fontWeight: 700 }}>dodaj tydzień</button>
+            Brak tygodni — <button onClick={() => setAddWeekAt('top')} style={{ border: 'none', background: 'none', color: 'var(--gold)', cursor: 'pointer', fontWeight: 700 }}>dodaj tydzień</button>
           </div>
         )}
 
         {/* na końcu planu — kolejny tydzień bez przewijania na górę */}
         {weeks.length > 0 && (
           <div style={{ borderTop: '1.5px dashed var(--border)', paddingTop: '1rem' }}>
-            <button className="coach-btn coach-btn-dark" onClick={async () => {
-              await onAddWeek()
-              setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 150)
-            }}>+ Dodaj tydzień {weeks.length + 1}</button>
+            {addWeekAt === 'bottom'
+              ? <AddWeekPicker defaultDate={nextWeekDate} onAdd={addWeekWithDate} onCancel={() => setAddWeekAt(null)} />
+              : <button className="coach-btn coach-btn-dark" onClick={() => setAddWeekAt('bottom')}>+ Dodaj tydzień</button>}
           </div>
         )}
       </div>

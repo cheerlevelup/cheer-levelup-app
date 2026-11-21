@@ -26,6 +26,8 @@ type Week = {
   plan_id: number
   week_number: number
   name?: string | null
+  // data tygodnia (migracja 202611210001) — tygodnie ustawiają się według niej
+  start_date?: string | null
 }
 
 type Day = {
@@ -1149,18 +1151,49 @@ export default function PlanEditorClient({ plan, athletes = [], athletesFromPool
     if (selectedDayId != null && gone.has(selectedDayId)) setSelectedDayId(localDays.find(d => !gone.has(d.id))?.id || null)
   }
 
-  async function addWeek() {
-    const nextNum = localWeeks.length + 1
-    const { data: weekData } = await supabase
+  // Tygodnie ustawiają się według daty: numer tygodnia = kolejność dat (najwcześniejszy to
+  // Tydzień 1), tygodnie bez daty na końcu w dotychczasowej kolejności. Domyślne nazwy
+  // „Tydzień N” idą za numerem, własne nazwy zostają.
+  async function renumberWeeks(list: Week[]): Promise<Week[]> {
+    const ordered = [...list].sort((a, b) => {
+      if (a.start_date && b.start_date) return a.start_date.localeCompare(b.start_date) || a.week_number - b.week_number
+      if (a.start_date) return -1
+      if (b.start_date) return 1
+      return a.week_number - b.week_number
+    })
+    const isDefault = (name?: string | null) => !name || /^Tydzie[nń] \d+$/i.test(name.trim())
+    const changed = ordered.map((w, i) => ({ w, num: i + 1 })).filter(t => t.w.week_number !== t.num)
+    // najpierw numery tymczasowe, żeby po drodze nie było dwóch tygodni z tym samym numerem
+    for (const { w, num } of changed) {
+      const { error } = await supabase.from('workout_weeks').update({ week_number: num + 10000 }).eq('id', w.id)
+      if (error) { showError(`Nie udało się ułożyć tygodni według dat: ${error.message}`); return list }
+    }
+    const next = new Map<number, Week>()
+    for (const { w, num } of changed) {
+      const patch = { week_number: num, name: isDefault(w.name) ? `Tydzień ${num}` : w.name }
+      const { error } = await supabase.from('workout_weeks').update(patch).eq('id', w.id)
+      if (error) { showError(`Nie udało się ułożyć tygodni według dat: ${error.message}`); break }
+      next.set(w.id, { ...w, ...patch })
+    }
+    return list.map(w => next.get(w.id) || w)
+  }
+
+  async function addWeek(date: string) {
+    const nextNum = Math.max(0, ...localWeeks.map(w => w.week_number)) + 1
+    const { data: weekData, error: wErr } = await supabase
       .from('workout_weeks')
-      .insert({ plan_id: plan.id, week_number: nextNum, name: `Tydzien ${nextNum}` })
+      .insert({ plan_id: plan.id, week_number: nextNum, name: `Tydzień ${nextNum}`, start_date: date })
       .select()
       .single()
 
-    if (!weekData) return
+    if (wErr || !weekData) {
+      showError(/start_date/.test(wErr?.message || '') ? 'Aby dodawać tygodnie z datą, uruchom migrację 202611210001 w Supabase.' : `Nie udało się dodać tygodnia: ${wErr?.message || ''}`)
+      return
+    }
     const newWeek = weekData as Week
-    setLocalWeeks(prev => [...prev, newWeek])
-    setTargetWeeks(prev => [...prev, newWeek])
+    const weeks = await renumberWeeks([...localWeeks, newWeek])
+    setLocalWeeks(weeks)
+    setTargetWeeks(weeks)
 
     const { data: newDays } = await supabase
       .from('workout_days')
@@ -1178,43 +1211,16 @@ export default function PlanEditorClient({ plan, athletes = [], athletesFromPool
     }
   }
 
-  // Nowy Tydzień 1 na górze planu — dotychczasowe tygodnie przesuwają się na 2, 3...
-  // (domyślne nazwy „Tydzień N” idą za numerem, własne nazwy zostają)
-  async function addWeekTop() {
-    const sorted = [...localWeeks].sort((a, b) => b.week_number - a.week_number)
-    const isDefault = (name?: string | null) => !name || /^Tydzie[nń] \d+$/i.test(name.trim())
-    const renamed = new Map<number, { week_number: number; name?: string | null }>()
-    // od końca, żeby numery się nie zdublowały po drodze
-    for (const w of sorted) {
-      const next = { week_number: w.week_number + 1, name: isDefault(w.name) ? `Tydzień ${w.week_number + 1}` : w.name }
-      const { error } = await supabase.from('workout_weeks').update(next).eq('id', w.id)
-      if (error) { showError(`Nie udało się przesunąć tygodni: ${error.message}`); return }
-      renamed.set(w.id, next)
+  // Zmiana daty tygodnia — tygodnie od razu układają się na nowo według dat
+  async function setWeekDate(weekId: number, date: string | null) {
+    const { error } = await supabase.from('workout_weeks').update({ start_date: date }).eq('id', weekId)
+    if (error) {
+      showError(/start_date/.test(error.message) ? 'Aby ustawiać daty tygodni, uruchom migrację 202611210001 w Supabase.' : `Nie udało się zapisać daty tygodnia: ${error.message}`)
+      return
     }
-    const shift = (list: Week[]) => list.map(w => renamed.has(w.id) ? { ...w, ...renamed.get(w.id)! } : w)
-    setLocalWeeks(shift)
-    setTargetWeeks(shift)
-
-    const { data: weekData, error: wErr } = await supabase
-      .from('workout_weeks')
-      .insert({ plan_id: plan.id, week_number: 1, name: 'Tydzień 1' })
-      .select()
-      .single()
-    if (wErr || !weekData) { showError(`Nie udało się dodać tygodnia: ${wErr?.message || ''}`); return }
-    const newWeek = weekData as Week
-    setLocalWeeks(prev => [newWeek, ...prev])
-    setTargetWeeks(prev => [newWeek, ...prev])
-
-    const { data: newDays } = await supabase
-      .from('workout_days')
-      .insert([{ week_id: newWeek.id, day_name: 'Trening 1', day_order: 1 }])
-      .select()
-    if (newDays) {
-      const createdDays = newDays as Day[]
-      setLocalDays(prev => [...prev, ...createdDays])
-      setTargetDays(prev => [...prev, ...createdDays])
-      setSelectedDayId(createdDays[0]?.id || null)
-    }
+    const weeks = await renumberWeeks(localWeeks.map(w => w.id === weekId ? { ...w, start_date: date } : w))
+    setLocalWeeks(weeks)
+    setTargetWeeks(weeks)
   }
 
   async function addBlock(dayId?: number) {
@@ -1688,7 +1694,7 @@ export default function PlanEditorClient({ plan, athletes = [], athletesFromPool
           blocks={localBlocks}
           onUpdateExercise={updateExercise}
           onAddWeek={addWeek}
-          onAddWeekTop={addWeekTop}
+          onSetWeekDate={setWeekDate}
           onDeleteWeek={deleteWeek}
           onAddDay={addDay}
           onRenameDay={renameDay}
