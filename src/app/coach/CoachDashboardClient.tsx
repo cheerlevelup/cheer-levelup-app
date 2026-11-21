@@ -141,24 +141,20 @@ export default function CoachDashboardClient({ groups, athletes, recentSessions,
                   <div className="coach-empty-sub">Zaplanuj trening, żeby zobaczyć go tutaj.</div>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '4px 18px 18px' }}>
+                <div className="coach-recent-list">
                   {recentSessions.map((session) => (
                     <div
                       key={session.id}
-                      className="coach-group-card"
+                      className="coach-recent-row"
                       onClick={() => router.push(`/coach/athletes/${session.athlete_id}`)}
                     >
-                      <div className="coach-group-top">
-                        <div>
-                          <div className="coach-group-name">{session.athlete?.full_name || 'Zawodniczka'}</div>
-                          <div className="coach-group-count">
-                            {session.workout_day?.day_name || 'Trening'} · {session.date_completed ? formatDate(session.date_completed) : '—'}
-                          </div>
-                        </div>
-                        <div className="coach-group-chevron">
-                          <ChevronRight size={16} />
+                      <div className="coach-recent-body">
+                        <div className="coach-recent-name">{session.athlete?.full_name || 'Zawodniczka'}</div>
+                        <div className="coach-recent-meta">
+                          {session.workout_day?.day_name || 'Trening'} · {session.date_completed ? formatDate(session.date_completed) : '—'}
                         </div>
                       </div>
+                      <ChevronRight size={14} className="coach-recent-chev" />
                     </div>
                   ))}
                 </div>
