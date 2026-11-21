@@ -1140,6 +1140,45 @@ export default function PlanEditorClient({ plan, athletes = [], athletesFromPool
     }
   }
 
+  // Nowy Tydzień 1 na górze planu — dotychczasowe tygodnie przesuwają się na 2, 3...
+  // (domyślne nazwy „Tydzień N” idą za numerem, własne nazwy zostają)
+  async function addWeekTop() {
+    const sorted = [...localWeeks].sort((a, b) => b.week_number - a.week_number)
+    const isDefault = (name?: string | null) => !name || /^Tydzie[nń] \d+$/i.test(name.trim())
+    const renamed = new Map<number, { week_number: number; name?: string | null }>()
+    // od końca, żeby numery się nie zdublowały po drodze
+    for (const w of sorted) {
+      const next = { week_number: w.week_number + 1, name: isDefault(w.name) ? `Tydzień ${w.week_number + 1}` : w.name }
+      const { error } = await supabase.from('workout_weeks').update(next).eq('id', w.id)
+      if (error) { showError(`Nie udało się przesunąć tygodni: ${error.message}`); return }
+      renamed.set(w.id, next)
+    }
+    const shift = (list: Week[]) => list.map(w => renamed.has(w.id) ? { ...w, ...renamed.get(w.id)! } : w)
+    setLocalWeeks(shift)
+    setTargetWeeks(shift)
+
+    const { data: weekData, error: wErr } = await supabase
+      .from('workout_weeks')
+      .insert({ plan_id: plan.id, week_number: 1, name: 'Tydzień 1' })
+      .select()
+      .single()
+    if (wErr || !weekData) { showError(`Nie udało się dodać tygodnia: ${wErr?.message || ''}`); return }
+    const newWeek = weekData as Week
+    setLocalWeeks(prev => [newWeek, ...prev])
+    setTargetWeeks(prev => [newWeek, ...prev])
+
+    const { data: newDays } = await supabase
+      .from('workout_days')
+      .insert([{ week_id: newWeek.id, day_name: 'Trening 1', day_order: 1 }])
+      .select()
+    if (newDays) {
+      const createdDays = newDays as Day[]
+      setLocalDays(prev => [...prev, ...createdDays])
+      setTargetDays(prev => [...prev, ...createdDays])
+      setSelectedDayId(createdDays[0]?.id || null)
+    }
+  }
+
   async function addBlock(dayId?: number) {
     const targetDay = dayId ?? selectedDayId
     if (!targetDay) return
@@ -1608,6 +1647,7 @@ export default function PlanEditorClient({ plan, athletes = [], athletesFromPool
           blocks={localBlocks}
           onUpdateExercise={updateExercise}
           onAddWeek={addWeek}
+          onAddWeekTop={addWeekTop}
           onAddDay={addDay}
           onRenameDay={renameDay}
           onSetDayDate={setDayDate}

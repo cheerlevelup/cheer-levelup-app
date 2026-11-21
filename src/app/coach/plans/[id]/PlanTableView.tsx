@@ -315,6 +315,8 @@ interface Props {
   blocks: Block[]
   onUpdateExercise: (blockId: number, exercise: BlockExercise, patch: ExercisePatch) => void
   onAddWeek: () => Promise<void>
+  // nowy Tydzień 1 na górze (pozostałe tygodnie przesuwają się o jeden)
+  onAddWeekTop?: () => Promise<void>
   onAddDay: (weekId: number) => Promise<void>
   onRenameDay: (dayId: number, name: string) => void
   // data treningu — u zawodniczki „Dzisiejszy trening" tylko w ten dzień
@@ -626,6 +628,14 @@ export default function PlanTableView(props: Props) {
           <button onClick={() => setWarmupCols(v => Math.min(6, v + 1))}>+</button>
         </div>
         <button className="coach-btn coach-btn-dark coach-btn-small" onClick={onAddWeek}>+ Tydzień</button>
+        {props.onAddWeekTop && weeks.length > 0 && (
+          <button className="coach-btn coach-btn-ghost coach-btn-small" title="Nowy Tydzień 1 na samej górze — dotychczasowe tygodnie przesuną się na 2, 3…"
+            onClick={async () => {
+              if (!confirm('Wstawić nowy Tydzień 1 na górze? Obecne tygodnie przesuną się o jeden (Tydzień 1 → 2 itd.).')) return
+              await props.onAddWeekTop!()
+              notify('Dodano Tydzień 1 na górze')
+            }}>⤒ Tydzień na górze</button>
+        )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
           <button className="coach-btn coach-btn-excel" onClick={() => doExport('xlsx')} disabled={exporting !== null}>
             {exporting === 'xlsx' ? '...' : '⬇ Excel'}
