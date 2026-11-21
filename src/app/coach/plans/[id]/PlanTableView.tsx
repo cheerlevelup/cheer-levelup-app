@@ -654,11 +654,19 @@ export default function PlanTableView(props: Props) {
               {/* week header — każdy tydzień w osobnej karcie */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 -1rem 1rem', padding: '0.6rem 1rem', background: 'var(--navy-900)', borderRadius: '14px 14px 0 0', flexWrap: 'wrap' }}>
                 <div style={{ fontFamily: 'var(--font-inter),sans-serif', fontWeight: 800, fontSize: 14, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--gold)' }}>Tydzień {week.week_number}</div>
-                <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: 11, color: '#aeb7cc' }}>{weekDays.length} {weekDays.length === 1 ? 'trening' : weekDays.length < 5 ? 'treningi' : 'treningów'}</span>
-                <button className="coach-btn coach-btn-ghost coach-btn-small" onClick={() => onAddDay(week.id)}>+ Trening</button>
                 {props.clipboard?.kind === 'day' && (
                   <button style={{ ...iconBtn, color: 'var(--gold)', fontWeight: 700 }} title="Wklej skopiowany trening jako nowy trening w tym tygodniu" onClick={async () => { await props.onPasteDay(week.id); notify(`Wklejono trening „${(props.clipboard as { name: string }).name}”`) }}>📋 wklej trening „{props.clipboard.name}”</button>
                 )}
+                <button
+                  onClick={() => onAddDay(week.id)}
+                  title="Dodaj trening do tego tygodnia"
+                  style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px 3px 4px', background: 'rgba(212,175,55,.12)', color: 'var(--gold)', border: '1px solid rgba(212,175,55,.45)', borderRadius: 999, fontFamily: 'var(--font-inter),sans-serif', fontSize: 11, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', cursor: 'pointer', lineHeight: 1.4 }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(212,175,55,.25)' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(212,175,55,.12)' }}
+                >
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, borderRadius: '50%', background: 'var(--gold)', color: 'var(--navy-900)', fontSize: 13, fontWeight: 800, lineHeight: 1 }}>+</span>
+                  Trening
+                </button>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
