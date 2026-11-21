@@ -425,9 +425,15 @@ function drawDay(
         let x = m
         if (ctx.logo) {
           const d = bandH - 4.5
-          // białe kafelki z zaokrąglonymi rogami — plik logo ma białe tło
-          doc.setFillColor(255, 255, 255); doc.roundedRect(x - 0.8, bandH / 2 - d / 2 - 0.8, d + 1.6, d + 1.6, 2, 2, 'F')
-          try { doc.addImage(ctx.logo, 'PNG', x, bandH / 2 - d / 2, d, d, 'cheer-logo', 'FAST') } catch { /* brak logo — sam tekst */ }
+          // białe koło — plik logo ma białe tło, rogi obrazka przycięte do koła
+          const cx = x + d / 2, cy = bandH / 2, r = d / 2 + 0.8
+          doc.setFillColor(255, 255, 255); doc.circle(cx, cy, r, 'F')
+          try {
+            doc.saveGraphicsState()
+            doc.circle(cx, cy, r, null); doc.clip(); doc.discardPath()
+            doc.addImage(ctx.logo, 'PNG', x, bandH / 2 - d / 2, d, d, 'cheer-logo', 'FAST')
+            doc.restoreGraphicsState()
+          } catch { /* brak logo — sam tekst */ }
           x += d + 5
         }
         // tytuł treningu, a pod nim: DRUŻYNA (złota) · plan
