@@ -96,6 +96,7 @@ type DayCtx = {
   athletes: { id: number; full_name: string }[]
   blocks: PdfBlock[]
   logo?: string | null   // logo Cheer LevelUP (PNG jako data URL) w nagłówku
+  team?: string          // nazwa drużyny w nagłówku
 }
 
 export async function buildPlanPdf(opts: {
@@ -106,6 +107,7 @@ export async function buildPlanPdf(opts: {
   fonts?: PdfFonts | null
   theme?: PdfTheme
   logo?: string | null
+  team?: string | null
 }): Promise<JsPDF> {
   const { plan, blocks, athletes, fonts } = opts
   applyTheme(opts.theme ?? 'sportowy')
@@ -125,7 +127,7 @@ export async function buildPlanPdf(opts: {
 
   const doc = newDoc()
   const { font, t } = registerPdfFonts(doc, fonts)
-  const ctx: DayCtx = { font, t, plan, athletes, blocks, logo: opts.logo }
+  const ctx: DayCtx = { font, t, plan, athletes, blocks, logo: opts.logo, team: opts.team?.trim() || '' }
   const pageW = doc.internal.pageSize.getWidth()
   const pageH = doc.internal.pageSize.getHeight()
 
@@ -135,9 +137,10 @@ export async function buildPlanPdf(opts: {
     return doc
   }
 
-  // Skala treningu: największa, przy której mieści się na jednej stronie (sprawdzane na
-  // roboczym dokumencie); długi trening — skala minimalna i podział na strony
-  const MIN_S = 0.82, MAX_S = 1.7
+  // Skala treningu: stała (MAX_S — ten sam rozmiar czcionki w każdym planie, bez
+  // powiększania krótkich treningów); gdy trening się nie mieści na stronie — mniejsza,
+  // aż do MIN_S; dłuższy niż to — skala minimalna i podział na strony
+  const MIN_S = 0.68, MAX_S = 0.92
   const fits = (day: PdfDay, s: number) => {
     const scratch = newDoc()
     registerPdfFonts(scratch, fonts)
@@ -163,7 +166,7 @@ export async function buildPlanPdf(opts: {
     doc.setPage(p)
     doc.setDrawColor(...RULE); doc.setLineWidth(0.2); doc.line(12, pageH - 8, pageW - 12, pageH - 8)
     doc.setFont(font, 'normal'); doc.setFontSize(7); doc.setTextColor(...MUTED)
-    doc.text(t(`${plan.name} · Cheer Level Up — Cheer Body Training Programs`), 12, pageH - 4.5)
+    doc.text(t(`${ctx.team ? `${ctx.team} · ` : ''}${plan.name} · Cheer Level Up — Cheer Body Training Programs`), 12, pageH - 4.5)
     doc.text(`${p} / ${pages}`, pageW - 12, pageH - 4.5, { align: 'right' })
   }
   return doc
@@ -183,7 +186,7 @@ function drawDay(
   const pageW = doc.internal.pageSize.getWidth()
   const pageH = doc.internal.pageSize.getHeight()
   const m = 12
-  const headerH = TH.headerBand ? 28 : 21
+  const headerH = TH.headerBand ? 20 : 19
   const bottom = 12
   const available = pageW - 2 * m
   const fs = 8 * s                     // podstawowy rozmiar tekstu
@@ -427,29 +430,44 @@ function drawDay(
           try { doc.addImage(ctx.logo, 'PNG', x, bandH / 2 - d / 2, d, d, 'cheer-logo', 'FAST') } catch { /* brak logo — sam tekst */ }
           x += d + 5
         }
-        doc.setFont(font, 'bold'); doc.setFontSize(19); doc.setTextColor(255, 255, 255)
-        spaced(t(day.day_name).toUpperCase(), x, bandH / 2 - 0.4, 0.5)
-        doc.setFont(font, 'bold'); doc.setFontSize(7.5); doc.setTextColor(...GOLD)
-        spaced(t(`PLAN TRENINGOWY  ·  ${plan.name}`).toUpperCase(), x, bandH / 2 + 5.2, 0.9)
+        // tytuł treningu, a pod nim: DRUŻYNA (złota) · plan
+        doc.setFont(font, 'bold'); doc.setFontSize(13); doc.setTextColor(255, 255, 255)
+        spaced(t(day.day_name).toUpperCase(), x, bandH / 2 - 0.6, 0.4)
+        let sx2 = x
+        doc.setFontSize(6.6)
+        if (ctx.team) {
+          doc.setFont(font, 'bold'); doc.setTextColor(...GOLD)
+          sx2 += spaced(t(ctx.team).toUpperCase(), sx2, bandH / 2 + 4.1, 0.7) + 2.2
+          doc.setFont(font, 'normal'); doc.setTextColor(165, 182, 208)
+          sx2 += spaced('·', sx2, bandH / 2 + 4.1, 0) + 2.2
+        } else {
+          doc.setFont(font, 'bold'); doc.setTextColor(...GOLD)
+        }
+        spaced(t(plan.name).toUpperCase(), sx2, bandH / 2 + 4.1, 0.7)
         const rx = pageW - m
-        doc.setFont(font, 'bold'); doc.setFontSize(11); doc.setTextColor(255, 255, 255)
-        const w1 = doc.getTextWidth('CHEER LEVEL UP') + 1.2 * 13
-        doc.text('CHEER LEVEL UP', rx - w1, bandH / 2 - 0.2, { charSpace: 1.2 })
-        doc.setFont(font, 'normal'); doc.setFontSize(6.3); doc.setTextColor(165, 182, 208)
-        const w2 = doc.getTextWidth('CHEER BODY TRAINING PROGRAMS') + 0.55 * 27
-        doc.text('CHEER BODY TRAINING PROGRAMS', rx - w2, bandH / 2 + 4.4, { charSpace: 0.55 })
+        doc.setFont(font, 'bold'); doc.setFontSize(8.5); doc.setTextColor(255, 255, 255)
+        const w1 = doc.getTextWidth('CHEER LEVEL UP') + 1 * 13
+        doc.text('CHEER LEVEL UP', rx - w1, bandH / 2 - 0.2, { charSpace: 1 })
+        doc.setFont(font, 'normal'); doc.setFontSize(5.4); doc.setTextColor(165, 182, 208)
+        const w2 = doc.getTextWidth('CHEER BODY TRAINING PROGRAMS') + 0.45 * 27
+        doc.text('CHEER BODY TRAINING PROGRAMS', rx - w2, bandH / 2 + 3.6, { charSpace: 0.45 })
         return
       }
-      doc.setFillColor(...GOLD); doc.rect(m, 9.5, 1.4, 8, 'F')
-      doc.setFont(font, 'bold'); doc.setFontSize(17); doc.setTextColor(...NAVY)
-      doc.text(t(day.day_name), m + 4, 15.6)
-      const dw = doc.getTextWidth(t(day.day_name))
-      doc.setFont(font, 'normal'); doc.setFontSize(10); doc.setTextColor(...MUTED)
-      doc.text(t(plan.name), m + 4 + dw + 4, 15.6)
+      doc.setFillColor(...GOLD); doc.rect(m, 8.5, 1.4, 7.5, 'F')
+      doc.setFont(font, 'bold'); doc.setFontSize(14); doc.setTextColor(...NAVY)
+      doc.text(t(day.day_name), m + 4, 14.2)
+      let hx = m + 4 + doc.getTextWidth(t(day.day_name)) + 4
+      if (ctx.team) {
+        doc.setFont(font, 'bold'); doc.setFontSize(9); doc.setTextColor(...GOLD)
+        doc.text(t(ctx.team), hx, 14.2)
+        hx += doc.getTextWidth(t(ctx.team)) + 2.5
+      }
+      doc.setFont(font, 'normal'); doc.setFontSize(9); doc.setTextColor(...MUTED)
+      doc.text(t(ctx.team ? `· ${plan.name}` : plan.name), hx, 14.2)
       doc.setFont(font, 'bold'); doc.setFontSize(8); doc.setTextColor(...NAVY)
-      doc.text('CHEER LEVELUP', pageW - m, 13.2, { align: 'right' })
+      doc.text('CHEER LEVELUP', pageW - m, 12, { align: 'right' })
       doc.setFont(font, 'normal'); doc.setFontSize(7); doc.setTextColor(...MUTED)
-      doc.text(t('plan treningowy'), pageW - m, 16.8, { align: 'right' })
+      doc.text(t('plan treningowy'), pageW - m, 15.4, { align: 'right' })
       doc.setDrawColor(...RULE); doc.setLineWidth(0.3); doc.line(m, headerH, pageW - m, headerH)
     },
   })

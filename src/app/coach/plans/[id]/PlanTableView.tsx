@@ -298,7 +298,7 @@ async function exportXlsx(plan: Plan, days: Day[], blocks: Block[], wCols: numbe
 // ─── Export PDF ───────────────────────────────────────────────────────────────
 async function exportPdf(plan: Plan, days: Day[], blocks: Block[], athletes: { id: number; full_name: string }[]) {
   const [fonts, logo] = await Promise.all([loadPdfFonts(), loadPdfLogo()])
-  const doc = await buildPlanPdf({ plan, days, blocks, athletes, fonts, logo })
+  const doc = await buildPlanPdf({ plan, days, blocks, athletes, fonts, logo, team: (plan as { team_name?: string }).team_name })
   doc.save(`${plan.name}.pdf`)
 }
 

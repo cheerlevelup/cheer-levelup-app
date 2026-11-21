@@ -42,8 +42,23 @@ export async function loadPlanEditorData(supabase: any, planId: number, groupId?
       .map(({ id, full_name }) => ({ id, full_name }))
   }
 
+  // Nazwa drużyny do nagłówka PDF: grupa planu, grupa zawodniczki (plan indywidualny)
+  // albo grupy zawodniczek z aktywnym przypisaniem
+  let teamName = ''
+  if (ownerGroupId) {
+    const { data: g } = await supabase.from('groups').select('name').eq('id', ownerGroupId).maybeSingle()
+    teamName = g?.name || ''
+  } else if (plan.athlete_id) {
+    const { data: a } = await supabase.from('athletes').select('group:groups(name)').eq('id', plan.athlete_id).maybeSingle()
+    teamName = (a as any)?.group?.name || ''
+  } else if (!athletesFromPool) {
+    const { data } = await supabase.from('athlete_workout_assignments').select('athlete:athletes(group:groups(name))').eq('plan_id', planId).eq('is_active', true)
+    const names = [...new Set(((data || []) as any[]).map(r => r.athlete?.group?.name).filter(Boolean))] as string[]
+    teamName = names.sort((x, y) => x.localeCompare(y, 'pl')).join(', ')
+  }
+
   // Pełna struktura planu
-  const { data: weeks } = await supabase
+  const { data: weeks }= await supabase
     .from('workout_weeks')
     .select('*')
     .eq('plan_id', planId)
@@ -114,7 +129,7 @@ export async function loadPlanEditorData(supabase: any, planId: number, groupId?
     : { data: [] }
 
   return {
-    plan,
+    plan: { ...plan, team_name: teamName },
     athletes,
     athletesFromPool,
     weeks: weeksList,
