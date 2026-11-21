@@ -887,6 +887,7 @@
   .coach-track-status.coach-progress{background:var(--gold);color:var(--navy-900);}
   .coach-track-status.coach-sent{background:var(--navy-900);color:#fff;}
   .coach-track-status.coach-done{background:var(--green);color:#fff;}
+  .coach-track-status.coach-absent{background:#fdedec;color:#c23b3b;font-weight:800;}
 
   .coach-track-legend{display:flex;gap:16px;flex-wrap:wrap;padding:12px 10px 4px;}
   .coach-track-legend-item{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);font-family:var(--font-inter),sans-serif;}

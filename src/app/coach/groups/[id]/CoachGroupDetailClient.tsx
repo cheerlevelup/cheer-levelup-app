@@ -20,7 +20,8 @@ const thStyle: React.CSSProperties = { padding: '0.75rem 0.5rem', textAlign: 'ce
 function tdWs(bg: string): React.CSSProperties { return { padding: '0.4rem 0.5rem', textAlign: 'center', borderBottom: `1.5px solid var(--border)`, background: bg, verticalAlign: 'middle' } }
 function statTd(bg: string): React.CSSProperties { return { padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid var(--border)`, background: bg, fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.78rem', fontWeight: 700, color: 'var(--navy-900)' } }
 
-function CellStatus({ session }: { session: any | null }) {
+function CellStatus({ session, absent }: { session: any | null; absent?: boolean }) {
+  if (absent) return <div title="Nieobecna" className="coach-track-status coach-absent">✕</div>
   if (!session) return <div className="coach-track-status coach-none">○</div>
   if (session.completed && session.report_sent) return <div title="Raport wysłany" className="coach-track-status coach-sent">📋</div>
   if (session.completed) return <div className="coach-track-status coach-done">✓</div>
@@ -1336,14 +1337,15 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                               </td>
                               {activePlanDays.map((day: any) => {
                                 const sess = sessionIndex[`${athlete.id}_${day.id}`] || null
-                                const clickable = !!sess
+                                const absent = ((day.absent_athlete_ids || []) as unknown[]).map(Number).includes(athlete.id)
+                                const clickable = !!sess && !absent
                                 return (
                                   <td key={day.id} style={{ textAlign: 'center' }}>
                                     <div
                                       onClick={() => clickable && openSessionReport(sess, athlete.id, athlete.full_name, day.day_name || `Trening ${day.id}`)}
                                       title={sess?.completed ? 'Kliknij aby zobaczyć raport' : sess ? 'Trening w toku — kliknij aby zobaczyć bieżące dane' : undefined}
                                       style={{ display: 'flex', justifyContent: 'center', cursor: clickable ? 'pointer' : 'default' }}>
-                                      <CellStatus session={sess} />
+                                      <CellStatus session={sess} absent={absent} />
                                     </div>
                                   </td>
                                 )
@@ -1360,6 +1362,7 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                       { symbol: '✓', label: 'Wykonany', cls: 'coach-done' },
                       { symbol: '📋', label: 'Raport wysłany', cls: 'coach-sent' },
                       { symbol: '◑', label: 'W trakcie', cls: 'coach-progress' },
+                      { symbol: '✕', label: 'Nieobecna', cls: 'coach-absent' },
                     ].map(item => (
                       <div key={item.label} className="coach-track-legend-item">
                         <div className={`coach-track-status ${item.cls}`}>{item.symbol}</div>
