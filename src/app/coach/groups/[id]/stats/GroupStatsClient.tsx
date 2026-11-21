@@ -92,12 +92,12 @@ function SelfGroupTrainingStats({ athletes, sessions, feedbacks, activePlanDays,
       onPeriodChange={setPeriod}
       cols={[
         { key: 'Zawodniczka', left: true },
-        { key: 'Treningi', emoji: '🏋️' },
         { key: 'Ukończone', emoji: '✅' },
         { key: '% planu', emoji: '📊' },
         { key: 'Śr. RPE', emoji: '🔥' },
         { key: 'Min RPE', emoji: '↓' },
         { key: 'Max RPE', emoji: '↑' },
+        { key: 'Ankieta', emoji: '📝' },
       ]}
       rows={athletes.map(athlete => {
         const athFb = filterByDays(feedbacks.filter(f => f.athlete_id === athlete.id), period)
@@ -110,12 +110,12 @@ function SelfGroupTrainingStats({ athletes, sessions, feedbacks, activePlanDays,
         return {
           id: athlete.id, name: athlete.full_name,
           cells: [
-            { v: athFb.length || null },
             { v: completed || null },
             { v: pct !== null ? `${pct}%` : null, color: pct === null ? undefined : pct >= 80 ? 'var(--green)' : pct >= 50 ? 'var(--gold)' : '#EF4444' },
             { v: rpeAvg !== null ? rpeAvg.toFixed(1) : null, color: rpeColor },
             { v: rpeVals.length ? Math.min(...rpeVals) : null },
             { v: rpeVals.length ? Math.max(...rpeVals) : null },
+            { v: athFb.length || null },
           ],
         }
       })}
