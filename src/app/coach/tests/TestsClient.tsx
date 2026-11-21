@@ -107,7 +107,7 @@ function multiSummary<T>(sel: Set<T>, all: T[], labelOf: (v: T) => string) {
 }
 
 // ── Wyniki ──────────────────────────────────────────────────────────────────
-function WynikiTab({ groups, athletes, catalog, results }: Props) {
+export function WynikiTab({ groups, athletes, catalog, results, singleGroup }: Props & { singleGroup?: boolean }) {
   const router = useRouter()
   const allYears = useMemo(() => [...new Set(athletes.map(a => a.birth_year).filter((y): y is number => y != null))].sort((a, b) => a - b), [athletes])
 
@@ -184,7 +184,7 @@ function WynikiTab({ groups, athletes, catalog, results }: Props) {
   }, [results, dateFrom, dateTo, visibleTests, catalog, focus, flagOverride])
 
   const people = useMemo(() => {
-    let list = athletes.filter(a => groupFilter.has(a.group_id) && a.birth_year != null && yearFilter.has(a.birth_year))
+    let list = athletes.filter(a => groupFilter.has(a.group_id) && (a.birth_year == null ? yearFilter.size === allYears.length : yearFilter.has(a.birth_year)))
     if (focus !== 'all') list = list.filter(a => focusAthleteIds.has(a.id))
     if (sortTestId != null) {
       const dates = testDates[sortTestId] || []
@@ -218,14 +218,14 @@ function WynikiTab({ groups, athletes, catalog, results }: Props) {
   return (
     <>
       <div className="coach-testy-filters">
-        <FilterDropdown label="Grupy" summary={multiSummary(groupFilter, groups.map(g => g.id), id => groupName(id as number))}>
+        {!singleGroup && <FilterDropdown label="Grupy" summary={multiSummary(groupFilter, groups.map(g => g.id), id => groupName(id as number))}>
           <div className="coach-tfd-list">
             <div className={`coach-tfd-item coach-tfd-all ${groupFilter.size === groups.length ? 'coach-active' : ''}`} onClick={() => setGroupFilter(new Set(groups.map(g => g.id)))}>Wszystkie</div>
             {groups.map(g => (
               <div key={g.id} className={`coach-tfd-item ${groupFilter.has(g.id) ? 'coach-active' : ''}`} onClick={() => toggleSet(groupFilter, setGroupFilter, g.id)}>{g.name}</div>
             ))}
           </div>
-        </FilterDropdown>
+        </FilterDropdown>}
 
         <FilterDropdown label="Roczniki" summary={multiSummary(yearFilter, allYears, y => String(y))}>
           <div className="coach-tfd-list">

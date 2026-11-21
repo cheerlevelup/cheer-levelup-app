@@ -1,24 +1,27 @@
 'use client'
 // src/app/coach/groups/[id]/tests/GroupTestsClient.tsx
-// Placeholder — testy sprawnościowe całej grupy, treść wkrótce (mockup w przygotowaniu).
-import { Ruler } from 'lucide-react'
+// Wyniki testów sprawnościowych zawodniczek grupy — tabela z głównej zakładki
+// „Testy” (filtry roczników/testów/dat, sortowanie, flagi, braki) bez filtra grup.
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
-import { TabsNav, Card } from '@/components/coach/ui'
+import { TabsNav } from '@/components/coach/ui'
 import GroupHero from '@/components/coach/GroupHero'
+import { WynikiTab } from '@/app/coach/tests/TestsClient'
 
 type Group = { id: number; name: string; group_type?: string }
 
 interface Props {
   group: Group
-  athletesCount: number
+  athletes: any[]
+  catalog: any[]
+  results: any[]
 }
 
-export default function GroupTestsClient({ group, athletesCount }: Props) {
+export default function GroupTestsClient({ group, athletes, catalog, results }: Props) {
   return (
     <>
       <SetPageMeta title="Testy" backHref={`/coach/groups/${group.id}`} backLabel={group.name} />
       <div className="coach-content">
-        <GroupHero group={group} athletesCount={athletesCount} />
+        <GroupHero group={group} athletesCount={athletes.length} />
 
         <TabsNav items={[
           { key: 'treningi', label: 'Treningi', href: `/coach/groups/${group.id}` },
@@ -27,17 +30,14 @@ export default function GroupTestsClient({ group, athletesCount }: Props) {
           { key: 'zawodniczki', label: 'Zawodniczki', href: `/coach/groups/${group.id}/athletes` },
           { key: 'testy', label: 'Testy', href: `/coach/groups/${group.id}/tests` },
         ]} />
-        <Card>
-          <div style={{ padding: '2.5rem 1.5rem', textAlign: 'center', color: 'var(--muted)' }}>
-            <Ruler size={28} style={{ opacity: 0.5, marginBottom: 10 }} />
-            <div style={{ fontWeight: 700, color: 'var(--ink)', fontSize: '0.95rem', marginBottom: 4 }}>
-              Testy sprawnościowe grupy będą tu dostępne wkrótce
-            </div>
-            <div style={{ fontSize: '0.82rem' }}>
-              {group.name} · {athletesCount} zawodniczek
-            </div>
-          </div>
-        </Card>
+
+        <WynikiTab
+          groups={[{ id: group.id, name: group.name }]}
+          athletes={athletes}
+          catalog={catalog}
+          results={results}
+          singleGroup
+        />
       </div>
     </>
   )
