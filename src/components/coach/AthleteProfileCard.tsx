@@ -59,6 +59,8 @@ type PlanProgress = {
   total: number
 }
 
+const fmtDate = (iso: string | null) => iso ? new Date(iso + 'T00:00:00').toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'bez daty'
+
 const STATUS_LABEL: Record<Injury['status'], string> = {
   active: 'Aktywna', in_treatment: 'W leczeniu', healed: 'Wyleczona', chronic: 'Przewlekła',
 }
@@ -345,39 +347,63 @@ export default function AthleteProfileCard({ athlete, onClose }: { athlete: Athl
             ) : results.length === 0 ? (
               <div className="coach-injury-empty">Zawodniczka nie ma jeszcze wyników testów.</div>
             ) : (
-              (catalogAll || [])
-                .filter(ct => results.some(r => r.test_catalog_id === ct.id))
-                .map(ct => {
-                  const rows = results
-                    .filter(r => r.test_catalog_id === ct.id)
-                    .sort((a, b) => (b.test_date || '').localeCompare(a.test_date || ''))
-                  return (
-                    <div key={ct.id} className="coach-test-group">
-                      <div className="coach-test-group-head"><Ruler size={14} /> {ct.name.toUpperCase()}{ct.unit ? ` [${ct.unit.toUpperCase()}]` : ''}</div>
-                      <div className="coach-test-group-body">
-                        {rows.map((r, i) => (
-                          <div key={r.id ?? i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 0', borderTop: i > 0 ? '1px solid var(--border)' : 'none' }}>
-                            <span style={{ width: 90, fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.75rem', color: 'var(--muted-light)' }}>
-                              {r.test_date ? new Date(r.test_date + 'T00:00:00').toLocaleDateString('pl-PL') : 'bez daty'}
-                            </span>
-                            <span style={{ flex: 1, fontWeight: i === 0 ? 800 : 600, color: 'var(--navy-900)' }}>
-                              {r.value} {ct.unit}
-                              {i === 0 && rows.length > 1 && <span style={{ marginLeft: 8, fontSize: '0.65rem', fontWeight: 700, color: 'var(--gold)' }}>OSTATNI</span>}
-                            </span>
-                            <button onClick={() => removeTestResult(r.id)} title="Usuń wynik"
-                              style={{ background: 'none', border: 'none', color: 'var(--muted-light)', cursor: 'pointer', fontSize: '0.8rem' }}>✕</button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )
-                })
+              <div className="coach-athlete-tests">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Test</th>
+                      <th>Ostatni wynik</th>
+                      <th>Data</th>
+                      <th>Zmiana</th>
+                      <th>Poprzednie pomiary</th>
+                      <th aria-label="Usuń" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(catalogAll || [])
+                      .filter(ct => results.some(r => r.test_catalog_id === ct.id))
+                      .map(ct => {
+                        const rows = results
+                          .filter(r => r.test_catalog_id === ct.id)
+                          .sort((a, b) => (b.test_date || '').localeCompare(a.test_date || ''))
+                        const [last, ...prev] = rows
+                        const diff = prev.length && last.value != null && prev[0].value != null
+                          ? Math.round((last.value - prev[0].value) * 100) / 100 : null
+                        return (
+                          <tr key={ct.id}>
+                            <td className="coach-at-name">{ct.name}</td>
+                            <td className="coach-at-value">{last.value}<span>{ct.unit}</span></td>
+                            <td className="coach-at-date">{fmtDate(last.test_date)}</td>
+                            <td>
+                              {diff == null ? <span className="coach-at-muted">—</span>
+                                : diff === 0 ? <span className="coach-at-diff">=</span>
+                                : <span className={`coach-at-diff ${diff > 0 ? 'coach-up' : 'coach-down'}`}>{diff > 0 ? '▲ +' : '▼ '}{diff}</span>}
+                            </td>
+                            <td>
+                              {prev.length === 0 ? <span className="coach-at-muted">—</span> : (
+                                <div className="coach-at-chips">
+                                  {prev.map((r, i) => (
+                                    <span key={r.id ?? i} className="coach-at-chip">
+                                      <b>{r.value}</b> {fmtDate(r.test_date)}
+                                      <button onClick={() => removeTestResult(r.id)} title="Usuń ten pomiar">×</button>
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
+                            <td><button className="coach-at-del" onClick={() => removeTestResult(last.id)} title="Usuń ostatni wynik">✕</button></td>
+                          </tr>
+                        )
+                      })}
+                  </tbody>
+                </table>
+              </div>
             )}
 
             {adding ? (
-              <div className="coach-test-group">
-                <div className="coach-test-group-head"><Ruler size={14} /> NOWY WYNIK TESTU</div>
-                <div className="coach-test-group-body">
+              <div className="coach-at-form">
+                <div className="coach-at-form-title">Nowy wynik testu</div>
+                <div>
                   <div className="coach-test-row" style={{ flexWrap: 'wrap' }}>
                     <select value={newTestId} onChange={e => setNewTestId(e.target.value)} style={{ minWidth: 200 }}>
                       <option value="">— wybierz test —</option>

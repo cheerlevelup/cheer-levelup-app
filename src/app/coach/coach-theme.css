@@ -773,14 +773,38 @@
   }
   .coach-add-injury-btn:hover{border-color:var(--gold);color:var(--ink);}
 
-  .coach-test-group{border-radius:8px;overflow:hidden;border:1px solid var(--border);margin-bottom:8px;}
-  .coach-test-group-head{
-    background:var(--navy-900);color:var(--gold);
-    font-size:11px;font-weight:700;font-family:var(--font-inter),sans-serif;
-    padding:6px 10px;display:flex;align-items:center;gap:6px;
+  /* Karta zawodniczki → Testy: lekka tabela wyników */
+  .coach-athlete-tests{border:1px solid var(--border);border-radius:10px;overflow-x:auto;background:#fff;margin-bottom:10px;}
+  .coach-athlete-tests table{width:100%;border-collapse:collapse;font-family:var(--font-inter),sans-serif;}
+  .coach-athlete-tests th{
+    text-align:left;font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--muted-light);background:var(--bg);padding:8px 12px;border-bottom:1px solid var(--border);white-space:nowrap;
   }
-  .coach-test-group-head svg{width:12px;height:12px;}
-  .coach-test-group-body{padding:8px 10px;display:flex;flex-direction:column;gap:6px;}
+  .coach-athlete-tests td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px;color:var(--ink);vertical-align:middle;}
+  .coach-athlete-tests tbody tr:last-child td{border-bottom:none;}
+  .coach-athlete-tests tbody tr:hover td{background:#FAFBFC;}
+  .coach-at-name{font-weight:600;color:var(--navy-900);white-space:nowrap;}
+  .coach-at-value{font-size:17px;font-weight:800;color:var(--navy-900);white-space:nowrap;}
+  .coach-at-value span{font-size:11px;font-weight:600;color:var(--muted-light);margin-left:4px;}
+  .coach-at-date{color:var(--muted);white-space:nowrap;font-size:12.5px;}
+  .coach-at-muted{color:var(--muted-light);}
+  .coach-at-diff{font-size:12px;font-weight:700;color:var(--muted);white-space:nowrap;}
+  .coach-at-diff.coach-up{color:#1f9d64;}
+  .coach-at-diff.coach-down{color:#c23b3b;}
+  .coach-at-chips{display:flex;flex-wrap:wrap;gap:5px;}
+  .coach-at-chip{
+    display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:var(--muted);
+    background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:2px 4px 2px 9px;white-space:nowrap;
+  }
+  .coach-at-chip b{color:var(--navy-900);font-weight:700;}
+  .coach-at-chip button,.coach-at-del{background:none;border:none;color:var(--muted-light);cursor:pointer;font-size:12px;line-height:1;padding:2px 4px;border-radius:4px;}
+  .coach-at-chip button:hover,.coach-at-del:hover{color:#c23b3b;background:#fdedec;}
+  .coach-at-form{border:1px solid var(--border);border-radius:10px;background:var(--bg);padding:12px;margin-bottom:10px;}
+  .coach-at-form-title{font-family:var(--font-inter),sans-serif;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
+  .coach-test-row select{
+    font-family:var(--font-inter),sans-serif;font-size:12px;color:var(--ink);
+    border:1px solid var(--border);border-radius:6px;padding:5px 7px;outline:none;background:#fff;
+  }
   .coach-test-row{display:flex;align-items:center;gap:8px;}
   .coach-test-row-label{font-size:11.5px;color:var(--ink);font-family:var(--font-inter),sans-serif;font-weight:500;width:110px;flex-shrink:0;}
   .coach-test-row input{
