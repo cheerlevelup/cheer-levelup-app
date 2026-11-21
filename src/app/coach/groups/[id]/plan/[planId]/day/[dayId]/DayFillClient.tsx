@@ -15,7 +15,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { Button } from '@/components/coach/ui'
-import { AlertTriangle, MessageCircle, Check, X, RefreshCw, FileDown, SlidersHorizontal } from 'lucide-react'
+import { AlertTriangle, MessageCircle, Check, X, RefreshCw, FileDown, SlidersHorizontal, Pencil } from 'lucide-react'
 import { sortWithVariants } from '@/lib/exerciseVariants'
 import { fmtRange, isoPowtLines, eccTempoLines, type PlanWorkSet } from '@/lib/coach/planFormat'
 import type { SheetBox, SheetCell, SheetColumn, SheetItem, SheetRow } from '@/lib/coach/dayFillPdf'
@@ -156,6 +156,92 @@ function ParamsEditor({ initial, placeholders, onSave, onCancel }: {
       {field('comment', 'Komentarz dla niej', 170, 'left')}
       <button onClick={() => onSave(v)} title="Zapisz parametry tej zawodniczki" style={{ flexShrink: 0, width: 24, height: 24, borderRadius: 7, border: 'none', background: 'var(--green)', color: '#ffffff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Check size={13} /></button>
       <button onClick={onCancel} title="Anuluj" style={{ flexShrink: 0, width: 24, height: 24, borderRadius: 7, border: 'none', background: 'none', color: 'var(--muted-light)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><X size={13} /></button>
+    </div>
+  )
+}
+
+// Szybka edycja parametrów ćwiczenia z planu (dla wszystkich) — bez wychodzenia z tabeli.
+// Zmienione pole trafia do każdej serii; niezmienione zostaje jak w planie (np. różne powt. w seriach).
+type QuickVals = { sets: string; reps: string; weight: string; tempo: string; comment: string }
+function quickInitial(ex: BlockEx): QuickVals {
+  const ws = workSets(ex)
+  const first = ws[0] || {}
+  return {
+    sets: String(ex.sets || ws.length || 1),
+    reps: (first.reps ?? ex.reps ?? '') || '',
+    weight: (first.weight_kg ?? (ex.weight_kg != null ? String(ex.weight_kg) : '')) || '',
+    tempo: (first.tempo ?? ex.tempo ?? '') || '',
+    comment: ex.coach_comment || '',
+  }
+}
+function QuickExerciseEditor({ ex, name, pos, onClose, onSaved }: {
+  ex: BlockEx; name: string; pos: { top: number; left: number }; onClose: () => void; onSaved: () => void
+}) {
+  const supabase = createClient()
+  const init = useMemo(() => quickInitial(ex), [ex])
+  const [v, setV] = useState<QuickVals>(init)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const special = !!ex.iso || !!ex.ecc   // ISO / ekscentryczne — powt. i tempo tylko w edytorze planu
+
+  async function save() {
+    const n = Math.max(1, Math.min(20, parseInt(v.sets) || 1))
+    const src = workSets(ex).length ? workSets(ex) : [{ reps: ex.reps || '', weight_kg: ex.weight_kg != null ? String(ex.weight_kg) : '', tempo: ex.tempo || '', rir: ex.rir != null ? String(ex.rir) : '' }]
+    const sets: PlanWorkSet[] = Array.from({ length: n }, (_, i) => ({ ...(src[i] || src[src.length - 1] || {}) }))
+    for (const s of sets) {
+      if (!special && v.reps !== init.reps) s.reps = v.reps.trim()
+      if (v.weight !== init.weight) s.weight_kg = v.weight.trim()
+      if (!special && v.tempo !== init.tempo) s.tempo = v.tempo.trim()
+    }
+    const first = sets[0] || {}
+    const w = parseFloat((first.weight_kg || '').replace(',', '.'))
+    const payload: Record<string, unknown> = {
+      sets: n,
+      work_sets: sets,
+      weight_kg: isNaN(w) ? null : w,
+      coach_comment: v.comment.trim() || null,
+      ...(special ? {} : { reps: first.reps || null, tempo: first.tempo || null }),
+    }
+    setBusy(true); setErr('')
+    let { error } = await supabase.from('workout_block_exercises').update(payload).eq('id', ex.id)
+    if (error && /work_sets/.test(error.message)) {
+      const { work_sets: _ws, ...rest } = payload
+      ;({ error } = await supabase.from('workout_block_exercises').update(rest).eq('id', ex.id))
+    }
+    setBusy(false)
+    if (error) { setErr(error.message); return }
+    onSaved()
+  }
+
+  const field = (k: keyof QuickVals, label: string, width: number | string, ph = '') => (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 2, ...(k === 'comment' ? { flex: '1 1 100%' } : {}) }}>
+      <span style={{ fontFamily: INTER, fontSize: '0.55rem', fontWeight: 700, color: 'var(--muted-light)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{label}</span>
+      <input value={v[k]} placeholder={ph} autoFocus={k === 'sets'}
+        onChange={e => setV(prev => ({ ...prev, [k]: e.target.value }))}
+        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); save() } else if (e.key === 'Escape') onClose() }}
+        inputMode={k === 'sets' ? 'numeric' : undefined}
+        style={{ width, boxSizing: 'border-box', border: '1.5px solid var(--border)', borderRadius: 7, background: '#fff', fontFamily: INTER, fontSize: '0.78rem', color: 'var(--navy-900)', padding: '5px 7px', outline: 'none', textAlign: k === 'comment' ? 'left' : 'center' }} />
+    </label>
+  )
+  return (
+    <div data-quick-pop style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 300, width: 330, background: '#fff', border: '1.5px solid var(--navy-900)', borderRadius: 12, boxShadow: '0 12px 32px rgba(13,27,42,.22)', padding: '10px 12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+        <span style={{ fontWeight: 800, fontSize: '0.8rem', color: 'var(--navy-900)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+        <span style={{ fontFamily: INTER, fontSize: '0.6rem', color: 'var(--muted)' }}>dla wszystkich</span>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {field('sets', 'Serie', 48)}
+        {!special && field('reps', 'Powt.', 70, '8')}
+        {field('weight', 'Ciężar', 70, 'kg / BW')}
+        {!special && field('tempo', 'Tempo', 70, '3010')}
+        {field('comment', 'Komentarz', '100%', 'wskazówka dla zawodniczek')}
+      </div>
+      {special && <div style={{ marginTop: 6, fontFamily: INTER, fontSize: '0.66rem', color: 'var(--muted)' }}>ISO / ekscentryczne — czas, intensywność i tempo zmienisz w edytorze planu.</div>}
+      {err && <div style={{ marginTop: 6, fontFamily: INTER, fontSize: '0.7rem', color: '#c23b3b', fontWeight: 700 }}>❌ {err}</div>}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginTop: 10 }}>
+        <Button variant="ghost" size="small" onClick={onClose} disabled={busy}>Anuluj</Button>
+        <Button variant="dark" size="small" onClick={save} disabled={busy} style={{ color: 'var(--gold)' }}>{busy ? 'Zapisuję…' : 'Zapisz'}</Button>
+      </div>
     </div>
   )
 }
@@ -371,6 +457,18 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
     })
   }
   const [teamBusy, setTeamBusy] = useState<number | null>(null)
+  // szybka edycja parametrów ćwiczenia (przycisk ✎ w nagłówku kolumny)
+  const [quickEdit, setQuickEdit] = useState<{ ex: BlockEx; name: string; pos: { top: number; left: number } } | null>(null)
+  function openQuickEdit(ex: BlockEx, name: string, el: HTMLElement) {
+    const r = el.getBoundingClientRect()
+    setQuickEdit(q => q?.ex.id === ex.id ? null : { ex, name, pos: { top: Math.min(r.bottom + 6, window.innerHeight - 260), left: Math.max(8, Math.min(r.left - 10, window.innerWidth - 342)) } })
+  }
+  useEffect(() => {
+    if (!quickEdit) return
+    const close = (e: MouseEvent) => { const t = e.target as HTMLElement | null; if (!t?.closest?.('[data-quick-pop]') && !t?.closest?.('[data-quick-btn]')) setQuickEdit(null) }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [quickEdit])
   async function toggleTeamSkipped(ex: BlockEx, name: string, isFor: (id: number) => boolean) {
     const targets = teamTargets(ex, isFor)
     if (targets.length === 0) return
@@ -781,6 +879,16 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
         .df-w.skipped { background: #fdecec; border-color: #f1c4c4; }
         .df-w.skipped::placeholder { color: #c23b3b; font-weight: 800; }
       `}</style>
+      {quickEdit && (
+        <QuickExerciseEditor
+          key={quickEdit.ex.id}
+          ex={quickEdit.ex}
+          name={quickEdit.name}
+          pos={quickEdit.pos}
+          onClose={() => setQuickEdit(null)}
+          onSaved={() => { setQuickEdit(null); router.refresh() }}
+        />
+      )}
       <div className="coach-content" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <PlanModeSwitch mode="fill" editorLink={editorHref(group.id, plan.id, day.id)} fillLink={null} />
@@ -882,6 +990,14 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                           {pill(col.label, col.variant === 'alt')}
                           <span style={{ fontWeight: 800, fontSize: '0.72rem', color: col.variant === 'alt' ? '#7c3aed' : 'var(--navy-900)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...(teamSkipped(ex, col.isFor) ? { textDecoration: 'line-through', textDecorationColor: '#c23b3b' } : {}) }}>{exName(ex)}</span>
+                          <button
+                            data-quick-btn
+                            onClick={e => openQuickEdit(ex, exName(ex), e.currentTarget)}
+                            title="Szybka edycja parametrów (serie, powtórzenia, ciężar, tempo, komentarz) — dla wszystkich"
+                            style={{ flexShrink: 0, marginLeft: 'auto', width: 20, height: 18, border: '1.5px solid var(--border)', background: quickEdit?.ex.id === ex.id ? 'var(--navy-900)' : '#fff', color: quickEdit?.ex.id === ex.id ? 'var(--gold)' : 'var(--navy-900)', borderRadius: 5, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0, cursor: 'pointer' }}
+                          >
+                            <Pencil size={10} />
+                          </button>
                           {(() => {
                             const all = teamSkipped(ex, col.isFor)
                             return (
@@ -889,7 +1005,7 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                                 onClick={() => toggleTeamSkipped(ex, exName(ex), col.isFor)}
                                 disabled={teamBusy === ex.id}
                                 title={all ? 'Drużyna nie wykonała tego ćwiczenia — kliknij, by cofnąć' : 'Oznacz ćwiczenie jako niewykonane przez całą drużynę'}
-                                style={{ flexShrink: 0, marginLeft: 'auto', border: '1.5px solid #c23b3b', background: all ? '#c23b3b' : '#fff', color: all ? '#fff' : '#c23b3b', borderRadius: 5, padding: '1px 5px', fontFamily: INTER, fontSize: '0.55rem', fontWeight: 800, whiteSpace: 'nowrap', cursor: teamBusy === ex.id ? 'wait' : 'pointer' }}
+                                style={{ flexShrink: 0, border: '1.5px solid #c23b3b', background: all ? '#c23b3b' : '#fff', color: all ? '#fff' : '#c23b3b', borderRadius: 5, padding: '1px 5px', fontFamily: INTER, fontSize: '0.55rem', fontWeight: 800, whiteSpace: 'nowrap', cursor: teamBusy === ex.id ? 'wait' : 'pointer' }}
                               >
                                 {teamBusy === ex.id ? '…' : all ? 'NIE WYKONANE' : '✕ drużyna'}
                               </button>
