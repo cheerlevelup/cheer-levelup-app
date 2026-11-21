@@ -137,45 +137,45 @@ export default function AthleteProfileCard({ athlete, onClose }: { athlete: Athl
   const activeInjuryCount = (injuries || []).filter(i => i.status === 'active').length
 
   // ── Testy ──
-  const [catalog, setCatalog] = useState<CatalogTest[] | null>(null)
-  const [tests, setTests] = useState<Map<number, BenchmarkTest> | null>(null)
+  // catalogAll: także zarchiwizowane testy (żeby historyczne wyniki miały nazwę)
+  const [catalogAll, setCatalogAll] = useState<(CatalogTest & { is_archived?: boolean })[] | null>(null)
+  const [results, setResults] = useState<BenchmarkTest[] | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [newTestId, setNewTestId] = useState('')
+  const [newValue, setNewValue] = useState('')
+  const [newDate, setNewDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [savingTest, setSavingTest] = useState(false)
+  const [testError, setTestError] = useState('')
 
   async function loadTests() {
-    if (tests !== null) return
+    if (results !== null) return
     const [{ data: catalogData }, { data: testsData }] = await Promise.all([
-      supabase.from('test_catalog').select('id, name, unit').eq('is_archived', false).order('sort_order', { ascending: true }),
+      supabase.from('test_catalog').select('id, name, unit, is_archived').order('sort_order', { ascending: true }),
       supabase.from('benchmark_tests').select('*').eq('athlete_id', athlete.id).order('test_date', { ascending: false }),
     ])
-    const m = new Map<number, BenchmarkTest>()
-    for (const row of (testsData || []) as BenchmarkTest[]) {
-      // wpisy „brak testu” (bez wartości) nie zasłaniają ostatniego prawdziwego wyniku
-      if (row.value == null && (row as BenchmarkTest & { missing?: boolean }).missing) continue
-      if (!m.has(row.test_catalog_id)) m.set(row.test_catalog_id, row) // najnowszy (posortowane malejąco)
-    }
-    setCatalog((catalogData || []) as CatalogTest[])
-    setTests(m)
+    setCatalogAll((catalogData || []) as (CatalogTest & { is_archived?: boolean })[])
+    // tylko faktycznie wykonane testy (z wynikiem) — wpisy „brak testu” pomijamy
+    setResults(((testsData || []) as BenchmarkTest[]).filter(r => r.value != null))
   }
 
-  function updateTestLocal(testCatalogId: number, patch: Partial<BenchmarkTest>) {
-    setTests(prev => {
-      const m = new Map(prev)
-      const existing = m.get(testCatalogId) || { athlete_id: athlete.id, test_catalog_id: testCatalogId, value: null, test_date: null }
-      m.set(testCatalogId, { ...existing, ...patch })
-      return m
-    })
+  async function addTestResult() {
+    const testId = parseInt(newTestId)
+    const value = parseFloat(newValue.replace(',', '.'))
+    if (!testId || isNaN(value)) { setTestError('Wybierz test i wpisz wynik.'); return }
+    setSavingTest(true); setTestError('')
+    const { data, error } = await supabase.from('benchmark_tests').insert({
+      athlete_id: athlete.id, test_catalog_id: testId, value, test_date: newDate || null,
+    }).select().single()
+    setSavingTest(false)
+    if (error) { setTestError(error.message); return }
+    setResults(prev => [data as BenchmarkTest, ...(prev || [])])
+    setAdding(false); setNewTestId(''); setNewValue('')
   }
 
-  async function saveTest(testCatalogId: number) {
-    const row = tests?.get(testCatalogId)
-    if (!row) return
-    if (row.id) {
-      await supabase.from('benchmark_tests').update({ value: row.value, test_date: row.test_date || null }).eq('id', row.id)
-    } else {
-      const { data } = await supabase.from('benchmark_tests').insert({
-        athlete_id: athlete.id, test_catalog_id: testCatalogId, value: row.value, test_date: row.test_date || null,
-      }).select().single()
-      if (data) setTests(prev => { const m = new Map(prev); m.set(testCatalogId, data as BenchmarkTest); return m })
-    }
+  async function removeTestResult(id?: number) {
+    if (!id || !confirm('Usunąć ten wynik testu?')) return
+    const { error } = await supabase.from('benchmark_tests').delete().eq('id', id)
+    if (!error) setResults(prev => (prev || []).filter(r => r.id !== id))
   }
 
   // ── Raporty ──
@@ -339,36 +339,65 @@ export default function AthleteProfileCard({ athlete, onClose }: { athlete: Athl
 
         {tab === 'testy' && (
           <>
-            <div className="coach-section-label" style={{ padding: '0 0 8px' }}>Testy sprawnościowe — wyniki i daty pomiarów</div>
-            {(catalog || []).length === 0 ? (
-              <div className="coach-injury-empty">Brak testów w katalogu. Dodaj je w zakładce „Testy”.</div>
+            <div className="coach-section-label" style={{ padding: '0 0 8px' }}>Wykonane testy sprawnościowe</div>
+            {results === null ? (
+              <div className="coach-injury-empty">Wczytuję...</div>
+            ) : results.length === 0 ? (
+              <div className="coach-injury-empty">Zawodniczka nie ma jeszcze wyników testów.</div>
             ) : (
-              (catalog || []).map(ct => {
-                const t = tests?.get(ct.id)
-                return (
-                  <div key={ct.id} className="coach-test-group">
-                    <div className="coach-test-group-head"><Ruler size={14} /> {ct.name.toUpperCase()}{ct.unit ? ` [${ct.unit.toUpperCase()}]` : ''}</div>
-                    <div className="coach-test-group-body">
-                      <div className="coach-test-row">
-                        <span className="coach-test-row-label">Wynik</span>
-                        <input
-                          type="number"
-                          placeholder={ct.unit}
-                          value={t?.value ?? ''}
-                          onChange={e => updateTestLocal(ct.id, { value: e.target.value ? parseFloat(e.target.value) : null })}
-                          onBlur={() => saveTest(ct.id)}
-                        />
-                        <input
-                          type="date"
-                          value={t?.test_date ?? ''}
-                          onChange={e => updateTestLocal(ct.id, { test_date: e.target.value })}
-                          onBlur={() => saveTest(ct.id)}
-                        />
+              (catalogAll || [])
+                .filter(ct => results.some(r => r.test_catalog_id === ct.id))
+                .map(ct => {
+                  const rows = results
+                    .filter(r => r.test_catalog_id === ct.id)
+                    .sort((a, b) => (b.test_date || '').localeCompare(a.test_date || ''))
+                  return (
+                    <div key={ct.id} className="coach-test-group">
+                      <div className="coach-test-group-head"><Ruler size={14} /> {ct.name.toUpperCase()}{ct.unit ? ` [${ct.unit.toUpperCase()}]` : ''}</div>
+                      <div className="coach-test-group-body">
+                        {rows.map((r, i) => (
+                          <div key={r.id ?? i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 0', borderTop: i > 0 ? '1px solid var(--border)' : 'none' }}>
+                            <span style={{ width: 90, fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.75rem', color: 'var(--muted-light)' }}>
+                              {r.test_date ? new Date(r.test_date + 'T00:00:00').toLocaleDateString('pl-PL') : 'bez daty'}
+                            </span>
+                            <span style={{ flex: 1, fontWeight: i === 0 ? 800 : 600, color: 'var(--navy-900)' }}>
+                              {r.value} {ct.unit}
+                              {i === 0 && rows.length > 1 && <span style={{ marginLeft: 8, fontSize: '0.65rem', fontWeight: 700, color: 'var(--gold)' }}>OSTATNI</span>}
+                            </span>
+                            <button onClick={() => removeTestResult(r.id)} title="Usuń wynik"
+                              style={{ background: 'none', border: 'none', color: 'var(--muted-light)', cursor: 'pointer', fontSize: '0.8rem' }}>✕</button>
+                          </div>
+                        ))}
                       </div>
                     </div>
+                  )
+                })
+            )}
+
+            {adding ? (
+              <div className="coach-test-group">
+                <div className="coach-test-group-head"><Ruler size={14} /> NOWY WYNIK TESTU</div>
+                <div className="coach-test-group-body">
+                  <div className="coach-test-row" style={{ flexWrap: 'wrap' }}>
+                    <select value={newTestId} onChange={e => setNewTestId(e.target.value)} style={{ minWidth: 200 }}>
+                      <option value="">— wybierz test —</option>
+                      {(catalogAll || []).filter(ct => !ct.is_archived).map(ct => (
+                        <option key={ct.id} value={ct.id}>{ct.name}{ct.unit ? ` [${ct.unit}]` : ''}</option>
+                      ))}
+                    </select>
+                    <input type="number" step="any" placeholder={(catalogAll || []).find(c => String(c.id) === newTestId)?.unit || 'wynik'}
+                      value={newValue} onChange={e => setNewValue(e.target.value)} />
+                    <input type="date" value={newDate} onChange={e => setNewDate(e.target.value)} />
                   </div>
-                )
-              })
+                  {testError && <div style={{ color: '#c23b3b', fontSize: '0.75rem', marginTop: 6 }}>{testError}</div>}
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
+                    <Button variant="ghost" onClick={() => { setAdding(false); setTestError('') }}>Anuluj</Button>
+                    <Button variant="gold" onClick={addTestResult} disabled={savingTest}>{savingTest ? 'Zapisuję...' : 'Zapisz'}</Button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <button className="coach-add-injury-btn" onClick={() => setAdding(true)}>+ Dodaj wynik testu</button>
             )}
           </>
         )}
