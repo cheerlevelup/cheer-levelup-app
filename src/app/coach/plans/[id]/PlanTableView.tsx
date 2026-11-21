@@ -106,13 +106,21 @@ function EditCell({ value, onCommit, align = 'center', placeholder, renderDispla
   )
 }
 
+// Nazwa pliku eksportu: najpierw drużyna, potem plan (np. „Girls Październik")
+function exportFileName(plan: Plan) {
+  const team = (plan as { team_name?: string }).team_name?.trim()
+  const name = plan.name.trim()
+  const full = team && !name.toLowerCase().startsWith(team.toLowerCase()) ? `${team} ${name}` : name
+  return full.replace(/[\\/:*?"<>|]/g, '-')
+}
+
 // ─── Export XLSX ──────────────────────────────────────────────────────────────
 async function exportXlsx(plan: Plan, days: Day[], blocks: Block[], athletes: { id: number; full_name: string }[]) {
   const logo = await loadPdfLogo()
   const buf = await buildPlanXlsx({ plan, days, blocks, athletes, logo })
   const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
   const url = URL.createObjectURL(blob)
-  const a = document.createElement('a'); a.href = url; a.download = `${plan.name}.xlsx`; a.click()
+  const a = document.createElement('a'); a.href = url; a.download = `${exportFileName(plan)}.xlsx`; a.click()
   URL.revokeObjectURL(url)
 }
 
@@ -120,7 +128,7 @@ async function exportXlsx(plan: Plan, days: Day[], blocks: Block[], athletes: { 
 async function exportPdf(plan: Plan, days: Day[], blocks: Block[], athletes: { id: number; full_name: string }[]) {
   const [fonts, logo] = await Promise.all([loadPdfFonts(), loadPdfLogo()])
   const doc = await buildPlanPdf({ plan, days, blocks, athletes, fonts, logo, team: (plan as { team_name?: string }).team_name })
-  doc.save(`${plan.name}.pdf`)
+  doc.save(`${exportFileName(plan)}.pdf`)
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
