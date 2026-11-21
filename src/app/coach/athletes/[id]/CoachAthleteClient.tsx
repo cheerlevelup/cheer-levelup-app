@@ -5,9 +5,8 @@ import { useState, useEffect } from 'react'
 import { applyVariantsToBlocks } from '@/lib/exerciseVariants'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
-import ModuleConfigPanel from '@/components/ModuleConfigPanel'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
-import { Button, Modal, StatCard, StatusPill, TabsState } from '@/components/coach/ui'
+import { Button, Modal, StatCard, TabsState } from '@/components/coach/ui'
 import MoveToGroupModal from '@/components/coach/MoveToGroupModal'
 
 // Semantyczne kolory (odwołania do tokenów motywu coach-theme.css + kilka
@@ -297,8 +296,6 @@ interface Props {
   wellnessList: any[]
   groupTrainingEntries: any[]
   painLogs: any[]
-  groupModuleConfigs: any[]
-  athleteModuleConfigs: any[]
   allGroups: any[]
   allPlans: any[]
 }
@@ -545,9 +542,8 @@ function SessionFeedbackModal({ session, onClose }: { session: any; onClose: () 
 
 type MainTab = 'overview' | 'wellness'
 
-export default function CoachAthleteClient({ athlete, assignment, pastAssignments, sessions, feedbacks, wellnessLogs, wellnessList, groupTrainingEntries, painLogs, groupModuleConfigs, athleteModuleConfigs, allGroups, allPlans }: Props) {
+export default function CoachAthleteClient({ athlete, assignment, pastAssignments, sessions, feedbacks, wellnessLogs, wellnessList, groupTrainingEntries, painLogs, allGroups, allPlans }: Props) {
   const router = useRouter()
-  const supabase = createClient()
   const [planTab, setPlanTab] = useState<'active' | 'history'>('active')
   const [movingGroup, setMovingGroup] = useState(false)
   const [changingPlan, setChangingPlan] = useState(false)
@@ -555,68 +551,8 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
   const [localAssignment, setLocalAssignment] = useState(assignment)
   const [selectedWellness, setSelectedWellness] = useState<{ wellness: any; dateLabel: string } | null>(null)
   const [mainTab, setMainTab] = useState<MainTab>('overview')
-  const [moduleConfig, setModuleConfig] = useState<'wellness' | null>(null)
-  const [localAthleteModuleConfigs, setLocalAthleteModuleConfigs] = useState<any[]>(athleteModuleConfigs)
   const [selectedSessionFeedback, setSelectedSessionFeedback] = useState<{ session: any } | null>(null)
   const [selectedGroupTraining, setSelectedGroupTraining] = useState<{ training: any; entries: any[] } | null>(null)
-  const inheritedModuleConfig = moduleConfig
-    ? groupModuleConfigs.find((config: any) => config.module === moduleConfig)
-    : null
-
-  const moduleDefaults = {
-    wellness: {
-      pre: ['sleep_hours', 'sleep_quality', 'readiness', 'energy', 'stress', 'muscle_soreness', 'hydration', 'recovery_score'],
-      post: [],
-    },
-  }
-  const groupConfigFor = (module: 'wellness') => groupModuleConfigs.find((config: any) => config.module === module)
-  const athleteConfigFor = (module: 'wellness') => localAthleteModuleConfigs.find((config: any) => config.module === module)
-  const effectiveConfigFor = (module: 'wellness') => athleteConfigFor(module) || groupConfigFor(module)
-  const isModuleEnabled = (module: 'wellness') => effectiveConfigFor(module)?.enabled !== false
-  const configSource = (module: 'wellness') => athleteConfigFor(module) ? 'indywidualnie' : 'wg grupy'
-  const sameList = (a: string[] = [], b: string[] = []) => a.length === b.length && a.every(item => b.includes(item))
-
-  async function saveModuleAccess(module: 'wellness', enabled: boolean) {
-    const athleteConfig = athleteConfigFor(module)
-    const groupConfig = groupConfigFor(module)
-    const groupEnabled = groupConfig?.enabled !== false
-    const defaults = moduleDefaults[module]
-    const groupPre = groupConfig?.pre_params || defaults.pre
-    const groupPost = groupConfig?.post_params || defaults.post
-
-    if (enabled === groupEnabled) {
-      const hasCustomParams = athleteConfig && (
-        !sameList(athleteConfig.pre_params || [], groupPre)
-        || !sameList(athleteConfig.post_params || [], groupPost)
-      )
-      if (!hasCustomParams) {
-        if (athleteConfig?.id) {
-          const { error } = await supabase.from('group_module_config').delete().eq('id', athleteConfig.id)
-          if (error) return
-        }
-        setLocalAthleteModuleConfigs(prev => prev.filter(config => config.module !== module))
-        return
-      }
-    }
-
-    const current = athleteConfig || groupConfig
-    const { data, error } = await supabase
-      .from('group_module_config')
-      .upsert({
-        athlete_id: athlete.id,
-        module,
-        enabled,
-        pre_params: current?.pre_params || defaults.pre,
-        post_params: current?.post_params || defaults.post,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'athlete_id,module' })
-      .select('id, group_id, athlete_id, module, enabled, pre_params, post_params, updated_at')
-      .single()
-
-    if (error) return
-    setLocalAthleteModuleConfigs(prev => [...prev.filter(config => config.module !== module), data])
-  }
-
   const completedSessions = sessions.filter(s => s.completed)
   const feedbackMap: Record<number, any> = {}
   for (const f of feedbacks) feedbackMap[f.workout_session_id || f.session_id] = f
@@ -713,18 +649,6 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
           onClose={() => setSelectedGroupTraining(null)}
         />
       )}
-      {moduleConfig && (
-        <ModuleConfigPanel
-          athleteId={athlete.id}
-          module={moduleConfig}
-          groupConfig={inheritedModuleConfig ? {
-            enabled: inheritedModuleConfig.enabled ?? true,
-            pre: inheritedModuleConfig.pre_params || [],
-            post: inheritedModuleConfig.post_params || [],
-          } : null}
-          onClose={() => setModuleConfig(null)}
-        />
-      )}
       {movingGroup && (
         <MoveToGroupModal
           athlete={localAthlete}
@@ -767,29 +691,11 @@ export default function CoachAthleteClient({ athlete, assignment, pastAssignment
           <div className="coach-comp-tab-body">
             {mainTab === 'wellness' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div style={sectionBoxStyle}>
-                  <SectionLabel>Konfiguracja wellness</SectionLabel>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-                    <StatusPill label={isModuleEnabled('wellness') ? 'Wellness włączony' : 'Wellness wyłączony'} tone={isModuleEnabled('wellness') ? 'green' : 'red'} />
-                    <span style={{ fontSize: 11, color: athleteConfigFor('wellness') ? 'var(--gold)' : 'var(--muted)', fontFamily: 'var(--font-inter),sans-serif' }}>{configSource('wellness')}</span>
+                {wellnessLogs.length === 0 && (
+                  <div style={{ ...sectionBoxStyle, color: 'var(--muted)', fontSize: 13.5, fontFamily: 'var(--font-inter),sans-serif' }}>
+                    Brak wpisów wellness. Zawodniczka uzupełnia wellness przy okazji treningu.
                   </div>
-                  <p style={{ color: 'var(--muted)', fontSize: 13.5, marginBottom: 14, fontFamily: 'var(--font-inter),sans-serif' }}>
-                    Wybierz które parametry wellness widzi ta zawodniczka. Nadpisuje ustawienia grupy.
-                  </p>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <Button
-                      onClick={() => saveModuleAccess('wellness', !isModuleEnabled('wellness'))}
-                      style={isModuleEnabled('wellness')
-                        ? { color: '#c23b3b', background: '#fdecec' }
-                        : { color: '#1f9d64', background: '#e9f9f0' }}
-                    >
-                      {isModuleEnabled('wellness') ? 'Wyłącz wellness' : 'Włącz wellness'}
-                    </Button>
-                    <Button variant="dark" onClick={() => setModuleConfig('wellness')}>🩺 Edytuj parametry wellness</Button>
-                    <Button variant="ghost" onClick={() => router.push(`/coach/athletes/${athlete.id}/training`)}>Zobacz historię →</Button>
-                  </div>
-                </div>
-
+                )}
                 {wellnessLogs.length > 0 && (
                   <div style={sectionBoxStyle}>
                     <SectionLabel>Ostatnie wpisy wellness</SectionLabel>

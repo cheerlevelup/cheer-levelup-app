@@ -170,11 +170,9 @@ export default async function CoachGroupDetailPage({ params }: Props) {
     .select('id, name, is_archived')
     .order('created_at', { ascending: false })
 
-  // Wellness z ostatnich 30 dni (7 do tabeli + 30 do statystyk)
+  // Wellness z ostatnich 30 dni (do statystyk)
   const thirtyDaysAgo = new Date()
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-  const sevenDaysAgo = new Date()
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
 
   const { data: wellnessLogs } = await supabase
     .from('wellness_logs')
@@ -191,14 +189,6 @@ export default async function CoachGroupDetailPage({ params }: Props) {
     .gte('created_at', thirtyDaysAgo.toISOString())
     .order('created_at', { ascending: false })
 
-  const { data: moduleConfigs } = await supabase
-    .from('group_module_config')
-    .select('id, group_id, athlete_id, module, enabled, pre_params, post_params, updated_at')
-    .eq('module', 'wellness')
-    .or(`group_id.eq.${groupId},athlete_id.in.(${athleteIds.join(',')})`)
-
-  const wellnessWeek = (wellnessLogs || []).filter((l: any) => l.date >= sevenDaysAgo.toISOString().split('T')[0])
-
   return (
     <CoachGroupDetailClient
       group={group}
@@ -208,9 +198,7 @@ export default async function CoachGroupDetailPage({ params }: Props) {
       sessions={sessions || []}
       plans={plans || []}
       wellnessLogs={wellnessLogs || []}
-      wellnessWeek={wellnessWeek}
       feedbacks={feedbacks || []}
-      moduleConfigs={moduleConfigs || []}
       assignmentsHistory={allGroupAssignmentsHistory || []}
       archivedPlans={archivedPlans || []}
       {...await loadStartPlans(supabase, groupId, athletes)}

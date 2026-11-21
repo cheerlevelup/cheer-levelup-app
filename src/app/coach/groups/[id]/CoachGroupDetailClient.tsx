@@ -5,7 +5,6 @@ import { useState, useEffect } from 'react'
 import { applyVariantsToBlocks } from '@/lib/exerciseVariants'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
-import ModuleConfigPanel from '@/components/ModuleConfigPanel'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { Card, Modal, Field, Button, TabsNav, SegmentedControl, StatsTable } from '@/components/coach/ui'
 import GroupHero from '@/components/coach/GroupHero'
@@ -189,9 +188,6 @@ function SessionReportModal({ session, athleteId, athleteName, dayName, onClose 
     async function load() {
       try {
         const sb = createClient()
-        // Data sesji w czasie lokalnym (UTC przesuwało wieczorne treningi na inny dzień)
-        const sessionBase = session.date_completed ? new Date(session.date_completed) : new Date()
-        const sessionDate = `${sessionBase.getFullYear()}-${String(sessionBase.getMonth() + 1).padStart(2, '0')}-${String(sessionBase.getDate()).padStart(2, '0')}`
 
         // Każde zapytanie niezależnie — błąd jednego nie blokuje reszty
         let fbData = null, logsData: any[] = [], blocksData: any[] = [], wellnessData = null
@@ -218,24 +214,6 @@ function SessionReportModal({ session, athleteId, athleteName, dayName, onClose 
           const r = await sb.from('wellness_logs').select('*').eq('workout_session_id', session.id).order('created_at', { ascending: false }).limit(1).maybeSingle()
           wellnessData = r.data || null
         } catch {}
-
-        // 2) Dzienny wpis wellness z datą sesji (strona wellness zapisuje pole date)
-        if (!wellnessData) {
-          try {
-            const r = await sb.from('wellness_logs').select('*').eq('athlete_id', athleteId).eq('date', sessionDate).order('created_at', { ascending: false }).limit(1).maybeSingle()
-            wellnessData = r.data || null
-          } catch {}
-        }
-
-        // 3) Jakikolwiek wpis zawodniczki z tego samego dnia (po created_at)
-        if (!wellnessData) {
-          try {
-            const dayStart = new Date(sessionBase); dayStart.setHours(0, 0, 0, 0)
-            const dayEnd = new Date(dayStart); dayEnd.setDate(dayEnd.getDate() + 1)
-            const r = await sb.from('wellness_logs').select('*').eq('athlete_id', athleteId).gte('created_at', dayStart.toISOString()).lt('created_at', dayEnd.toISOString()).order('created_at', { ascending: false }).limit(1).maybeSingle()
-            wellnessData = r.data || null
-          } catch {}
-        }
 
         setFeedback(fbData)
         setSetLogs(logsData)
@@ -762,60 +740,6 @@ function avg(arr: number[]): number | null {
   return arr.reduce((a, b) => a + b, 0) / arr.length
 }
 
-function colorBand(val: number | null, thresholds: [number, number], colors: [string, string, string]): string {
-  if (val === null) return 'var(--muted-light)'
-  if (val <= thresholds[0]) return colors[0]
-  if (val <= thresholds[1]) return colors[1]
-  return colors[2]
-}
-
-function Dot({ color, title }: { color: string; title?: string }) {
-  return <div title={title} style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0 }} />
-}
-
-function WellnessBadge({ value, label, color }: { value: string; label?: string; color: string }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-      <div style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.72rem', fontWeight: 800, color }}>{value}</div>
-      {label && <div style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.5rem', color: 'var(--muted-light)' }}>{label}</div>}
-    </div>
-  )
-}
-
-function getAthleteWellnessSummary(athleteId: number, logs: any[]) {
-  const myLogs = logs.filter((l: any) => l.athlete_id === athleteId)
-  const today = new Date().toISOString().split('T')[0]
-  const hasToday = myLogs.some((l: any) => (l.date ?? l.created_at?.slice(0, 10)) === today)
-
-  const sleepVals = myLogs.map((l: any) => l.sleep_hours).filter((v: any) => v != null) as number[]
-  const stressVals = myLogs.map((l: any) => l.stress).filter((v: any) => v != null) as number[]
-
-  // Pain: max pain_during from last 7 days
-  const painVals = myLogs
-    .map((l: any) => l.pain_data?.painDuring ?? null)
-    .filter((v: any) => v != null) as number[]
-  const maxPain = painVals.length ? Math.max(...painVals) : null
-
-  // Activity hours
-  const totalMinutes = myLogs.reduce((sum: number, l: any) => {
-    const dur = parseInt(l.activity_data?.duration || '0') || 0
-    return sum + dur
-  }, 0)
-  const activityHours = totalMinutes > 0 ? +(totalMinutes / 60).toFixed(1) : null
-
-  // Cycle
-  const latestCycle = myLogs.find((l: any) => l.cycle_phase)?.cycle_phase ?? null
-
-  return {
-    hasToday,
-    sleepAvg: avg(sleepVals),
-    stressAvg: avg(stressVals),
-    maxPain,
-    activityHours,
-    latestCycle,
-    entryCount: myLogs.length,
-  }
-}
 
 
 function filterByDays(logs: any[], days: number, dateField = 'date') {
@@ -829,7 +753,7 @@ function filterByDays(logs: any[], days: number, dateField = 'date') {
 }
 
 
-export default function CoachGroupDetailClient({ group, athletes, assignments, days, sessions, plans, wellnessLogs = [], wellnessWeek = [], feedbacks = [], moduleConfigs = [], assignmentsHistory = [], archivedPlans = [], startPlans = [], planTrainings = [] }: any) {
+export default function CoachGroupDetailClient({ group, athletes, assignments, days, sessions, plans, wellnessLogs = [], feedbacks = [], assignmentsHistory = [], archivedPlans = [], startPlans = [], planTrainings = [] }: any) {
   const router = useRouter()
   const supabase = createClient()
   const [showAssignModal, setShowAssignModal] = useState(false)
@@ -839,92 +763,11 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
   const todayPlanTraining = (planTrainings as any[]).find(t => t.training_date === todayStr) || null
   const [assignedMsg, setAssignedMsg] = useState('')
   const [subView, setSubView] = useState<SubView>('trening')
-  const [moduleConfig, setModuleConfig] = useState<'wellness' | null>(null)
-  const [athleteWellnessConfig, setAthleteWellnessConfig] = useState<any | null>(null)
-  const [localModuleConfigs, setLocalModuleConfigs] = useState<any[]>(moduleConfigs)
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null)
   const [wellnessPeriod, setWellnessPeriod] = useState(14)
   const [quickReportAthlete, setQuickReportAthlete] = useState<any | null>(null)
   const [sessionReport, setSessionReport] = useState<{ session: any; athleteId: number; athleteName: string; dayName: string } | null>(null)
 
-  const defaultWellnessPreParams = ['sleep_hours', 'sleep_quality', 'readiness', 'energy', 'stress', 'muscle_soreness', 'hydration', 'recovery_score']
-  const defaultWellnessPostParams: string[] = []
-  const groupWellnessConfig = localModuleConfigs.find((config: any) => config.module === 'wellness' && config.group_id === group.id)
-  const groupWellnessEnabled = groupWellnessConfig?.enabled !== false
-  const getAthleteWellnessConfig = (athleteId: number) => localModuleConfigs.find((config: any) => config.module === 'wellness' && config.athlete_id === athleteId)
-  const getWellnessEnabled = (athleteId: number) => {
-    const config = getAthleteWellnessConfig(athleteId)
-    return config ? config.enabled !== false : groupWellnessEnabled
-  }
-  const groupWellnessForPanel = {
-    enabled: groupWellnessEnabled,
-    pre: groupWellnessConfig?.pre_params || defaultWellnessPreParams,
-    post: groupWellnessConfig?.post_params || defaultWellnessPostParams,
-  }
-
-  function sameList(a: string[] = [], b: string[] = []) {
-    return a.length === b.length && a.every(item => b.includes(item))
-  }
-
-  async function saveWellnessAccess(target: { athleteId?: number; enabled: boolean }) {
-    const current = target.athleteId ? getAthleteWellnessConfig(target.athleteId) || groupWellnessConfig : groupWellnessConfig
-    const groupPre = groupWellnessConfig?.pre_params || defaultWellnessPreParams
-    const groupPost = groupWellnessConfig?.post_params || defaultWellnessPostParams
-
-    if (target.athleteId && target.enabled === groupWellnessEnabled) {
-      const athleteConfig = getAthleteWellnessConfig(target.athleteId)
-      const hasCustomParams = athleteConfig && (
-        !sameList(athleteConfig.pre_params || [], groupPre)
-        || !sameList(athleteConfig.post_params || [], groupPost)
-      )
-
-      if (!hasCustomParams) {
-        if (athleteConfig?.id) {
-          const { error } = await supabase.from('group_module_config').delete().eq('id', athleteConfig.id)
-          if (error) {
-            setAssignedMsg(`Błąd zapisu wellness: ${error.message}`)
-            return
-          }
-        }
-
-        setLocalModuleConfigs(prev => prev.filter((config: any) => !(config.module === 'wellness' && config.athlete_id === target.athleteId)))
-        setAssignedMsg('Wellness ustawiony jak grupa')
-        setTimeout(() => setAssignedMsg(''), 1800)
-        return
-      }
-    }
-
-    const payload: any = {
-      module: 'wellness',
-      enabled: target.enabled,
-      pre_params: current?.pre_params || defaultWellnessPreParams,
-      post_params: current?.post_params || defaultWellnessPostParams,
-      updated_at: new Date().toISOString(),
-    }
-    if (target.athleteId) payload.athlete_id = target.athleteId
-    else payload.group_id = group.id
-
-    const { data, error } = await supabase
-      .from('group_module_config')
-      .upsert(payload, { onConflict: target.athleteId ? 'athlete_id,module' : 'group_id,module' })
-      .select('id, group_id, athlete_id, module, enabled, pre_params, post_params, updated_at')
-      .single()
-
-    if (error) {
-      setAssignedMsg(`Błąd zapisu wellness: ${error.message}`)
-      return
-    }
-
-    setLocalModuleConfigs(prev => [
-      ...prev.filter((config: any) => target.athleteId
-        ? !(config.module === 'wellness' && config.athlete_id === target.athleteId)
-        : !(config.module === 'wellness' && config.group_id === group.id)
-      ),
-      data,
-    ])
-    setAssignedMsg(target.enabled ? 'Wellness włączony' : 'Wellness wyłączony')
-    setTimeout(() => setAssignedMsg(''), 1800)
-  }
 
   function openQuickReport(athleteId: number) {
     const found = athletes.find((a: any) => a.id === athleteId)
@@ -978,21 +821,6 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
           athletes={athletes} plans={plans} groupId={group.id}
           onClose={() => setShowAssignModal(false)}
           onAssigned={() => { setAssignedMsg('Plan przypisany!'); router.refresh() }}
-        />
-      )}
-      {moduleConfig && (
-        <ModuleConfigPanel
-          groupId={group.id}
-          module={moduleConfig}
-          onClose={() => { setModuleConfig(null); router.refresh() }}
-        />
-      )}
-      {athleteWellnessConfig && (
-        <ModuleConfigPanel
-          athleteId={athleteWellnessConfig.id}
-          module="wellness"
-          groupConfig={groupWellnessForPanel}
-          onClose={() => { setAthleteWellnessConfig(null); router.refresh() }}
         />
       )}
       {sessionReport && (
@@ -1083,56 +911,6 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
           {subView === 'wellness' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
 
-              {/* Konfiguracja wellness: grupa + nadpisania indywidualne */}
-              <div className="coach-statstable">
-                <div className="coach-statstable-head">
-                  <div className="coach-statstable-title">Konfiguracja parametrów</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                    <button className={`coach-st-toggle ${groupWellnessEnabled ? "coach-on" : ""}`} onClick={() => saveWellnessAccess({ enabled: !groupWellnessEnabled })}>
-                      {groupWellnessEnabled ? "Wellness grupy włączony" : "Wellness grupy wyłączony"}
-                    </button>
-                    <button className="coach-st-btn coach-dark" onClick={() => setModuleConfig("wellness")}>Edytuj dla grupy</button>
-                  </div>
-                </div>
-                <div style={{ overflowX: "auto" }}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th className="coach-st-left">Zawodniczka</th>
-                        <th>Wpisy (7 dni)</th>
-                        <th>Ustawienia</th>
-                        <th>Wellness</th>
-                        <th />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {athletes.map((athlete: any) => {
-                        const ws = getAthleteWellnessSummary(athlete.id, wellnessWeek)
-                        const individualConfig = getAthleteWellnessConfig(athlete.id)
-                        const wellnessEnabled = getWellnessEnabled(athlete.id)
-                        return (
-                          <tr key={athlete.id}>
-                            <td className="coach-st-left"><button className="coach-st-name" onClick={() => openQuickReport(athlete.id)}>{athlete.full_name}</button></td>
-                            <td>
-                              <span className={`coach-st-pill ${ws.hasToday ? "coach-green" : ws.entryCount > 0 ? "coach-amber" : "coach-red"}`}>
-                                {ws.hasToday ? "dziś" : ws.entryCount > 0 ? `${ws.entryCount} wpisów` : "brak"}
-                              </span>
-                            </td>
-                            <td><span className={`coach-st-tag ${individualConfig ? "coach-gold" : ""}`}>{individualConfig ? "indywidualnie" : "wg grupy"}</span></td>
-                            <td>
-                              <button className={`coach-st-toggle coach-sm ${wellnessEnabled ? "coach-on" : ""}`} onClick={() => saveWellnessAccess({ athleteId: athlete.id, enabled: !wellnessEnabled })}>
-                                {wellnessEnabled ? "włączony" : "wyłączony"}
-                              </button>
-                            </td>
-                            <td><button className="coach-st-btn" onClick={() => setAthleteWellnessConfig(athlete)}>Konfiguruj →</button></td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
               {/* ── Wellness stats table ── */}
               <StatsTable
                 title="Statystyki wellness"
@@ -1140,15 +918,11 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                 onPeriodChange={setWellnessPeriod}
                 cols={[
                   { key: 'Zawodniczka', left: true },
-                  { key: 'Dziś' },
                   { key: 'Wpisy', emoji: '📝' },
                   { key: 'Sen śr.', emoji: '🌙' },
                   { key: 'Energia', emoji: '⚡' },
                   { key: 'Stres', emoji: '🧠' },
                   { key: 'Gotowość', emoji: '💪' },
-                  { key: 'Max ból', emoji: '🩹' },
-                  { key: 'Akt. godz.', emoji: '🏃' },
-                  { key: 'Cykl', emoji: '🌸' },
                 ]}
                 rows={athletes.map((athlete: any) => {
                   const logs = filterByDays(wellnessLogs.filter((l: any) => l.athlete_id === athlete.id), wellnessPeriod)
@@ -1156,28 +930,17 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                   const energyAvg = avg(logs.map((l: any) => l.energy).filter((v: any) => v != null))
                   const stressAvg = avg(logs.map((l: any) => l.stress).filter((v: any) => v != null))
                   const readinessAvg = avg(logs.map((l: any) => l.readiness).filter((v: any) => v != null))
-                  const maxPain = logs.reduce((m: number | null, l: any) => {
-                    const p = l.pain_data?.painDuring ?? null
-                    return p === null ? m : m === null ? p : Math.max(m, p)
-                  }, null as number | null)
-                  const totalMin = logs.reduce((s: number, l: any) => s + (parseInt(l.activity_data?.duration || '0') || 0), 0)
-                  const actH = totalMin > 0 ? (totalMin / 60).toFixed(1) : null
-                  const latestCycle = logs.find((l: any) => l.cycle_phase)?.cycle_phase ?? null
                   const sc = (v: number | null, lo: number, hi: number) => v === null ? undefined : v < lo ? '#EF4444' : v < hi ? 'var(--gold)' : 'var(--green)'
                   const stressC = stressAvg === null ? undefined : stressAvg >= 8 ? '#EF4444' : stressAvg >= 5 ? 'var(--gold)' : 'var(--green)'
 
                   return {
                     id: athlete.id, name: athlete.full_name,
                     cells: [
-                      (() => { const ws = getAthleteWellnessSummary(athlete.id, wellnessWeek); return ws.hasToday ? { v: '✓', color: 'var(--green)' } : { v: '✕', color: '#EF4444' } })(),
                       { v: logs.length || null, color: logs.length === 0 ? '#EF4444' : 'var(--green)' },
                       { v: sleepAvg !== null ? `${sleepAvg.toFixed(1)}h` : null, color: sc(sleepAvg, 5, 7) },
                       { v: energyAvg !== null ? energyAvg.toFixed(1) : null, color: sc(energyAvg, 4, 7) },
                       { v: stressAvg !== null ? stressAvg.toFixed(1) : null, color: stressC },
                       { v: readinessAvg !== null ? readinessAvg.toFixed(1) : null, color: sc(readinessAvg, 4, 7) },
-                      { v: maxPain !== null ? maxPain : null, color: maxPain !== null ? (maxPain >= 6 ? '#EF4444' : maxPain >= 4 ? 'var(--gold)' : 'var(--green)') : undefined },
-                      { v: actH !== null ? `${actH}h` : null },
-                      { v: latestCycle === 'menstruacja' ? '🔴 mens.' : latestCycle ? latestCycle.slice(0, 7) : null, color: latestCycle === 'menstruacja' ? '#EF4444' : 'var(--muted-light)' },
                     ],
                   }
                 })}

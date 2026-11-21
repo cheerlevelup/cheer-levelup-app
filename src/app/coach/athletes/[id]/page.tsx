@@ -87,18 +87,6 @@ export default async function CoachAthletePage({ params }: Props) {
         .order('created_at', { ascending: false }).limit(10)
     : { data: [] }
 
-  const { data: groupModuleConfigs } = athlete.group_id
-    ? await supabase
-        .from('group_module_config')
-        .select('id, group_id, athlete_id, module, enabled, pre_params, post_params, updated_at')
-        .eq('group_id', athlete.group_id)
-    : { data: [] }
-
-  const { data: athleteModuleConfigs } = await supabase
-    .from('group_module_config')
-    .select('id, group_id, athlete_id, module, enabled, pre_params, post_params, updated_at')
-    .eq('athlete_id', athleteId)
-
   // Wszystkie grupy i plany (do edycji profilu)
   const { data: allGroups } = await supabase
     .from('groups')
@@ -121,8 +109,6 @@ export default async function CoachAthletePage({ params }: Props) {
       wellnessList={wellnessList}
       groupTrainingEntries={groupTrainingEntries || []}
       painLogs={painLogs || []}
-      groupModuleConfigs={groupModuleConfigs || []}
-      athleteModuleConfigs={athleteModuleConfigs || []}
       allGroups={allGroups || []}
       allPlans={allPlans || []}
     />

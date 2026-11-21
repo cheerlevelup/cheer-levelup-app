@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation'
 import type { Athlete, WorkoutSession, AthleteWorkoutAssignment, WorkoutDay } from '@/types/workout'
 import type { PlanTrainingItem, PlanTrainings } from '@/lib/training'
 import type { GroupTrainingListItem } from '@/lib/athleteGroupTrainingShared'
-import WellnessModal from '@/components/WellnessModal'
 import { useLiveRefresh } from '@/lib/useLiveRefresh'
 import { C, sans, display, shadow, radius } from '@/lib/athleteTheme'
 
@@ -25,16 +24,6 @@ interface Props {
   // dzisiejsza data (YYYY-MM-DD, czas polski) — „Dzisiejszy trening" to trening planu z tą datą
   today: string
   history: WorkoutSession[]
-  todayWellness: WellnessStatus
-  wellnessEnabled: boolean
-  wellnessFields: string[]
-}
-
-type WellnessStatus = {
-  dateIso: string
-  completedFields: number
-  totalFields: number
-  isComplete: boolean
 }
 
 const trainerName = 'Urszula Papka'
@@ -44,16 +33,10 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' })
 }
 
-function formatLongDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' })
-}
-
-export default function AthleteClient({ athlete, nextTraining, planTrainings, groupTrainings, today, history, todayWellness, wellnessEnabled, wellnessFields }: Props) {
+export default function AthleteClient({ athlete, nextTraining, planTrainings, groupTrainings, today, history }: Props) {
   const router = useRouter()
-  const [wellnessOpen, setWellnessOpen] = useState(false)
   // trening rozpoczęty przez trenera pojawia się bez przeładowania strony
-  useLiveRefresh(15000, !wellnessOpen)
-  const [wellnessDone, setWellnessDone] = useState(todayWellness.isComplete)
+  useLiveRefresh(15000, true)
   // „pokaż wszystkie" osobno dla każdego planu (klucz: id przypisania)
   const [showAll, setShowAll] = useState<Record<number, boolean>>({})
   // ukończony trening (bez rozpoczętej sesji) — edycja wpisów w historii, nie powtórka
@@ -251,25 +234,6 @@ export default function AthleteClient({ athlete, nextTraining, planTrainings, gr
             </section>
           )}
 
-          {/* ── WELLNESS ── */}
-          {wellnessEnabled && (
-            <button
-              className="ath-card"
-              onClick={() => setWellnessOpen(true)}
-              style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 14, padding: 16, borderRadius: radius, background: wellnessDone ? '#ecfaf3' : C.white, border: `1px solid ${wellnessDone ? '#bfe9d3' : C.grayLight}`, boxShadow: shadow }}
-            >
-              <div style={{ width: 46, height: 46, borderRadius: 12, flexShrink: 0, background: wellnessDone ? C.green : C.offWhite, color: wellnessDone ? C.white : C.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
-                {wellnessDone ? '✓' : '🩺'}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="ath-eyebrow" style={{ color: wellnessDone ? '#1f9d68' : C.muted, fontSize: 10 }}>Wellness · {formatDate(todayWellness.dateIso)}</div>
-                <div className="ath-display" style={{ fontSize: 20, color: wellnessDone ? '#167a52' : C.ink, marginTop: 3 }}>{wellnessDone ? 'Wypełniony' : 'Dzienny monitoring'}</div>
-                {!wellnessDone && <div style={{ fontSize: 13, color: C.muted, marginTop: 2 }}>{formatLongDate(todayWellness.dateIso)}</div>}
-              </div>
-              {!wellnessDone && <span style={{ flexShrink: 0, color: C.gold, fontSize: 24, fontWeight: 700 }}>›</span>}
-            </button>
-          )}
-
           {/* ── HISTORIA / STATYSTYKI ── */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <button className="ath-card" onClick={() => router.push('/athlete/history')}
@@ -307,15 +271,6 @@ export default function AthleteClient({ athlete, nextTraining, planTrainings, gr
           </button>
         </main>
       </div>
-
-      {wellnessEnabled && wellnessOpen && (
-        <WellnessModal
-          athlete={athlete}
-          enabledFields={wellnessFields}
-          onClose={() => setWellnessOpen(false)}
-          onSaved={() => { setWellnessOpen(false); setWellnessDone(true) }}
-        />
-      )}
     </>
   )
 }

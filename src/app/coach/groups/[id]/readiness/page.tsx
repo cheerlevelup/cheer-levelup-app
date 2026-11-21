@@ -33,16 +33,8 @@ export default async function GroupReadinessPage({ params }: Props) {
 
   const athletes = (rawAthletes || []).filter((a: any) => !a.archived)
 
-  // Konfiguracja arkusza gotowości dla grupy (jeśli trener ją ustawił)
-  const { data: wellnessConfig } = await supabase
-    .from('group_module_config')
-    .select('pre_params, enabled')
-    .eq('module', 'wellness')
-    .eq('group_id', groupId)
-    .maybeSingle()
-
-  const defaultWellnessFields = ['sleep_hours', 'sleep_quality', 'readiness', 'energy', 'stress', 'muscle_soreness']
-  const wellnessFields: string[] = wellnessConfig?.pre_params?.length ? wellnessConfig.pre_params : defaultWellnessFields
+  // Stały zestaw pól arkusza gotowości (konfiguracja dziennego wellness została usunięta)
+  const wellnessFields: string[] = ['sleep_hours', 'sleep_quality', 'readiness', 'energy', 'stress', 'muscle_soreness']
 
   return (
     <ReadinessKioskClient
