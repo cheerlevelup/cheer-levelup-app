@@ -1083,40 +1083,55 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
           {subView === 'wellness' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
 
-              {/* Config + individual overrides */}
-              <Card>
-                <div style={{ padding: '1rem 1.25rem', borderBottom: `1.5px solid var(--border)`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.62rem', color: 'var(--muted-light)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Konfiguracja parametrów</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                  <button onClick={() => saveWellnessAccess({ enabled: !groupWellnessEnabled })} style={{ border: `1.5px solid ${groupWellnessEnabled ? '#86EFAC' : '#FCA5A5'}`, background: groupWellnessEnabled ? '#F0FDF4' : '#FEF2F2', color: groupWellnessEnabled ? 'var(--green)' : '#EF4444', borderRadius: 999, padding: '0.45rem 0.85rem', fontWeight: 900, fontSize: '0.74rem', cursor: 'pointer' }}>
-                    {groupWellnessEnabled ? 'Wellness włączony' : 'Wellness wyłączony'}
-                  </button>
-                  <button onClick={() => setModuleConfig('wellness')} style={{ border: 'none', background: 'var(--navy-900)', color: 'var(--gold)', borderRadius: 8, padding: '0.45rem 0.85rem', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer' }}>
-                    🩺 Edytuj dla grupy
-                  </button>
+              {/* Konfiguracja wellness: grupa + nadpisania indywidualne */}
+              <div className="coach-statstable">
+                <div className="coach-statstable-head">
+                  <div className="coach-statstable-title">Konfiguracja parametrów</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    <button className={`coach-st-toggle ${groupWellnessEnabled ? "coach-on" : ""}`} onClick={() => saveWellnessAccess({ enabled: !groupWellnessEnabled })}>
+                      {groupWellnessEnabled ? "Wellness grupy włączony" : "Wellness grupy wyłączony"}
+                    </button>
+                    <button className="coach-st-btn coach-dark" onClick={() => setModuleConfig("wellness")}>Edytuj dla grupy</button>
                   </div>
                 </div>
-                {athletes.map((athlete: any, i: number) => {
-                  const ws = getAthleteWellnessSummary(athlete.id, wellnessWeek)
-                  const individualConfig = getAthleteWellnessConfig(athlete.id)
-                  const wellnessEnabled = getWellnessEnabled(athlete.id)
-                  return (
-                    <div key={athlete.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0.65rem 1.25rem', borderBottom: i < athletes.length - 1 ? `1.5px solid var(--border)` : 'none' }}>
-                      <div style={{ flex: 1, fontWeight: 700, color: 'var(--navy-900)', fontSize: '0.9rem' }}>{athlete.full_name}</div>
-                      <div style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.68rem', color: ws.hasToday ? 'var(--green)' : ws.entryCount > 0 ? 'var(--gold)' : '#EF4444' }}>{ws.hasToday ? '✅ dziś' : ws.entryCount > 0 ? `⚠️ ${ws.entryCount} wpisów` : '✗ brak'}</div>
-                      <div style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.58rem', color: individualConfig ? 'var(--gold)' : 'var(--muted-light)', minWidth: 82, textAlign: 'center' }}>
-                        {individualConfig ? 'indywidualnie' : 'wg grupy'}
-                      </div>
-                      <button onClick={() => saveWellnessAccess({ athleteId: athlete.id, enabled: !wellnessEnabled })} style={{ border: `1.5px solid ${wellnessEnabled ? '#86EFAC' : '#FCA5A5'}`, background: wellnessEnabled ? '#F0FDF4' : '#FEF2F2', color: wellnessEnabled ? 'var(--green)' : '#EF4444', borderRadius: 999, padding: '0.35rem 0.7rem', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.6rem', fontWeight: 900, cursor: 'pointer', minWidth: 84 }}>
-                        {wellnessEnabled ? 'włączony' : 'wyłączony'}
-                      </button>
-                      <button onClick={() => setAthleteWellnessConfig(athlete)} style={{ border: `1.5px solid var(--border)`, background: 'var(--bg)', color: 'var(--navy-900)', borderRadius: 7, padding: '0.35rem 0.65rem', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.62rem', fontWeight: 700, cursor: 'pointer' }}>
-                        Konfiguruj →
-                      </button>
-                    </div>
-                  )
-                })}
-              </Card>
+                <div style={{ overflowX: "auto" }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th className="coach-st-left">Zawodniczka</th>
+                        <th>Wpisy (7 dni)</th>
+                        <th>Ustawienia</th>
+                        <th>Wellness</th>
+                        <th />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {athletes.map((athlete: any) => {
+                        const ws = getAthleteWellnessSummary(athlete.id, wellnessWeek)
+                        const individualConfig = getAthleteWellnessConfig(athlete.id)
+                        const wellnessEnabled = getWellnessEnabled(athlete.id)
+                        return (
+                          <tr key={athlete.id}>
+                            <td className="coach-st-left"><button className="coach-st-name" onClick={() => openQuickReport(athlete.id)}>{athlete.full_name}</button></td>
+                            <td>
+                              <span className={`coach-st-pill ${ws.hasToday ? "coach-green" : ws.entryCount > 0 ? "coach-amber" : "coach-red"}`}>
+                                {ws.hasToday ? "dziś" : ws.entryCount > 0 ? `${ws.entryCount} wpisów` : "brak"}
+                              </span>
+                            </td>
+                            <td><span className={`coach-st-tag ${individualConfig ? "coach-gold" : ""}`}>{individualConfig ? "indywidualnie" : "wg grupy"}</span></td>
+                            <td>
+                              <button className={`coach-st-toggle coach-sm ${wellnessEnabled ? "coach-on" : ""}`} onClick={() => saveWellnessAccess({ athleteId: athlete.id, enabled: !wellnessEnabled })}>
+                                {wellnessEnabled ? "włączony" : "wyłączony"}
+                              </button>
+                            </td>
+                            <td><button className="coach-st-btn" onClick={() => setAthleteWellnessConfig(athlete)}>Konfiguruj →</button></td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
 
               {/* ── Wellness stats table ── */}
               <StatsTable
@@ -1125,6 +1140,7 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                 onPeriodChange={setWellnessPeriod}
                 cols={[
                   { key: 'Zawodniczka', left: true },
+                  { key: 'Dziś' },
                   { key: 'Wpisy', emoji: '📝' },
                   { key: 'Sen śr.', emoji: '🌙' },
                   { key: 'Energia', emoji: '⚡' },
@@ -1153,6 +1169,7 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                   return {
                     id: athlete.id, name: athlete.full_name,
                     cells: [
+                      (() => { const ws = getAthleteWellnessSummary(athlete.id, wellnessWeek); return ws.hasToday ? { v: '✓', color: 'var(--green)' } : { v: '✕', color: '#EF4444' } })(),
                       { v: logs.length || null, color: logs.length === 0 ? '#EF4444' : 'var(--green)' },
                       { v: sleepAvg !== null ? `${sleepAvg.toFixed(1)}h` : null, color: sc(sleepAvg, 5, 7) },
                       { v: energyAvg !== null ? energyAvg.toFixed(1) : null, color: sc(energyAvg, 4, 7) },
@@ -1166,87 +1183,6 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
                 })}
                 onAthleteClick={openQuickReport}
               />
-
-              {/* ── Wellness — przegląd tygodniowy (7 dni) ── */}
-              {athletes.length > 0 && (
-                <Card>
-                  <div style={{ padding: '0.875rem 1.25rem', borderBottom: `1.5px solid var(--border)`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div>
-                      <div style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.6rem', color: 'var(--muted-light)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Wellness — przegląd tygodniowy</div>
-                      <div style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.65rem', color: 'var(--navy-900)', fontWeight: 700, marginTop: 2 }}>Dane z ostatnich 7 dni</div>
-                    </div>
-                  </div>
-                  <div style={{ overflowX: 'auto' }}>
-                    <table style={{ borderCollapse: 'collapse', minWidth: '100%' }}>
-                      <thead>
-                        <tr style={{ background: '#0D2D1A' }}>
-                          <th style={{ padding: '0.65rem 1.25rem', textAlign: 'left', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.6rem', color: '#86EFAC', letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: `1.5px solid #1A4D2E` }}>Zawodniczka</th>
-                          {[
-                            { label: 'Wellness', title: 'Czy uzupełniła dziś' },
-                            { label: '🌙 Sen śr.', title: 'Średnia snu (h)' },
-                            { label: '🧠 Stres', title: 'Średni stres (1-10)' },
-                            { label: '🩹 Max ból', title: 'Maks. ból podczas treningu' },
-                            { label: '🏃 Aktywność', title: 'Łączne godziny aktywności' },
-                            { label: '🌸 Cykl', title: 'Ostatnia zaznaczona faza' },
-                          ].map(h => (
-                            <th key={h.label} title={h.title} style={{ padding: '0.65rem 0.75rem', textAlign: 'center', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.6rem', color: '#86EFAC', letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: `1.5px solid #1A4D2E`, minWidth: 80 }}>
-                              {h.label}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {athletes.map((athlete: any, rowIdx: number) => {
-                          const ws = getAthleteWellnessSummary(athlete.id, wellnessWeek)
-                          const rowBg = rowIdx % 2 === 0 ? '#fff' : '#F7FFF9'
-
-                          const sleepColor = ws.sleepAvg === null ? undefined : ws.sleepAvg <= 5 ? '#EF4444' : ws.sleepAvg <= 7 ? 'var(--gold)' : 'var(--green)'
-                          const stressColor = ws.stressAvg === null ? undefined : ws.stressAvg >= 8 ? '#EF4444' : ws.stressAvg >= 5 ? 'var(--gold)' : 'var(--green)'
-                          const painColor = ws.maxPain === null ? undefined : ws.maxPain >= 6 ? '#EF4444' : ws.maxPain >= 5 ? 'var(--gold)' : 'var(--green)'
-
-                          const pill = (val: string | number | null, color?: string) => val !== null ? (
-                            <span style={{ display: 'inline-block', background: (color ?? 'var(--navy-900)') + '1A', color: color ?? 'var(--navy-900)', borderRadius: 6, padding: '2px 8px', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.75rem', fontWeight: 800 }}>{val}</span>
-                          ) : <span style={{ color: 'var(--border)', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.7rem' }}>—</span>
-
-                          return (
-                            <tr key={athlete.id} style={{ background: rowBg }}
-                              onMouseEnter={e => (e.currentTarget.style.background = '#ECFDF5')}
-                              onMouseLeave={e => (e.currentTarget.style.background = rowBg)}>
-                              <td style={{ padding: '0.7rem 1.25rem', fontWeight: 700, color: 'var(--navy-900)', borderBottom: `1px solid #E0F2EA`, whiteSpace: 'nowrap' }}>
-                                <button onClick={() => openQuickReport(athlete.id)} style={{ background: 'none', border: 'none', color: 'var(--navy-900)', fontFamily: 'var(--font-inter),sans-serif', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', padding: 0 }}>{athlete.full_name}</button>
-                              </td>
-                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid #E0F2EA` }}>
-                                <span title={ws.hasToday ? 'Uzupełniła dziś' : ws.entryCount > 0 ? 'Wpis w tym tygodniu' : 'Brak wpisów'} style={{ fontSize: '1rem' }}>
-                                  {ws.hasToday ? '✅' : ws.entryCount > 0 ? '⚠️' : '❌'}
-                                </span>
-                              </td>
-                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid #E0F2EA` }}>
-                                {pill(ws.sleepAvg !== null ? `${ws.sleepAvg.toFixed(1)}h` : null, sleepColor)}
-                              </td>
-                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid #E0F2EA` }}>
-                                {pill(ws.stressAvg !== null ? ws.stressAvg.toFixed(1) : null, stressColor)}
-                              </td>
-                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid #E0F2EA` }}>
-                                {pill(ws.maxPain !== null ? ws.maxPain : null, painColor)}
-                              </td>
-                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid #E0F2EA` }}>
-                                {pill(ws.activityHours !== null ? `${ws.activityHours}h` : null, 'var(--navy-900)')}
-                              </td>
-                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', borderBottom: `1px solid #E0F2EA` }}>
-                                {ws.latestCycle === 'menstruacja'
-                                  ? <span title="Menstruacja">🔴</span>
-                                  : ws.latestCycle
-                                    ? <span style={{ fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.68rem', color: 'var(--muted-light)' }}>{ws.latestCycle.slice(0, 7)}</span>
-                                    : <span style={{ color: 'var(--border)', fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.7rem' }}>—</span>}
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </Card>
-              )}
             </div>
           )}
 

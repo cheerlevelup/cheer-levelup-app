@@ -794,6 +794,26 @@
   .coach-st-empty{color:var(--border);font-size:12px;}
   .coach-st-val{display:inline-block;min-width:24px;font-size:12px;font-weight:700;color:var(--navy-900);background:var(--bg);border-radius:6px;padding:1px 7px;}
 
+  .coach-statstable{margin-bottom:0;}
+  .coach-st-pill{display:inline-block;font-family:var(--font-inter),sans-serif;font-size:11.5px;font-weight:700;border-radius:999px;padding:2px 9px;white-space:nowrap;}
+  .coach-st-pill.coach-green{color:#1f9d64;background:#e9f9f0;}
+  .coach-st-pill.coach-amber{color:#b7791f;background:#fdf3e1;}
+  .coach-st-pill.coach-red{color:#c23b3b;background:#fdedec;}
+  .coach-st-tag{font-family:var(--font-inter),sans-serif;font-size:11px;color:var(--muted-light);white-space:nowrap;}
+  .coach-st-tag.coach-gold{color:#b7791f;font-weight:600;}
+  .coach-st-toggle{
+    font-family:var(--font-inter),sans-serif;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;
+    border:1px solid #f6c9c9;background:#fdedec;color:#c23b3b;border-radius:999px;padding:4px 12px;
+  }
+  .coach-st-toggle.coach-on{border-color:#bfe8d2;background:#e9f9f0;color:#1f9d64;}
+  .coach-st-toggle.coach-sm{font-size:11px;padding:2px 10px;min-width:78px;}
+  .coach-st-btn{
+    font-family:var(--font-inter),sans-serif;font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap;
+    border:1px solid var(--border);background:#fff;color:var(--navy-900);border-radius:7px;padding:3px 10px;
+  }
+  .coach-st-btn:hover{border-color:var(--gold);}
+  .coach-st-btn.coach-dark{background:var(--navy-900);border-color:var(--navy-900);color:var(--gold);font-size:12px;font-weight:700;padding:4px 12px;}
+
   /* Karta zawodniczki → Testy: lekka tabela wyników */
   .coach-athlete-tests{border:1px solid var(--border);border-radius:10px;overflow-x:auto;background:#fff;margin-bottom:10px;}
   .coach-athlete-tests table{width:100%;border-collapse:collapse;font-family:var(--font-inter),sans-serif;}
