@@ -5,6 +5,7 @@ import type { CSSProperties } from 'react'
 import { sortWithVariants, variantLabels } from '@/lib/exerciseVariants'
 import { fmtRange, isoPowtLines, repsLines, eccTempoLines } from '@/lib/coach/planFormat'
 import { buildPlanPdf, loadPdfFonts, loadPdfLogo } from '@/lib/coach/planPdf'
+import { buildPlanXlsx } from '@/lib/coach/planXlsx'
 import { EXERCISE_CATALOG_LIST_ID } from '@/lib/exerciseCatalog'
 import PlanModeSwitch, { fillHref, lastFillDay } from '@/components/coach/PlanModeSwitch'
 import { emptySkipState, loadSkipState, setSkipped, sessKey, skipLogKey, ovKey, type SkipState } from '@/lib/coach/groupSkipped'
@@ -84,211 +85,9 @@ function EditCell({ value, onCommit, align = 'center', placeholder, renderDispla
 }
 
 // ─── Export XLSX ──────────────────────────────────────────────────────────────
-async function exportXlsx(plan: Plan, days: Day[], blocks: Block[], wCols: number) {
-  const ExcelJS = (await import('exceljs')).default
-  const wb = new ExcelJS.Workbook()
-  wb.creator = 'Cheer LevelUP'
-  wb.created = new Date()
-
-  const NAVY  = '0D1B2A'
-  const GOLD  = 'F5C842'
-  const GREEN_HDR = '166534'
-  const GREEN_LIGHT = 'DCFCE7'
-  const GREEN_ALT   = 'BBF7D0'
-  const BLUE_HDR  = '1E3A5F'
-  const BLUE_LIGHT = 'DBEAFE'
-  const BLUE_ALT   = 'BFDBFE'
-  const WHITE = 'FFFFFF'
-  const GRAY_ALT = 'F4F6F9'
-  const GRAY_SEP = 'E2E8F0'
-  const TEXT  = '0D1B2A'
-
-  function border(style: 'thin'|'medium'|'hair' = 'thin', color = 'D1D5DB'): any {
-    const s = { style, color: { argb: `FF${color}` } }
-    return { top: s, bottom: s, left: s, right: s }
-  }
-
-  function applyHdr(cell: any, bg: string, fg: string, text: string, sz = 9, bold = true, align: string = 'center') {
-    cell.value = text
-    cell.font = { name: 'Calibri', size: sz, bold, color: { argb: `FF${fg}` } }
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${bg}` } }
-    cell.alignment = { horizontal: align, vertical: 'middle', wrapText: true }
-    cell.border = border('thin', bg === NAVY ? '1A3050' : 'CCCCCC')
-  }
-
-  function applyData(cell: any, value: string | number, bg: string, opts?: {
-    bold?: boolean; align?: string; link?: string; color?: string
-  }) {
-    cell.value = value
-    cell.font = { name: 'Calibri', size: 9, bold: opts?.bold, color: { argb: `FF${opts?.color ?? TEXT}` } }
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${bg}` } }
-    cell.alignment = { horizontal: opts?.align ?? 'left', vertical: 'middle', wrapText: true }
-    cell.border = border('hair', 'E2E8F0')
-    if (opts?.link) {
-      cell.value = { text: value as string, hyperlink: opts.link }
-      cell.font = { name: 'Calibri', size: 9, bold: opts.bold, color: { argb: 'FF1D4ED8' }, underline: true }
-    }
-  }
-
-  days.forEach(day => {
-    const sheet = wb.addWorksheet(day.day_name.slice(0, 31), {
-      views: [{ state: 'frozen', xSplit: 1, ySplit: 4 }],
-      pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
-    })
-
-    const dayBlocks = blocks.filter(b => b.day_id === day.id).sort((a, b) => a.block_order - b.block_order)
-
-    // col layout: Blok(1) + #(2) + Nazwa+Link(3) + Kom(4) + R*3 + serie*6
-    const C_BLOK = 1, C_NR = 2, C_NAZWA = 3, C_KOM = 4
-    const C_WARMUP_START = 5
-    const C_SERIE_START = C_WARMUP_START + wCols * 3
-    const TOTAL_COLS = C_SERIE_START + 5  // Serie Powt Ciezar Tempo RIR Kom = 6 cols
-
-    // ── Column widths ──────────────────────────────────────────────────────
-    sheet.getColumn(C_BLOK).width  = 6
-    sheet.getColumn(C_NR).width    = 4
-    sheet.getColumn(C_NAZWA).width = 26
-    sheet.getColumn(C_KOM).width   = 34
-    for (let r = 0; r < wCols; r++) {
-      sheet.getColumn(C_WARMUP_START + r * 3).width     = 9    // powt
-      sheet.getColumn(C_WARMUP_START + r * 3 + 1).width = 11   // ciezar
-      sheet.getColumn(C_WARMUP_START + r * 3 + 2).width = 22   // kom
-    }
-    sheet.getColumn(C_SERIE_START).width     = 7   // Serie
-    sheet.getColumn(C_SERIE_START + 1).width = 9   // Powt
-    sheet.getColumn(C_SERIE_START + 2).width = 10  // Ciezar
-    sheet.getColumn(C_SERIE_START + 3).width = 10  // Tempo
-    sheet.getColumn(C_SERIE_START + 4).width = 7   // RIR
-    sheet.getColumn(C_SERIE_START + 5).width = 20  // Kom
-
-    // ── Row 1: Title ───────────────────────────────────────────────────────
-    sheet.getRow(1).height = 22
-    const titleCell = sheet.getCell(1, C_BLOK)
-    titleCell.value = `${plan.name}  —  ${day.day_name}`
-    titleCell.font = { name: 'Calibri', size: 14, bold: true, color: { argb: `FF${GOLD}` } }
-    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${NAVY}` } }
-    titleCell.alignment = { horizontal: 'left', vertical: 'middle' }
-    sheet.mergeCells(1, C_BLOK, 1, TOTAL_COLS)
-    // gold left accent — simulate with thick left border on title
-    titleCell.border = { left: { style: 'medium', color: { argb: `FF${GOLD}` } } }
-
-    // ── Row 2: Section labels ──────────────────────────────────────────────
-    sheet.getRow(2).height = 16
-    for (let c = C_BLOK; c <= C_KOM; c++) applyHdr(sheet.getCell(2, c), NAVY, GOLD, '', 9)
-    if (wCols > 0) {
-      applyHdr(sheet.getCell(2, C_WARMUP_START), GREEN_HDR, 'FFFFFF', 'SERIE ROZGRZEWKOWE', 9, true, 'center')
-      sheet.mergeCells(2, C_WARMUP_START, 2, C_SERIE_START - 1)
-      for (let c = C_WARMUP_START + 1; c < C_SERIE_START; c++) sheet.getCell(2, c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${GREEN_HDR}` } }
-    }
-    applyHdr(sheet.getCell(2, C_SERIE_START), BLUE_HDR, 'FFFFFF', 'SERIE WŁAŚCIWE', 9, true, 'center')
-    sheet.mergeCells(2, C_SERIE_START, 2, TOTAL_COLS)
-
-    // ── Row 3: R1/R2 + serie col names ────────────────────────────────────
-    sheet.getRow(3).height = 15
-    applyHdr(sheet.getCell(3, C_BLOK), NAVY, GOLD, 'Blok')
-    applyHdr(sheet.getCell(3, C_NR), NAVY, GOLD, '#')
-    applyHdr(sheet.getCell(3, C_NAZWA), NAVY, GOLD, 'Nazwa', 9, true, 'left')
-    applyHdr(sheet.getCell(3, C_KOM), NAVY, GOLD, 'Komentarz', 9, true, 'left')
-    sheet.mergeCells(2, C_BLOK, 3, C_BLOK)
-    sheet.mergeCells(2, C_NR, 3, C_NR)
-    sheet.mergeCells(2, C_NAZWA, 3, C_NAZWA)
-    sheet.mergeCells(2, C_KOM, 3, C_KOM)
-    for (let r = 0; r < wCols; r++) {
-      const col = C_WARMUP_START + r * 3
-      applyHdr(sheet.getCell(3, col), GREEN_HDR, 'FFFFFF', `Warm-up set ${r + 1}`, 9, true, 'center')
-      sheet.mergeCells(3, col, 3, col + 2)
-    }
-    const serieLabels = ['Serie', 'Powt.', 'Ciężar', 'Tempo', 'RIR', 'Kom.']
-    serieLabels.forEach((lbl, i) => applyHdr(sheet.getCell(3, C_SERIE_START + i), BLUE_HDR, 'FFFFFF', lbl))
-
-    // ── Row 4: Sub-col labels ──────────────────────────────────────────────
-    sheet.getRow(4).height = 13
-    for (let c = C_BLOK; c <= C_KOM; c++) {
-      const cell = sheet.getCell(4, c)
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${NAVY}` } }
-      cell.border = border('thin', '1A3050')
-    }
-    for (let r = 0; r < wCols; r++) {
-      const col = C_WARMUP_START + r * 3
-      applyHdr(sheet.getCell(4, col),     '1A4D2E', 'A7F3D0', 'powt.',  8, false)
-      applyHdr(sheet.getCell(4, col + 1), '1A4D2E', 'A7F3D0', 'ciężar', 8, false)
-      applyHdr(sheet.getCell(4, col + 2), '1A4D2E', 'A7F3D0', 'kom.',   8, false, 'left')
-    }
-    for (let i = 0; i < 6; i++) {
-      const cell = sheet.getCell(4, C_SERIE_START + i)
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${BLUE_HDR}` } }
-      cell.border = border('thin', '162E4A')
-    }
-
-    // ── Data ──────────────────────────────────────────────────────────────
-    let rowIdx = 5
-    dayBlocks.forEach((block, bi) => {
-      const exs = sortWithVariants(block.workout_block_exercises || [])
-      const labels = variantLabels(exs)
-      if (exs.length === 0) return
-
-      const blockStartRow = rowIdx
-
-      exs.forEach((ex, i) => {
-        const isAlt = i % 2 === 1
-        const bg    = isAlt ? GRAY_ALT : WHITE
-        const wBg   = isAlt ? GREEN_ALT : GREEN_LIGHT
-        const sBg   = isAlt ? BLUE_ALT : BLUE_LIGHT
-        const row   = sheet.getRow(rowIdx)
-        row.height  = 18
-
-        // Blok label
-        const blokCell = sheet.getCell(rowIdx, C_BLOK)
-        blokCell.value = i === 0 ? blockLabel(bi) : ''
-        blokCell.font  = { name: 'Calibri', size: 11, bold: true, color: { argb: `FF${GOLD}` } }
-        blokCell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${NAVY}` } }
-        blokCell.alignment = { horizontal: 'center', vertical: 'middle' }
-        blokCell.border = { right: { style: 'medium', color: { argb: `FF${GOLD}` } } }
-
-        applyData(sheet.getCell(rowIdx, C_NR), labels.get(ex) ?? String(i + 1), bg, { align: 'center', color: '64748B' })
-        applyData(sheet.getCell(rowIdx, C_NAZWA),
-          fmtName(ex.exercise?.name || ex.exercise_code || ''), bg,
-          { bold: true, align: 'left', link: ex.exercise_url || undefined })
-        applyData(sheet.getCell(rowIdx, C_KOM), ex.coach_comment || '', bg, { align: 'left' })
-
-        for (let r = 0; r < wCols; r++) {
-          const ws = ex.warmup_sets?.[r]
-          const col = C_WARMUP_START + r * 3
-          applyData(sheet.getCell(rowIdx, col),     ws?.reps      || '', wBg, { align: 'center' })
-          applyData(sheet.getCell(rowIdx, col + 1), ws?.weight_kg || '', wBg, { align: 'center' })
-          applyData(sheet.getCell(rowIdx, col + 2), ws?.note      || '', wBg, { align: 'left' })
-        }
-
-        applyData(sheet.getCell(rowIdx, C_SERIE_START),     ex.sets ?? '',                  sBg, { bold: true, align: 'center' })
-        applyData(sheet.getCell(rowIdx, C_SERIE_START + 1), ex.reps || '',                  sBg, { align: 'center' })
-        applyData(sheet.getCell(rowIdx, C_SERIE_START + 2), ex.weight_kg != null ? String(ex.weight_kg) : '', sBg, { align: 'center' })
-        applyData(sheet.getCell(rowIdx, C_SERIE_START + 3), ex.tempo || '',                 sBg, { align: 'center' })
-        applyData(sheet.getCell(rowIdx, C_SERIE_START + 4), ex.rir != null ? String(ex.rir) : '', sBg, { align: 'center' })
-        applyData(sheet.getCell(rowIdx, C_SERIE_START + 5), '',                             sBg, { align: 'left' })
-
-        rowIdx++
-      })
-
-      // merge Blok cell vertically
-      if (exs.length > 1) sheet.mergeCells(blockStartRow, C_BLOK, blockStartRow + exs.length - 1, C_BLOK)
-
-      // separator between blocks
-      const sepRow = sheet.getRow(rowIdx)
-      sepRow.height = 6
-      for (let c = C_BLOK; c <= TOTAL_COLS; c++) {
-        const cell = sheet.getCell(rowIdx, c)
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${GRAY_SEP}` } }
-        cell.border = {}
-      }
-      rowIdx++
-    })
-
-    // ── Tab colour ─────────────────────────────────────────────────────────
-    sheet.properties = { ...sheet.properties, tabColor: { argb: `FF${GOLD}` } }
-  })
-
-  // Download
-  const buf = await wb.xlsx.writeBuffer()
+async function exportXlsx(plan: Plan, days: Day[], blocks: Block[], athletes: { id: number; full_name: string }[]) {
+  const logo = await loadPdfLogo()
+  const buf = await buildPlanXlsx({ plan, days, blocks, athletes, logo })
   const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a'); a.href = url; a.download = `${plan.name}.xlsx`; a.click()
@@ -588,7 +387,7 @@ export default function PlanTableView(props: Props) {
   async function doExport(type: 'xlsx' | 'pdf') {
     setExporting(type)
     try {
-      if (type === 'xlsx') await exportXlsx(plan, allDays, blocks, warmupCols)
+      if (type === 'xlsx') await exportXlsx(plan, allDays, blocks, props.athletes)
       else await exportPdf(plan, allDays, blocks, props.athletes)
     } catch (e) { console.error(e) }
     setExporting(null)
