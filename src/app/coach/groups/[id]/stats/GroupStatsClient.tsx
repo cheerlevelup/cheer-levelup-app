@@ -25,9 +25,10 @@ const PALETTE = [
 
 type Group = { id: number; name: string; group_type?: string }
 type Athlete = { id: number; full_name: string }
-type SelfSession = { athlete_id: number; workout_day_id: number; completed?: boolean; created_at: string; date_completed?: string | null }
+type SelfSession = { id?: number; athlete_id: number; workout_day_id: number; completed?: boolean; created_at: string; date_completed?: string | null }
 type SelfFeedback = { athlete_id: number; session_rpe?: number | null; created_at: string }
-type SelfPlanDay = { id: number }
+type SelfPlanDay = { id: number; day_name?: string | null; day_order?: number; week_number?: number; training_date?: string | null; absent_athlete_ids?: number[] }
+type SelfPain = { athlete_id: number; vas: number | null; location: string | null; created_at: string }
 type Training = { id: number; group_id: number; training_date: string; absent_athlete_ids?: number[] | null }
 type SetRow = { reps?: string; tempo?: string; weight?: string; skipped?: boolean }
 type VariantDef = string | { name?: string; sets?: number | null; reps?: string | null; tempo?: string | null; bodyweight?: boolean | null }
@@ -49,6 +50,7 @@ interface Props {
   selfSessions?: SelfSession[]
   selfFeedbacks?: SelfFeedback[]
   selfActivePlanDays?: SelfPlanDay[]
+  selfPains?: SelfPain[]
   activeInjuryIds?: number[]
 }
 
@@ -65,11 +67,115 @@ function filterByDays<T extends { [key: string]: any }>(rows: T[], days: number,
 
 // Statystyki treningowe dla grup samodzielnych — bez datowanych treningów grupowych,
 // postęp liczony z przypisanego planu (workout_sessions) i feedbacku po sesji.
-function SelfGroupTrainingStats({ athletes, sessions, feedbacks, activePlanDays, activeInjuryIds, onAthleteClick }: {
+function pctColor(p: number) { return p >= 80 ? 'var(--green)' : p >= 50 ? 'var(--gold)' : '#EF4444' }
+function rpeColorOf(v: number) { return v >= 8 ? '#EF4444' : v >= 6 ? 'var(--gold)' : 'var(--green)' }
+function fmtShortDate(iso: string) {
+  const d = new Date(iso)
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' })
+}
+
+// Panel drużynowy obok tabeli: obecność na 3 ostatnich treningach, zgłoszony ból, średnie RPE.
+function TeamStatsPanel({ athletes, sessions, feedbacks, activePlanDays, pains, period, onAthleteClick }: {
   athletes: Athlete[]
   sessions: SelfSession[]
   feedbacks: SelfFeedback[]
   activePlanDays: SelfPlanDay[]
+  pains: SelfPain[]
+  period: number
+  onAthleteClick: (id: number) => void
+}) {
+  const athleteIds = new Set(athletes.map(a => a.id))
+  const nameOf = new Map(athletes.map(a => [a.id, a.full_name]))
+
+  // 3 ostatnie treningi: dzień planu z datą treningu (do dziś) albo — gdy brak daty —
+  // data ostatniego ukończenia przez którąkolwiek zawodniczkę.
+  const today = new Date().toISOString().slice(0, 10)
+  const lastTrainings = activePlanDays
+    .map(d => {
+      const done = sessions.filter(s => s.workout_day_id === d.id && s.completed && athleteIds.has(s.athlete_id))
+      const present = new Set(done.map(s => s.athlete_id))
+      const lastDone = done.map(s => (s.date_completed || s.created_at || '').slice(0, 10)).filter(Boolean).sort().pop() || null
+      const date = d.training_date && d.training_date <= today ? d.training_date : (present.size > 0 ? lastDone : null)
+      return { day: d, date, present: present.size }
+    })
+    .filter((t): t is { day: SelfPlanDay; date: string; present: number } => !!t.date)
+    .sort((a, b) => b.date.localeCompare(a.date) || (b.day.week_number ?? 0) - (a.day.week_number ?? 0) || (b.day.day_order ?? 0) - (a.day.day_order ?? 0))
+    .slice(0, 3)
+
+  const periodPains = filterByDays(pains, period)
+  const painAthletes = Array.from(new Set(periodPains.map(p => p.athlete_id)))
+  const rpeVals = filterByDays(feedbacks, period).map(f => f.session_rpe).filter((v): v is number => v != null)
+  const teamRpe = avg(rpeVals)
+  const total = athletes.length
+
+  return (
+    <div className="coach-statstable coach-teamstats">
+      <div className="coach-statstable-head">
+        <div className="coach-statstable-title">Statystyki drużynowe</div>
+        <div className="coach-st-tag">ost. {period} dni</div>
+      </div>
+
+      <div className="coach-teamstats-section">
+        <div className="coach-teamstats-label">Obecność — 3 ostatnie treningi</div>
+        {lastTrainings.length === 0 ? (
+          <div className="coach-teamstats-empty">Brak przeprowadzonych treningów.</div>
+        ) : lastTrainings.map(t => {
+          const pct = total ? Math.round((t.present / total) * 100) : 0
+          const label = t.day.day_name || `Trening ${t.day.day_order ?? ''}`.trim()
+          return (
+            <div key={t.day.id} className="coach-teamstats-att">
+              <div className="coach-teamstats-att-top">
+                <span className="coach-teamstats-att-name">{label}<span className="coach-st-tag"> · {fmtShortDate(t.date)}</span></span>
+                <span className="coach-teamstats-att-pct" style={{ color: pctColor(pct) }}>{pct}%</span>
+              </div>
+              <div className="coach-teamstats-bar"><div style={{ width: `${pct}%`, background: pctColor(pct) }} /></div>
+              <div className="coach-st-tag">{t.present} z {total} zawodniczek</div>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="coach-teamstats-grid">
+        <div className="coach-teamstats-kpi">
+          <div className="coach-teamstats-label">Średnie RPE drużyny</div>
+          <div className="coach-teamstats-big" style={teamRpe !== null ? { color: rpeColorOf(teamRpe) } : undefined}>
+            {teamRpe !== null ? teamRpe.toFixed(1) : '—'}
+          </div>
+          <div className="coach-st-tag">{rpeVals.length ? `z ${rpeVals.length} ankiet` : 'brak ankiet'}</div>
+        </div>
+        <div className="coach-teamstats-kpi">
+          <div className="coach-teamstats-label">Zgłoszony ból</div>
+          <div className="coach-teamstats-big" style={{ color: periodPains.length ? '#EF4444' : 'var(--green)' }}>{periodPains.length}</div>
+          <div className="coach-st-tag">{periodPains.length ? `${painAthletes.length} ${painAthletes.length === 1 ? 'zawodniczka' : 'zawodniczki'}` : 'brak zgłoszeń'}</div>
+        </div>
+      </div>
+
+      {painAthletes.length > 0 && (
+        <div className="coach-teamstats-section">
+          {painAthletes.map(id => {
+            const list = periodPains.filter(p => p.athlete_id === id)
+            const maxVas = Math.max(0, ...list.map(p => p.vas ?? 0))
+            const locs = Array.from(new Set(list.map(p => p.location).filter(Boolean))).join(', ')
+            return (
+              <div key={id} className="coach-teamstats-pain">
+                <button className="coach-st-name" onClick={() => onAthleteClick(id)}>{nameOf.get(id) ?? '—'}</button>
+                <span className="coach-st-tag">{locs || `${list.length}×`}</span>
+                {maxVas > 0 && <span className="coach-st-pill coach-red">VAS {maxVas}</span>}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SelfGroupTrainingStats({ athletes, sessions, feedbacks, activePlanDays, pains, activeInjuryIds, onAthleteClick }: {
+  athletes: Athlete[]
+  sessions: SelfSession[]
+  feedbacks: SelfFeedback[]
+  activePlanDays: SelfPlanDay[]
+  pains: SelfPain[]
   activeInjuryIds: number[]
   onAthleteClick: (id: number) => void
 }) {
@@ -88,6 +194,7 @@ function SelfGroupTrainingStats({ athletes, sessions, feedbacks, activePlanDays,
   }
 
   return (
+    <div className="coach-stats-split">
     <StatsTable
       title="Statystyki treningowe"
       period={period}
@@ -125,6 +232,12 @@ function SelfGroupTrainingStats({ athletes, sessions, feedbacks, activePlanDays,
       })}
       onAthleteClick={onAthleteClick}
     />
+    <TeamStatsPanel
+      athletes={athletes} sessions={sessions} feedbacks={feedbacks}
+      activePlanDays={activePlanDays} pains={pains} period={period}
+      onAthleteClick={onAthleteClick}
+    />
+    </div>
   )
 }
 
@@ -364,7 +477,7 @@ function chartSvgMarkup(dates: string[], series: { color: string; points: (numbe
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${p}</svg>`
 }
 
-export default function GroupStatsClient({ group, athletes, trainings, exercises, entries, bodyWeights, selfSessions = [], selfFeedbacks = [], selfActivePlanDays = [], activeInjuryIds = [] }: Props) {
+export default function GroupStatsClient({ group, athletes, trainings, exercises, entries, bodyWeights, selfSessions = [], selfFeedbacks = [], selfActivePlanDays = [], selfPains = [], activeInjuryIds = [] }: Props) {
   const router = useRouter()
   const [tab, setTab] = useState<'stats' | 'summary'>('stats')
   // Podsumowanie (osadzone) oczekuje najnowszego treningu jako trainings[0] —
@@ -655,6 +768,7 @@ export default function GroupStatsClient({ group, athletes, trainings, exercises
             sessions={selfSessions}
             feedbacks={selfFeedbacks}
             activePlanDays={selfActivePlanDays}
+            pains={selfPains}
             activeInjuryIds={activeInjuryIds}
             onAthleteClick={id => router.push(`/coach/athletes/${id}`)}
           />

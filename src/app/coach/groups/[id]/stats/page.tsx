@@ -42,6 +42,7 @@ export default async function GroupStatsPage({ params }: Props) {
   let selfSessions: any[] = []
   let selfFeedbacks: any[] = []
   let selfActivePlanDays: any[] = []
+  let selfPains: any[] = []
   if (!isManaged && athleteIdsForSelf.length > 0) {
     const { data: groupAssignments } = await supabase
       .from('athlete_workout_assignments')
@@ -59,15 +60,23 @@ export default async function GroupStatsPage({ params }: Props) {
     if (currentPlanId) {
       const { data: weeks } = await supabase
         .from('workout_weeks')
-        .select('id, plan_id')
+        .select('id, plan_id, week_number')
         .eq('plan_id', currentPlanId)
       const weekIds = (weeks || []).map((w: any) => w.id)
+      const weekNo = new Map((weeks || []).map((w: any) => [w.id, w.week_number ?? 1]))
       if (weekIds.length > 0) {
         const { data: daysData } = await supabase
           .from('workout_days')
-          .select('id')
+          .select('*')
           .in('week_id', weekIds)
-        selfActivePlanDays = daysData || []
+        selfActivePlanDays = (daysData || []).map((d: any) => ({
+          id: d.id,
+          day_name: d.day_name ?? null,
+          day_order: d.day_order ?? 0,
+          week_number: weekNo.get(d.week_id) ?? 1,
+          training_date: d.training_date ?? null,
+          absent_athlete_ids: ((d.absent_athlete_ids || []) as any[]).map(Number),
+        }))
       }
     }
 
@@ -76,7 +85,7 @@ export default async function GroupStatsPage({ params }: Props) {
 
     const { data: sessions } = await supabase
       .from('workout_sessions')
-      .select('athlete_id, workout_day_id, completed, created_at, date_completed')
+      .select('id, athlete_id, workout_day_id, completed, created_at, date_completed')
       .in('athlete_id', athleteIdsForSelf)
     selfSessions = sessions || []
 
@@ -86,6 +95,28 @@ export default async function GroupStatsPage({ params }: Props) {
       .in('athlete_id', athleteIdsForSelf)
       .gte('created_at', thirtyDaysAgo.toISOString())
     selfFeedbacks = feedbacks || []
+
+    // Zgłoszony ból (pain_logs są powiązane z sesją, nie z zawodniczką)
+    const sessionById = new Map(selfSessions.map((s: any) => [s.id, s]))
+    const sessionIds = selfSessions.map((s: any) => s.id)
+    if (sessionIds.length > 0) {
+      const { data: pains } = await supabase
+        .from('pain_logs')
+        .select('*')
+        .in('workout_session_id', sessionIds)
+      selfPains = (pains || [])
+        .filter((p: any) => p.vas_score || p.pain_comment)
+        .map((p: any) => {
+          const sess: any = sessionById.get(p.workout_session_id)
+          return {
+            athlete_id: sess?.athlete_id ?? null,
+            vas: p.vas_score ?? null,
+            location: p.pain_location ?? null,
+            created_at: p.created_at || sess?.date_completed || sess?.created_at,
+          }
+        })
+        .filter((p: any) => p.athlete_id != null && p.created_at && new Date(p.created_at) >= thirtyDaysAgo)
+    }
   }
 
   const { data: trainings } = await supabase
@@ -147,6 +178,7 @@ export default async function GroupStatsPage({ params }: Props) {
       selfSessions={selfSessions}
       selfFeedbacks={selfFeedbacks}
       selfActivePlanDays={selfActivePlanDays}
+      selfPains={selfPains}
       activeInjuryIds={activeInjuryIds}
     />
   )
