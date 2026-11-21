@@ -1111,6 +1111,44 @@ export default function PlanEditorClient({ plan, athletes = [], athletesFromPool
     }
   }
 
+  // Usunięcie tygodnia razem z treningami (bloki i ćwiczenia kasują się kaskadą; wykonane
+  // treningi zawodniczek zostają w historii z workout_day_id = NULL). Dalsze tygodnie
+  // przesuwają się o jeden w górę (domyślne nazwy „Tydzień N” idą za numerem).
+  async function deleteWeek(weekId: number) {
+    const week = localWeeks.find(w => w.id === weekId)
+    if (!week) return
+    const dayIds = localDays.filter(d => d.week_id === weekId).map(d => d.id)
+    const msg = dayIds.length
+      ? `Usunąć Tydzień ${week.week_number} razem z ${dayIds.length} ${dayIds.length === 1 ? 'treningiem' : 'treningami'}, blokami i ćwiczeniami? Wykonane treningi zawodniczek zostaną w ich historii.`
+      : `Usunąć pusty Tydzień ${week.week_number}?`
+    if (!confirm(msg)) return
+    if (dayIds.length) {
+      const { error: dErr } = await supabase.from('workout_days').delete().in('id', dayIds)
+      if (dErr) { showError(`Błąd usuwania treningów tygodnia: ${dErr.message}`); return }
+    }
+    const { data: deleted, error } = await supabase.from('workout_weeks').delete().eq('id', weekId).select('id')
+    if (error) { showError(`Błąd usuwania tygodnia: ${error.message}`); return }
+    if (!deleted || deleted.length === 0) { showError('Usuwanie zablokowane przez RLS — sprawdź polityki w Supabase Dashboard.'); return }
+
+    const isDefault = (name?: string | null) => !name || /^Tydzie[nń] \d+$/i.test(name.trim())
+    const renamed = new Map<number, { week_number: number; name?: string | null }>()
+    for (const w of [...localWeeks].filter(w => w.week_number > week.week_number).sort((a, b) => a.week_number - b.week_number)) {
+      const next = { week_number: w.week_number - 1, name: isDefault(w.name) ? `Tydzień ${w.week_number - 1}` : w.name }
+      const { error: uErr } = await supabase.from('workout_weeks').update(next).eq('id', w.id)
+      if (uErr) { showError(`Nie udało się przenumerować tygodni: ${uErr.message}`); break }
+      renamed.set(w.id, next)
+    }
+    const apply = (list: Week[]) => list.filter(w => w.id !== weekId).map(w => renamed.has(w.id) ? { ...w, ...renamed.get(w.id)! } : w)
+    setLocalWeeks(apply)
+    setTargetWeeks(apply)
+    const gone = new Set(dayIds)
+    setLocalDays(prev => prev.filter(d => !gone.has(d.id)))
+    setTargetDays(prev => prev.filter(d => !gone.has(d.id)))
+    setLocalBlocks(prev => prev.filter(b => !gone.has(b.day_id)))
+    setTargetBlocks(prev => prev.filter(b => !gone.has(b.day_id)))
+    if (selectedDayId != null && gone.has(selectedDayId)) setSelectedDayId(localDays.find(d => !gone.has(d.id))?.id || null)
+  }
+
   async function addWeek() {
     const nextNum = localWeeks.length + 1
     const { data: weekData } = await supabase
@@ -1648,6 +1686,7 @@ export default function PlanEditorClient({ plan, athletes = [], athletesFromPool
           onUpdateExercise={updateExercise}
           onAddWeek={addWeek}
           onAddWeekTop={addWeekTop}
+          onDeleteWeek={deleteWeek}
           onAddDay={addDay}
           onRenameDay={renameDay}
           onSetDayDate={setDayDate}

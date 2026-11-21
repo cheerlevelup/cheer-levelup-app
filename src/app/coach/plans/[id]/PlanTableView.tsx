@@ -317,6 +317,7 @@ interface Props {
   onAddWeek: () => Promise<void>
   // nowy Tydzień 1 na górze (pozostałe tygodnie przesuwają się o jeden)
   onAddWeekTop?: () => Promise<void>
+  onDeleteWeek?: (weekId: number) => Promise<void>
   onAddDay: (weekId: number) => Promise<void>
   onRenameDay: (dayId: number, name: string) => void
   // data treningu — u zawodniczki „Dzisiejszy trening" tylko w ten dzień
@@ -667,6 +668,17 @@ export default function PlanTableView(props: Props) {
                   <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, borderRadius: '50%', background: 'var(--gold)', color: 'var(--navy-900)', fontSize: 13, fontWeight: 800, lineHeight: 1 }}>+</span>
                   Trening
                 </button>
+                {props.onDeleteWeek && (
+                  <button
+                    onClick={() => props.onDeleteWeek!(week.id)}
+                    title="Usuń ten tydzień razem z treningami"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', background: 'transparent', color: '#f3a3a3', border: '1px solid rgba(243,163,163,.45)', borderRadius: 999, fontFamily: 'var(--font-inter),sans-serif', fontSize: 11, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', cursor: 'pointer', lineHeight: 1.4 }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(194,59,59,.25)' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+                  >
+                    ✕ Usuń tydzień
+                  </button>
+                )}
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
