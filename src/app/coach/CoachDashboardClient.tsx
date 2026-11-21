@@ -7,6 +7,8 @@ import { Users, Layers, CalendarCheck, Plus, Calendar, ChevronRight } from 'luci
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { Card, Chip, StatCard } from '@/components/coach/ui'
 import NewGroupModal from '@/components/coach/NewGroupModal'
+import CountdownPanel from '@/components/coach/calendar/CountdownPanel'
+import { CalCountdown, CalEvent } from '@/lib/coach/calendar'
 
 type CoachGroup = {
   id: number
@@ -33,6 +35,9 @@ interface Props {
   groups: CoachGroup[]
   athletes: CoachAthlete[]
   recentSessions: RecentSession[]
+  calendarReady: boolean
+  calendarEvents: CalEvent[]
+  countdowns: CalCountdown[]
 }
 
 const CATEGORIES = ['Wszystkie', 'Dzieci', 'Młodzik', 'Youth', 'Junior', 'Kadra Senior']
@@ -46,7 +51,8 @@ function formatDate(iso: string) {
   })
 }
 
-export default function CoachDashboardClient({ groups, athletes, recentSessions }: Props) {
+export default function CoachDashboardClient({ groups, athletes, recentSessions, calendarReady, calendarEvents, countdowns: initialCountdowns }: Props) {
+  const [countdowns, setCountdowns] = useState<CalCountdown[]>(initialCountdowns)
   const router = useRouter()
   const [category, setCategory] = useState('Wszystkie')
   const [newGroupOpen, setNewGroupOpen] = useState(false)
@@ -71,6 +77,14 @@ export default function CoachDashboardClient({ groups, athletes, recentSessions 
     <>
       <SetPageMeta title="Pulpit" />
       <div className="coach-content">
+        {calendarReady && (
+          <CountdownPanel
+            events={calendarEvents}
+            groups={groups.map((g) => ({ id: g.id, name: g.name, sort_order: g.sort_order }))}
+            countdowns={countdowns}
+            onCountdownsChange={setCountdowns}
+          />
+        )}
         <section className="coach-grid-2">
           <Card>
             <div className="coach-panel-head">
@@ -170,6 +184,12 @@ export default function CoachDashboardClient({ groups, athletes, recentSessions 
                     <Layers size={15} />
                   </span>
                   Zarządzaj grupami
+                </div>
+                <div className="coach-quick-btn" onClick={() => router.push('/coach/calendar')}>
+                  <span className="coach-qi">
+                    <Calendar size={15} />
+                  </span>
+                  Kalendarz sezonu
                 </div>
                 <div className="coach-quick-btn" onClick={() => router.push('/coach/plans')}>
                   <span className="coach-qi">

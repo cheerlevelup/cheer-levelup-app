@@ -1,4 +1,5 @@
 import './coach-theme.css'
+import './coach-calendar.css'
 import { barlowCondensed, inter } from './coach-fonts'
 import CoachShell from '@/components/coach/CoachShell'
 

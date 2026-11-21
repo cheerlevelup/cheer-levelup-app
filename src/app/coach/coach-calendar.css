@@ -1,0 +1,146 @@
+/* ===== Kalendarz sezonu + widżety odliczania ===== */
+.coach-cal-label{
+  display:block;font-size:10.5px;letter-spacing:.04em;color:var(--muted-light);
+  font-family:var(--font-inter),sans-serif;font-weight:700;text-transform:uppercase;margin-bottom:6px;
+}
+.coach-cal-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;flex-shrink:0;}
+.coach-cal-check{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--ink);font-family:var(--font-inter),sans-serif;cursor:pointer;user-select:none;}
+.coach-cal-check input{width:15px;height:15px;accent-color:var(--navy-900);}
+.coach-cal-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:14px 18px 8px;}
+.coach-cal-toolbar-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.coach-cal-season{display:flex;align-items:center;gap:10px;}
+.coach-cal-season-label{font-family:var(--font-barlow-condensed),sans-serif;font-size:22px;font-weight:600;line-height:1.1;}
+.coach-cal-season .coach-sub{font-size:12px;color:var(--muted);font-family:var(--font-inter),sans-serif;}
+.coach-cal-nav{
+  width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:#fff;
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--ink);flex-shrink:0;
+}
+.coach-cal-nav:hover{border-color:var(--gold);}
+.coach-cal-filters{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:4px 18px 8px;}
+.coach-cal-legend{display:flex;flex-wrap:wrap;gap:12px;padding:2px 18px 10px;font-size:11.5px;color:var(--muted);font-family:var(--font-inter),sans-serif;}
+.coach-cal-legend > span{display:inline-flex;align-items:center;}
+
+.coach-cal-month{padding:0 18px 18px;}
+.coach-cal-month-head{display:flex;align-items:center;gap:8px;margin:4px 0 10px;}
+.coach-cal-month-title{font-family:var(--font-barlow-condensed),sans-serif;font-size:20px;font-weight:600;min-width:170px;text-align:center;}
+.coach-cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-left:1px solid var(--border);border-top:1px solid var(--border);border-radius:10px;overflow:hidden;}
+.coach-cal-wd{
+  font-size:11px;font-weight:700;color:var(--muted-light);text-transform:uppercase;letter-spacing:.04em;
+  padding:7px 8px;background:var(--bg);border-right:1px solid var(--border);border-bottom:1px solid var(--border);
+  font-family:var(--font-inter),sans-serif;
+}
+.coach-cal-cell{
+  min-height:104px;padding:5px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);
+  cursor:pointer;display:flex;flex-direction:column;gap:3px;min-width:0;background:#fff;
+}
+.coach-cal-cell:hover{background:#fffaf1;}
+.coach-cal-cell-empty{background:#fafbfc;cursor:default;}
+.coach-cal-cell-empty:hover{background:#fafbfc;}
+.coach-cal-daynum{font-size:12.5px;font-weight:600;color:var(--ink);font-family:var(--font-inter),sans-serif;width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:50%;flex-shrink:0;}
+.coach-cal-past .coach-cal-daynum{color:var(--muted-light);}
+.coach-cal-today .coach-cal-daynum{background:var(--gold);color:var(--navy-900);}
+.coach-cal-selected{box-shadow:inset 0 0 0 2px var(--navy-900);}
+.coach-cal-pills{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.coach-cal-pill{
+  font-size:11px;line-height:1.25;padding:2px 5px;border-radius:4px;border-left:3px solid;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:var(--font-inter),sans-serif;font-weight:600;
+}
+.coach-cal-pill b{font-weight:700;}
+.coach-cal-pill:hover{filter:brightness(.96);}
+.coach-cal-pill.coach-cal-cancelled{opacity:.45;text-decoration:line-through;}
+.coach-cal-more{font-size:10.5px;color:var(--muted);font-family:var(--font-inter),sans-serif;padding-left:4px;}
+.coach-cal-dots{display:none;}
+
+.coach-cal-agenda{display:flex;flex-direction:column;gap:8px;padding:0 18px 16px;}
+.coach-cal-row{
+  display:flex;align-items:stretch;gap:10px;border:1px solid var(--border);border-radius:10px;
+  padding:9px 10px;cursor:pointer;background:#fff;
+}
+.coach-cal-row:hover{border-color:var(--gold);background:#fffaf1;}
+.coach-cal-row.coach-cal-cancelled{opacity:.6;}
+.coach-cal-row.coach-cal-cancelled .coach-cal-row-title{text-decoration:line-through;}
+.coach-cal-row.coach-cal-past{opacity:.55;}
+.coach-cal-row-bar{width:4px;border-radius:4px;flex-shrink:0;}
+.coach-cal-row-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;}
+.coach-cal-row-top{display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
+.coach-cal-row-type{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:2px 7px;border-radius:100px;font-family:var(--font-inter),sans-serif;}
+.coach-cal-row-title{font-size:14px;font-weight:600;font-family:var(--font-inter),sans-serif;}
+.coach-cal-row-meta{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--muted);font-family:var(--font-inter),sans-serif;}
+.coach-cal-row-meta span{display:inline-flex;align-items:center;gap:4px;}
+.coach-cal-row-chev{color:var(--muted-light);align-self:center;flex-shrink:0;}
+
+.coach-cal-list{display:flex;flex-direction:column;gap:8px;padding:0 18px 18px;}
+.coach-cal-list-month{font-family:var(--font-barlow-condensed),sans-serif;font-size:16px;font-weight:600;color:var(--muted);margin:8px 0 2px;}
+
+.coach-cal-season-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;padding:4px 18px 18px;}
+.coach-cal-mini{border:1px solid var(--border);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px;min-width:0;}
+.coach-cal-mini-title{font-family:var(--font-barlow-condensed),sans-serif;font-size:16px;font-weight:600;cursor:pointer;}
+.coach-cal-mini-title span{color:var(--muted-light);font-weight:500;}
+.coach-cal-mini-title:hover{color:#b4761a;}
+.coach-cal-mini-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px;}
+.coach-cal-mini-wd{font-size:9.5px;font-weight:700;color:var(--muted-light);text-align:center;font-family:var(--font-inter),sans-serif;}
+.coach-cal-mini-day{
+  position:relative;font-size:11px;text-align:center;padding:3px 0;border-radius:5px;cursor:pointer;
+  font-family:var(--font-inter),sans-serif;color:var(--ink);
+}
+.coach-cal-mini-day:hover{outline:1px solid var(--gold);}
+.coach-cal-mini-day.coach-cal-past{opacity:.55;}
+.coach-cal-mini-day.coach-cal-today{outline:2px solid var(--gold);font-weight:700;}
+.coach-cal-mini-tr{position:absolute;left:50%;bottom:1px;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:var(--gold);}
+.coach-cal-mini-list{display:flex;flex-direction:column;gap:2px;border-top:1px solid var(--border);padding-top:6px;}
+.coach-cal-mini-list > div{font-size:11.5px;font-family:var(--font-inter),sans-serif;display:flex;align-items:center;gap:2px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.coach-cal-mini-list b{margin-right:3px;}
+
+.coach-cal-detail{display:flex;flex-direction:column;gap:9px;font-size:13.5px;font-family:var(--font-inter),sans-serif;color:var(--ink);}
+.coach-cal-detail > div{display:flex;align-items:center;gap:8px;}
+.coach-cal-detail svg{color:var(--muted);flex-shrink:0;}
+.coach-cal-detail-notes{white-space:pre-wrap;background:var(--bg);border-radius:8px;padding:9px 11px;color:var(--muted);font-size:13px;}
+
+/* Widżety odliczania */
+.coach-cd-wrap{display:flex;flex-direction:column;gap:8px;}
+.coach-cd-head{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.coach-cd-title{display:flex;align-items:center;gap:6px;font-family:var(--font-barlow-condensed),sans-serif;font-size:18px;font-weight:600;}
+.coach-cd-empty{font-size:12.5px;color:var(--muted);font-family:var(--font-inter),sans-serif;background:var(--card);border:1px dashed var(--border);border-radius:12px;padding:12px 14px;line-height:1.45;}
+.coach-cd-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;}
+.coach-cd-card{
+  position:relative;background:var(--navy-900);color:#fff;border-radius:12px;padding:12px 14px;
+  border-top:4px solid var(--gold);display:flex;flex-direction:column;gap:3px;box-shadow:var(--shadow);
+}
+.coach-cd-past{opacity:.55;}
+.coach-cd-del{
+  position:absolute;top:8px;right:8px;width:22px;height:22px;border-radius:6px;border:none;
+  background:rgba(255,255,255,.08);color:var(--muted-light);display:flex;align-items:center;justify-content:center;cursor:pointer;
+}
+.coach-cd-del:hover{background:rgba(255,255,255,.18);color:#fff;}
+.coach-cd-type{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;font-family:var(--font-inter),sans-serif;filter:brightness(1.7);}
+.coach-cd-name{font-family:var(--font-barlow-condensed),sans-serif;font-size:19px;font-weight:600;line-height:1.15;padding-right:24px;}
+.coach-cd-date{font-size:11.5px;color:var(--muted-light);font-family:var(--font-inter),sans-serif;display:flex;align-items:center;gap:3px;flex-wrap:wrap;}
+.coach-cd-days{display:flex;align-items:baseline;gap:6px;margin-top:4px;}
+.coach-cd-days-num{font-family:var(--font-barlow-condensed),sans-serif;font-size:40px;font-weight:700;line-height:1;color:var(--gold);}
+.coach-cd-days-label{font-size:13px;color:var(--gold-light);font-family:var(--font-inter),sans-serif;font-weight:600;}
+.coach-cd-groups{display:flex;flex-direction:column;gap:3px;margin-top:6px;padding-top:7px;border-top:1px solid var(--navy-700);}
+.coach-cd-group-row{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;font-family:var(--font-inter),sans-serif;color:#cdd4e3;}
+.coach-cd-group-row strong{color:#fff;font-weight:700;white-space:nowrap;}
+
+@media (max-width:1200px){
+  .coach-cal-season-grid{grid-template-columns:repeat(3,minmax(0,1fr));}
+}
+@media (max-width:980px){
+  .coach-cal-season-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:4px 12px 14px;}
+  .coach-bn-item{font-size:9.5px;min-width:0;}
+  .coach-bn-item span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+}
+@media (max-width:700px){
+  .coach-cal-month{padding:0 10px 12px;}
+  .coach-cal-cell{min-height:52px;padding:3px;align-items:center;}
+  .coach-cal-pills{display:none;}
+  .coach-cal-dots{display:flex;gap:2px;flex-wrap:wrap;justify-content:center;}
+  .coach-cal-dots .coach-cal-dot{width:6px;height:6px;margin:0;}
+  .coach-cal-wd{padding:6px 2px;text-align:center;font-size:10px;}
+  .coach-cal-month-title{min-width:0;flex:1;}
+  .coach-cal-toolbar, .coach-cal-filters, .coach-cal-legend{padding-left:12px;padding-right:12px;}
+  .coach-cal-agenda, .coach-cal-list{padding-left:12px;padding-right:12px;}
+}
+@media (max-width:480px){
+  .coach-cal-season-grid{grid-template-columns:1fr;}
+}

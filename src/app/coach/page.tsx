@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import CoachDashboardClient from './CoachDashboardClient'
+import { normalizeCountdown, normalizeEvent } from '@/lib/coach/calendar'
 
 export default async function CoachPage() {
   const supabase = await createClient()
@@ -33,11 +34,19 @@ export default async function CoachPage() {
     .order('date_completed', { ascending: false })
     .limit(10)
 
+  const [{ data: calEvents, error: calErr }, { data: countdowns }] = await Promise.all([
+    supabase.from('calendar_events').select('*').order('start_date', { ascending: true }),
+    supabase.from('calendar_countdowns').select('*').order('sort_order', { ascending: true }),
+  ])
+
   return (
     <CoachDashboardClient
       groups={groups || []}
       athletes={athletes || []}
       recentSessions={recentSessions || []}
+      calendarReady={!calErr}
+      calendarEvents={(calEvents || []).map(normalizeEvent)}
+      countdowns={(countdowns || []).map(normalizeCountdown)}
     />
   )
 }
