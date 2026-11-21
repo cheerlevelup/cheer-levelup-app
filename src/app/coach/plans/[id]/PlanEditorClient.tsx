@@ -10,7 +10,7 @@ import PlanWellnessConfig from '@/components/PlanWellnessConfig'
 import { SetPageMeta, usePageMeta } from '@/components/coach/PageMetaContext'
 import { Modal, Button } from '@/components/coach/ui'
 import { useExerciseCatalog, linkAfterRename, ExerciseCatalogDatalist, EXERCISE_CATALOG_LIST_ID } from '@/lib/exerciseCatalog'
-import { insertExercisesWithVariants, sortWithVariants, variantLabels } from '@/lib/exerciseVariants'
+import { insertExercisesWithVariants, copyExerciseOverrides, sortWithVariants, variantLabels } from '@/lib/exerciseVariants'
 import { moveExercise, moveBlock } from '@/lib/planReorder'
 import { DEFAULT_LEGEND, resolveLegend, sameAsDefault, type LegendItem } from '@/lib/planLegend'
 
@@ -1442,13 +1442,16 @@ export default function PlanEditorClient({ plan, athletes = [], athletesFromPool
       iso_type: ex.iso ? (ex.iso_type || null) : null,
     })
     // warianty (1b, 1c...) kopiujemy z przepiętym variant_of na nowe ćwiczenia bazowe
-    let { data: exData, error: exErr } = await insertExercisesWithVariants(supabase, exercises, rowFor)
+    let { data: exData, error: exErr, idMap } = await insertExercisesWithVariants(supabase, exercises, rowFor)
     if (exErr && (isWorkSetsColumnError(exErr) || isIsoColumnError(exErr))) {
       // brak kolumn work_sets / iso w bazie — skopiuj bez nich (usuń to, co już weszło)
       if (exData.length) await supabase.from('workout_block_exercises').delete().in('id', exData.map((e: any) => e.id))
-      ;({ data: exData, error: exErr } = await insertExercisesWithVariants(supabase, exercises, ex => exercisePayloadWithoutIso(exercisePayloadWithoutWorkSets(rowFor(ex)))))
+      ;({ data: exData, error: exErr, idMap } = await insertExercisesWithVariants(supabase, exercises, ex => exercisePayloadWithoutIso(exercisePayloadWithoutWorkSets(rowFor(ex)))))
     }
     if (exErr) showError(`Nie udało się skopiować ćwiczeń: ${exErr.message}`)
+    // indywidualne parametry zawodniczek (serie, powt., ciężar, tempo, komentarz) jadą z kopią
+    const ovErr = await copyExerciseOverrides(supabase, idMap)
+    if (ovErr) showError(`Ćwiczenia skopiowane, ale bez indywidualnych parametrów: ${ovErr.message}`)
     return (exData as BlockExercise[]) || []
   }
 

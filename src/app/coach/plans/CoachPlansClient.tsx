@@ -12,7 +12,7 @@ import { createClient } from '@/utils/supabase/client'
 import { Plus, ChevronRight, ChevronLeft, Copy, Trash2, Pencil, User, Users, RotateCcw, Lock, Unlock } from 'lucide-react'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { Card, Button, StatCard, SegmentedControl } from '@/components/coach/ui'
-import { insertExercisesWithVariants } from '@/lib/exerciseVariants'
+import { insertExercisesWithVariants, copyExerciseOverrides } from '@/lib/exerciseVariants'
 import { createPlanSkeleton, deactivateGroupAssignments, insertAssignments, isIndividual, removeAssignment } from '@/lib/coach/planAssignments'
 
 type Plan = { id: number; name: string; description?: string | null; created_at: string; group_id?: number | null; athlete_id?: number | null; is_archived?: boolean | null }
@@ -634,7 +634,8 @@ function PlanLibrary({ initialPlans }: { initialPlans: Plan[] }) {
 
             if (exercises && exercises.length > 0) {
               // wszystkie kolumny (serie, ISO, rozgrzewka...), warianty 1b/1c przepięte na nowe ćwiczenia bazowe
-              await insertExercisesWithVariants(supabase, exercises, ({ id, block_id, created_at, variant_of, variant_athlete_ids, ...rest }: any) => ({ ...rest, block_id: newBlock.id }), 'id')
+              const { idMap } = await insertExercisesWithVariants(supabase, exercises, ({ id, block_id, created_at, variant_of, variant_athlete_ids, ...rest }: any) => ({ ...rest, block_id: newBlock.id }), 'id')
+              await copyExerciseOverrides(supabase, idMap)
             }
           }
         }

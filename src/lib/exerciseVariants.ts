@@ -71,7 +71,7 @@ export async function insertExercisesWithVariants(supabase: any, rows: any[], bu
   const idMap = new Map<number, number>()
   for (const src of bases) {
     const { data, error } = await supabase.from('workout_block_exercises').insert(buildRow(src)).select(select).single()
-    if (error) return { data: inserted, error }
+    if (error) return { data: inserted, error, idMap }
     inserted.push(data)
     if (src.id != null) idMap.set(src.id, data.id)
   }
@@ -80,8 +80,23 @@ export async function insertExercisesWithVariants(supabase: any, rows: any[], bu
     if (newBase == null) continue
     const { data, error } = await supabase.from('workout_block_exercises')
       .insert({ ...buildRow(src), variant_of: newBase, variant_athlete_ids: src.variant_athlete_ids ?? [] }).select(select).single()
-    if (error) return { data: inserted, error }
+    if (error) return { data: inserted, error, idMap }
     inserted.push(data)
+    if (src.id != null) idMap.set(src.id, data.id)
   }
-  return { data: inserted, error: null }
+  return { data: inserted, error: null, idMap }
+}
+
+// Indywidualne parametry zawodniczek (athlete_exercise_overrides) przenoszone na skopiowane
+// ćwiczenia: idMap = stare id ćwiczenia → nowe id
+export async function copyExerciseOverrides(supabase: any, idMap: Map<number, number>) {
+  const oldIds = [...idMap.keys()]
+  if (oldIds.length === 0) return null
+  const { data, error } = await supabase.from('athlete_exercise_overrides').select('*').in('block_exercise_id', oldIds)
+  if (error || !data?.length) return error ?? null
+  const rows = (data as any[]).map(({ id, created_at, updated_at, block_exercise_id, ...rest }) => ({ ...rest, block_exercise_id: idMap.get(block_exercise_id) }))
+    .filter(r => r.block_exercise_id != null)
+  if (!rows.length) return null
+  const { error: insErr } = await supabase.from('athlete_exercise_overrides').upsert(rows, { onConflict: 'athlete_id,block_exercise_id' })
+  return insErr ?? null
 }
