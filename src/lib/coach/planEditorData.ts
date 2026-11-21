@@ -31,6 +31,8 @@ export async function loadPlanEditorData(supabase: any, planId: number, groupId?
   }
   // Plan jeszcze nikomu nieprzypisany (np. z biblioteki, przed „Rozpocznij trening") —
   // wszystkie zawodniczki z nazwą grupy, żeby od razu wpisać indywidualne parametry
+  // athletesFromPool: lista to nie zawodniczki planu, tylko wszystkie — bez „nie wykonane” w edytorze
+  const athletesFromPool = athletes.length === 0
   if (athletes.length === 0) {
     const { data } = await supabase.from('athletes').select('id, full_name, archived, group:groups(name)').order('full_name', { ascending: true })
     athletes = ((data || []) as any[])
@@ -114,6 +116,7 @@ export async function loadPlanEditorData(supabase: any, planId: number, groupId?
   return {
     plan,
     athletes,
+    athletesFromPool,
     weeks: weeksList,
     days,
     blocks,

@@ -121,6 +121,7 @@ interface Props {
   plan: Plan
   // zawodniczki planu — do przydziału wariantów ćwiczeń
   athletes?: { id: number; full_name: string }[]
+  athletesFromPool?: boolean
   weeks: Week[]
   days: Day[]
   blocks: Block[]
@@ -886,7 +887,7 @@ function VariantAssignModal({ options, athletes, onSave, onClose }: {
   )
 }
 
-export default function PlanEditorClient({ plan, athletes = [], weeks, days, blocks, exercises, allPlans, allWeeks, allDays, allBlocks }: Props) {
+export default function PlanEditorClient({ plan, athletes = [], athletesFromPool = false, weeks, days, blocks, exercises, allPlans, allWeeks, allDays, allBlocks }: Props) {
   const router = useRouter()
   const supabase = createClient()
   const catalog = useExerciseCatalog()
@@ -1626,6 +1627,7 @@ export default function PlanEditorClient({ plan, athletes = [], weeks, days, blo
           onEditExercise={(blockId, exercise) => setEditingExercise({ ...exercise, block_id: blockId })}
           onDeleteExercise={deleteExercise}
           athletes={athletes}
+          teamSkipEnabled={!athletesFromPool && athletes.length > 0}
           onAddVariant={addVariant}
           onDropExercise={dropExercise}
           onDropBlock={dropBlock}

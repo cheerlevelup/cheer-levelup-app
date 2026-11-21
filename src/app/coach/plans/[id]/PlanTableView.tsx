@@ -337,6 +337,8 @@ interface Props {
   onAddVariant: (blockId: number, base: BlockExercise) => void
   onAssignVariants: (blockId: number, baseId: number) => void
   athletes: { id: number; full_name: string }[]
+  // „nie wykonane” przez drużynę — gdy plan ma swoje zawodniczki (grupa albo przypisanie)
+  teamSkipEnabled?: boolean
   onEditExercise: (blockId: number, exercise: BlockExercise) => void
   onDeleteExercise: (blockId: number, exerciseId?: number) => void
   // przeciąganie w obrębie treningu: ćwiczenie (z wariantami) na miejsce innego / na koniec bloku; blok na miejsce innego
@@ -428,7 +430,8 @@ export default function PlanTableView(props: Props) {
   // Edytor służy tylko do tworzenia planu — wyniki wpisuje się po „Rozpocznij trening” w grupie.
   // Przełącznik wraca do ostatnio rozpoczętego treningu (jeśli był).
   const fillDayId = savedFillDay && orderedDays.some(d => d.id === savedFillDay) ? savedFillDay : null
-  const RESULTS_IN_EDITOR = false
+  // „Nie wykonane” (cała drużyna) można zaznaczać także tutaj — w planie otwartym z grupy
+  const TEAM_SKIP_IN_EDITOR = !!props.teamSkipEnabled
 
   // ── Niewykonane (plan grupy) ──
   // Trener zaznacza, że ćwiczenie albo seria nie zostały zrobione — zapis w seriach zawodniczek
@@ -444,7 +447,7 @@ export default function PlanTableView(props: Props) {
   }
   const [skipBusy, setSkipBusy] = useState<string | null>(null)
   const [skipError, setSkipError] = useState('')
-  const skipLoadKey = RESULTS_IN_EDITOR && groupId != null
+  const skipLoadKey = TEAM_SKIP_IN_EDITOR
     ? `${days.map(d => d.id).join(',')}|${blocks.flatMap(b => (b.workout_block_exercises || []).map(e => e.id)).join(',')}|${props.athletes.map(a => a.id).join(',')}`
     : ''
   useEffect(() => {
@@ -798,7 +801,7 @@ export default function PlanTableView(props: Props) {
                                 ...exs.map((ex, i) => {
                                   const name = fmtName(ex.exercise?.name || ex.exercise_code || '')
                                   const isoReps = !!ex.iso
-                                  const sk = RESULTS_IN_EDITOR && groupId != null && ex.id != null ? skipStatus(day.id, ex, exs) : null
+                                  const sk = TEAM_SKIP_IN_EDITOR && ex.id != null ? skipStatus(day.id, ex, exs) : null
                                   const skRow = `${day.id}_${ex.id}`
                                   const skSets = sk ? sk.perSet.map((p, k) => (p.total > 0 && p.skipped === p.total ? `S${k + 1}` : null)).filter(Boolean) : []
                                   return (

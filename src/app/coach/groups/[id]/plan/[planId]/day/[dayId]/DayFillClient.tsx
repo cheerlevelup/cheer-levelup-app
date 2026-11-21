@@ -366,6 +366,34 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
     })())
   }
 
+  // Ćwiczenie niewykonane przez całą drużynę: obecne zawodniczki, które je robią (warianty, pominięte)
+  function teamTargets(ex: BlockEx, isFor: (id: number) => boolean) {
+    return athletes
+      .filter(a => !absentIds.has(a.id) && isFor(a.id) && !ovrMap.get(ovrKey(a.id, ex.id))?.skip)
+      .map(a => ({ athleteId: a.id, nSets: ovrMap.get(ovrKey(a.id, ex.id))?.sets_override || ex.sets || workSets(ex).length || 1 }))
+  }
+  function teamSkipped(ex: BlockEx, isFor: (id: number) => boolean) {
+    const targets = teamTargets(ex, isFor)
+    if (targets.length === 0) return false
+    return targets.every(t => {
+      const s = sessions[t.athleteId]
+      return !!s && Array.from({ length: t.nSets }, (_, i) => !!logs[logKey(s.id, ex.id, i + 1, false)]?.skipped).every(Boolean)
+    })
+  }
+  const [teamBusy, setTeamBusy] = useState<number | null>(null)
+  async function toggleTeamSkipped(ex: BlockEx, name: string, isFor: (id: number) => boolean) {
+    const targets = teamTargets(ex, isFor)
+    if (targets.length === 0) return
+    const skip = !teamSkipped(ex, isFor)
+    if (skip && !confirm(`Oznaczyć „${name}” jako niewykonane przez całą drużynę (${targets.length} zawodniczek)?`)) return
+    setTeamBusy(ex.id)
+    try {
+      for (const t of targets) await toggleExerciseSkipped(t.athleteId, ex.id, t.nSets, skip)
+    } finally {
+      setTeamBusy(null)
+    }
+  }
+
   // Notatka do ćwiczenia — jak u zawodniczki: athlete_note pierwszej serii roboczej
   async function saveNote(athleteId: number, exId: number, text: string) {
     await track((async () => {
@@ -863,7 +891,20 @@ export default function DayFillClient({ group, plan, day, dayNav, blocks, athlet
                         title={[exName(ex), presc, ex.coach_comment, col.variant ? `Robią: ${who.map(a => a.full_name).join(', ') || 'nikt'}` : ''].filter(Boolean).join('\n')}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                           {pill(col.label, col.variant === 'alt')}
-                          <span style={{ fontWeight: 800, fontSize: '0.72rem', color: col.variant === 'alt' ? '#7c3aed' : 'var(--navy-900)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{exName(ex)}</span>
+                          <span style={{ fontWeight: 800, fontSize: '0.72rem', color: col.variant === 'alt' ? '#7c3aed' : 'var(--navy-900)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...(teamSkipped(ex, col.isFor) ? { textDecoration: 'line-through', textDecorationColor: '#c23b3b' } : {}) }}>{exName(ex)}</span>
+                          {(() => {
+                            const all = teamSkipped(ex, col.isFor)
+                            return (
+                              <button
+                                onClick={() => toggleTeamSkipped(ex, exName(ex), col.isFor)}
+                                disabled={teamBusy === ex.id}
+                                title={all ? 'Drużyna nie wykonała tego ćwiczenia — kliknij, by cofnąć' : 'Oznacz ćwiczenie jako niewykonane przez całą drużynę'}
+                                style={{ flexShrink: 0, marginLeft: 'auto', border: '1.5px solid #c23b3b', background: all ? '#c23b3b' : '#fff', color: all ? '#fff' : '#c23b3b', borderRadius: 5, padding: '1px 5px', fontFamily: INTER, fontSize: '0.55rem', fontWeight: 800, whiteSpace: 'nowrap', cursor: teamBusy === ex.id ? 'wait' : 'pointer' }}
+                              >
+                                {teamBusy === ex.id ? '…' : all ? 'NIE WYKONANE' : '✕ drużyna'}
+                              </button>
+                            )
+                          })()}
                         </div>
                         <div style={{ marginTop: 2, fontFamily: INTER, fontSize: '0.6rem', fontWeight: 700, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {presc}
