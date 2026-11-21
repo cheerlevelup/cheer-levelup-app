@@ -49,6 +49,7 @@ interface Props {
   selfSessions?: SelfSession[]
   selfFeedbacks?: SelfFeedback[]
   selfActivePlanDays?: SelfPlanDay[]
+  activeInjuryIds?: number[]
 }
 
 function avg(arr: number[]): number | null {
@@ -64,11 +65,12 @@ function filterByDays<T extends { [key: string]: any }>(rows: T[], days: number,
 
 // Statystyki treningowe dla grup samodzielnych — bez datowanych treningów grupowych,
 // postęp liczony z przypisanego planu (workout_sessions) i feedbacku po sesji.
-function SelfGroupTrainingStats({ athletes, sessions, feedbacks, activePlanDays, onAthleteClick }: {
+function SelfGroupTrainingStats({ athletes, sessions, feedbacks, activePlanDays, activeInjuryIds, onAthleteClick }: {
   athletes: Athlete[]
   sessions: SelfSession[]
   feedbacks: SelfFeedback[]
   activePlanDays: SelfPlanDay[]
+  activeInjuryIds: number[]
   onAthleteClick: (id: number) => void
 }) {
   const [period, setPeriod] = useState(30)
@@ -98,6 +100,7 @@ function SelfGroupTrainingStats({ athletes, sessions, feedbacks, activePlanDays,
         { key: 'Min RPE', emoji: '↓' },
         { key: 'Max RPE', emoji: '↑' },
         { key: 'Ankieta', emoji: '📝' },
+        { key: 'Kontuzje' },
       ]}
       rows={athletes.map(athlete => {
         const athFb = filterByDays(feedbacks.filter(f => f.athlete_id === athlete.id), period)
@@ -116,6 +119,7 @@ function SelfGroupTrainingStats({ athletes, sessions, feedbacks, activePlanDays,
             { v: rpeVals.length ? Math.min(...rpeVals) : null },
             { v: rpeVals.length ? Math.max(...rpeVals) : null },
             { v: athFb.length || null },
+            activeInjuryIds.includes(athlete.id) ? { v: 'Aktywna', color: '#EF4444' } : { v: 'Brak', color: 'var(--green)' },
           ],
         }
       })}
@@ -360,7 +364,7 @@ function chartSvgMarkup(dates: string[], series: { color: string; points: (numbe
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${p}</svg>`
 }
 
-export default function GroupStatsClient({ group, athletes, trainings, exercises, entries, bodyWeights, selfSessions = [], selfFeedbacks = [], selfActivePlanDays = [] }: Props) {
+export default function GroupStatsClient({ group, athletes, trainings, exercises, entries, bodyWeights, selfSessions = [], selfFeedbacks = [], selfActivePlanDays = [], activeInjuryIds = [] }: Props) {
   const router = useRouter()
   const [tab, setTab] = useState<'stats' | 'summary'>('stats')
   // Podsumowanie (osadzone) oczekuje najnowszego treningu jako trainings[0] —
@@ -651,6 +655,7 @@ export default function GroupStatsClient({ group, athletes, trainings, exercises
             sessions={selfSessions}
             feedbacks={selfFeedbacks}
             activePlanDays={selfActivePlanDays}
+            activeInjuryIds={activeInjuryIds}
             onAthleteClick={id => router.push(`/coach/athletes/${id}`)}
           />
         ) : trainings.length === 0 ? (

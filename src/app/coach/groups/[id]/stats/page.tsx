@@ -129,6 +129,13 @@ export default async function GroupStatsPage({ params }: Props) {
     }
   }
 
+  // Aktywne kontuzje zawodniczek (kolumna „Kontuzje” w statystykach treningowych)
+  let activeInjuryIds: number[] = []
+  if (athleteIds.length) {
+    const { data: inj } = await supabase.from('injuries').select('athlete_id').in('athlete_id', athleteIds).eq('status', 'active')
+    activeInjuryIds = [...new Set((inj || []).map((r: any) => r.athlete_id as number))]
+  }
+
   return (
     <GroupStatsClient
       group={group}
@@ -140,6 +147,7 @@ export default async function GroupStatsPage({ params }: Props) {
       selfSessions={selfSessions}
       selfFeedbacks={selfFeedbacks}
       selfActivePlanDays={selfActivePlanDays}
+      activeInjuryIds={activeInjuryIds}
     />
   )
 }
