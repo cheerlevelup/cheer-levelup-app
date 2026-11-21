@@ -773,6 +773,27 @@
   }
   .coach-add-injury-btn:hover{border-color:var(--gold);color:var(--ink);}
 
+  /* StatsTable (statystyki treningowe / wellness): jasny styl, kompaktowe kolumny */
+  .coach-statstable{background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+  .coach-statstable-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border-bottom:1px solid var(--border);}
+  .coach-statstable-title{font-family:var(--font-inter),sans-serif;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-light);}
+  .coach-statstable-periods{display:flex;gap:2px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:2px;}
+  .coach-statstable-periods button{border:none;background:transparent;cursor:pointer;font-family:var(--font-inter),sans-serif;font-size:11.5px;font-weight:600;color:var(--muted);padding:3px 10px;border-radius:6px;}
+  .coach-statstable-periods button.coach-active{background:#fff;color:var(--navy-900);font-weight:700;box-shadow:0 1px 3px rgba(13,27,42,.12);}
+  .coach-statstable table{border-collapse:collapse;width:auto;font-family:var(--font-inter),sans-serif;}
+  .coach-statstable th{
+    font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-light);
+    background:var(--bg);padding:7px 10px;border-bottom:1px solid var(--border);white-space:nowrap;text-align:center;min-width:64px;
+  }
+  .coach-statstable td{padding:5px 10px;border-bottom:1px solid var(--border);text-align:center;vertical-align:middle;}
+  .coach-statstable tbody tr:last-child td{border-bottom:none;}
+  .coach-statstable tbody tr:hover td{background:#FAFBFC;}
+  .coach-statstable .coach-st-left{text-align:left;padding-left:14px;padding-right:24px;}
+  .coach-st-name{background:none;border:none;padding:0;cursor:pointer;font-family:var(--font-inter),sans-serif;font-size:12.5px;font-weight:600;color:var(--ink);white-space:nowrap;text-align:left;}
+  .coach-st-name:hover{color:var(--gold);}
+  .coach-st-empty{color:var(--border);font-size:12px;}
+  .coach-st-val{display:inline-block;min-width:24px;font-size:12px;font-weight:700;color:var(--navy-900);background:var(--bg);border-radius:6px;padding:1px 7px;}
+
   /* Karta zawodniczki → Testy: lekka tabela wyników */
   .coach-athlete-tests{border:1px solid var(--border);border-radius:10px;overflow-x:auto;background:#fff;margin-bottom:10px;}
   .coach-athlete-tests table{width:100%;border-collapse:collapse;font-family:var(--font-inter),sans-serif;}
