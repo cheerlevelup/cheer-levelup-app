@@ -1,6 +1,7 @@
 'use client'
 // src/app/coach/groups/[id]/athletes/GroupAthletesClient.tsx
 import { useState } from 'react'
+import { groupTabs } from '@/components/coach/groupTabs'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { Plus, ChevronRight, ArrowRightLeft, Archive, ClipboardList } from 'lucide-react'
@@ -255,13 +256,7 @@ export default function GroupAthletesClient({ group, athletes, allGroups }: Prop
         <GroupHero group={group} athletesCount={athletes.length} />
 
         <TabsNav
-          items={[
-            { key: 'treningi', label: 'Treningi', href: `/coach/groups/${group.id}` },
-            { key: 'plan', label: 'Plan', href: `/coach/groups/${group.id}/plan` },
-            { key: 'statystyki', label: 'Statystyki', href: `/coach/groups/${group.id}/stats` },
-            { key: 'zawodniczki', label: 'Zawodniczki', href: `/coach/groups/${group.id}/athletes` },
-            { key: 'testy', label: 'Testy', href: `/coach/groups/${group.id}/tests` },
-          ]}
+          items={groupTabs(group.id)}
         />
 
         <div className="coach-group-tab-panel">

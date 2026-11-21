@@ -3,6 +3,7 @@
 // Zakładka "Plan" grupy samodzielnej — obciążenia z aktywnego planu (ćwiczenia ×
 // zawodniczki), z modyfikacjami trenera i faktycznymi danymi z treningu.
 import { useEffect, useState } from 'react'
+import { groupTabs } from '@/components/coach/groupTabs'
 import { createClient } from '@/utils/supabase/client'
 import { SetPageMeta } from '@/components/coach/PageMetaContext'
 import { TabsNav, Card } from '@/components/coach/ui'
@@ -159,13 +160,7 @@ export default function GroupPlanSelfClient({ group, athletes, currentPlan, acti
       <div className="coach-content">
         <GroupHero group={group} athletesCount={athletes.length} />
 
-        <TabsNav items={[
-          { key: 'treningi', label: 'Treningi', href: `/coach/groups/${group.id}` },
-          { key: 'plan', label: 'Plan', href: `/coach/groups/${group.id}/plan` },
-          { key: 'statystyki', label: 'Statystyki', href: `/coach/groups/${group.id}/stats` },
-          { key: 'zawodniczki', label: 'Zawodniczki', href: `/coach/groups/${group.id}/athletes` },
-          { key: 'testy', label: 'Testy', href: `/coach/groups/${group.id}/tests` },
-        ]} />
+        <TabsNav items={groupTabs(group.id)} />
         <GroupPlansPanel groupId={group.id} athletes={athletes} plans={groupPlans} currentPlanId={currentPlan?.id ?? null} />
         {athletes.length === 0 ? (
           <Card><div style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted-light)' }}>Brak zawodniczek w tej grupie.</div></Card>

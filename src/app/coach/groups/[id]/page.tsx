@@ -129,7 +129,7 @@ export default async function CoachGroupDetailPage({ params }: Props) {
   // Wszystkie plany z archiwum
   const { data: archivedPlans } = await supabase
     .from('workout_plans')
-    .select('id, name, is_archived, created_at')
+    .select('*')
     .eq('is_archived', true)
     .order('created_at', { ascending: false })
 
@@ -200,7 +200,7 @@ export default async function CoachGroupDetailPage({ params }: Props) {
       wellnessLogs={wellnessLogs || []}
       feedbacks={feedbacks || []}
       assignmentsHistory={allGroupAssignmentsHistory || []}
-      archivedPlans={archivedPlans || []}
+      archivedPlans={(archivedPlans || []).filter((p: any) => !p.template_kind)}
       {...await loadStartPlans(supabase, groupId, athletes)}
     />
   )

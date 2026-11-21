@@ -2,6 +2,7 @@
 // src/app/coach/groups/[id]/CoachGroupDetailClient.tsx
 
 import { useState, useEffect } from 'react'
+import { groupTabs } from '@/components/coach/groupTabs'
 import { applyVariantsToBlocks } from '@/lib/exerciseVariants'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
@@ -847,13 +848,7 @@ export default function CoachGroupDetailClient({ group, athletes, assignments, d
           <div style={{ marginTop: -8, marginBottom: 12, fontFamily: 'var(--font-inter),sans-serif', fontSize: '0.78rem', color: 'var(--green)', fontWeight: 700 }}>✓ {assignedMsg}</div>
         )}
 
-        <TabsNav items={[
-          { key: 'treningi', label: 'Treningi', href: `/coach/groups/${group.id}` },
-          { key: 'plan', label: 'Plan', href: `/coach/groups/${group.id}/plan` },
-          { key: 'statystyki', label: 'Statystyki', href: `/coach/groups/${group.id}/stats` },
-          { key: 'zawodniczki', label: 'Zawodniczki', href: `/coach/groups/${group.id}/athletes` },
-          { key: 'testy', label: 'Testy', href: `/coach/groups/${group.id}/tests` },
-        ]} />
+        <TabsNav items={groupTabs(group.id)} />
 
         <div className="coach-group-tab-panel">
           {/* Rozpocznij trening: plan → trening → obecność → tabela wyników */}

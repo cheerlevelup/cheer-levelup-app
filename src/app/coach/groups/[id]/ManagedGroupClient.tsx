@@ -2,6 +2,7 @@
 // src/app/coach/groups/[id]/ManagedGroupClient.tsx
 // Panel grupy zorganizowanej — trener prowadzi grupę i wpisuje wszystko sam
 import { useState } from 'react'
+import { groupTabs } from '@/components/coach/groupTabs'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { Dumbbell, Upload, X, ClipboardList, Play } from 'lucide-react'
@@ -463,13 +464,7 @@ export default function ManagedGroupClient({ group, athletes, trainings, startPl
         <GroupHero group={group} athletesCount={athletes.length} />
 
         <TabsNav
-          items={[
-            { key: 'treningi', label: 'Treningi', href: `/coach/groups/${group.id}` },
-            { key: 'plan', label: 'Plan', href: `/coach/groups/${group.id}/plan` },
-            { key: 'statystyki', label: 'Statystyki', href: `/coach/groups/${group.id}/stats` },
-            { key: 'zawodniczki', label: 'Zawodniczki', href: `/coach/groups/${group.id}/athletes` },
-            { key: 'testy', label: 'Testy', href: `/coach/groups/${group.id}/tests` },
-          ]}
+          items={groupTabs(group.id)}
         />
 
         <div className="coach-group-tab-panel">

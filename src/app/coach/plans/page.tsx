@@ -24,7 +24,7 @@ export default async function CoachPlansPage({ searchParams }: { searchParams: P
 
   return (
     <CoachPlansClient
-      plans={plans || []}
+      plans={(plans || []).filter((p: any) => !p.template_kind)}
       groups={groups || []}
       athletes={(athletes || []).filter((a: any) => !a.archived)}
       assignments={assignments || []}

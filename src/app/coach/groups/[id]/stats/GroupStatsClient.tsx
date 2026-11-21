@@ -5,6 +5,7 @@
 //    wybór ćwiczenia i metryki osi Y; oś X = kolejne daty treningów.
 //  • Obecność — tabela daty × zawodniczki + statystyki opuszczonych treningów.
 import { useMemo, useState } from 'react'
+import { groupTabs } from '@/components/coach/groupTabs'
 import { useRouter } from 'next/navigation'
 import { Download } from 'lucide-react'
 import { loadPdf, pl, drawHeaderBar, drawFooter, svgToPng, svgMarkupToPng, TABLE_STYLES } from '@/lib/groupPdf'
@@ -753,13 +754,7 @@ export default function GroupStatsClient({ group, athletes, trainings, exercises
       <div className="coach-content">
         <GroupHero group={group} athletesCount={athletes.length} />
 
-        <TabsNav items={[
-          { key: 'treningi', label: 'Treningi', href: `/coach/groups/${group.id}` },
-          { key: 'plan', label: 'Plan', href: `/coach/groups/${group.id}/plan` },
-          { key: 'statystyki', label: 'Statystyki', href: `/coach/groups/${group.id}/stats` },
-          { key: 'zawodniczki', label: 'Zawodniczki', href: `/coach/groups/${group.id}/athletes` },
-          { key: 'testy', label: 'Testy', href: `/coach/groups/${group.id}/tests` },
-        ]} />
+        <TabsNav items={groupTabs(group.id)} />
         {athletes.length === 0 ? (
           <Card><div className="coach-empty-list">Brak zawodniczek w grupie.</div></Card>
         ) : group.group_type !== 'managed' ? (
